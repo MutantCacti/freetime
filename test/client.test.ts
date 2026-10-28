@@ -24,7 +24,7 @@ interface Queue {
   indicator(): "warning" | "error" | null;
   all(): Toast[];
 }
-const TimeApp = (globalThis as unknown as { TimeApp: { createToastQueue(o?: object): Queue; initialScrollTop(m: object): number; utcOffsetLabel(z: string, d: Date): string; urlWithTz(h: string, tz: string | null): string } }).TimeApp;
+const TimeApp = (globalThis as unknown as { TimeApp: { glideStep(v: number, dt: number): number; createToastQueue(o?: object): Queue; initialScrollTop(m: object): number; utcOffsetLabel(z: string, d: Date): string; urlWithTz(h: string, tz: string | null): string } }).TimeApp;
 const TimeHead = (globalThis as unknown as { TimeHead: { readTheme(s: unknown): string | null; writeTheme(s: unknown, v: string): boolean } }).TimeHead;
 
 const ids = (list: Toast[]) => list.map((t) => t.id);
@@ -124,6 +124,34 @@ describe("motion", () => {
     expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
     expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
     expect(css).toMatch(/\.tb-menu-items:popover-open \{ transform-origin: top right;/);
+  });
+});
+
+describe("drag to scroll", () => {
+  it("the glide after a mouse drag slows down and stops", () => {
+    let v = 2; // px/ms, a fast flick
+    let t = 0;
+    let distance = 0;
+    while (v !== 0 && t < 5000) {
+      distance += v * 16;
+      v = TimeApp.glideStep(v, 16);
+      t += 16;
+    }
+    expect(v).toBe(0);
+    expect(t).toBeLessThan(1500); // stops within about a second
+    expect(distance).toBeGreaterThan(200);
+    expect(distance).toBeLessThan(500);
+    expect(TimeApp.glideStep(-1, 16)).toBeLessThan(0); // either direction
+    expect(TimeApp.glideStep(0.019, 16)).toBe(0);
+  });
+
+  it("shows a grab cursor and stops text selection mid-drag, and only handles the mouse", () => {
+    const css = allCss["/public/css/app.css"]!;
+    expect(css).toContain(".js .cal-scroll { cursor: grab; }");
+    expect(css).toMatch(/\.cal-scroll\.is-dragging, \.cal-scroll\.is-dragging \* \{ cursor: grabbing; user-select: none;/);
+    const js = allCss["/public/js/app.js"]!;
+    expect(js).toContain('if (e.pointerType !== "mouse" || e.button !== 0) return;');
+    expect(js).toContain("var DRAG_THRESHOLD = 5;");
   });
 });
 

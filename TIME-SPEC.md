@@ -278,6 +278,12 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
   - The download dialog states the range in the zone being shown. The export link carries the zone (it's a download, not the page URL). The `.ics` file itself uses UTC times, so calendar apps convert it correctly.
   - The fatal-error debug line stays in UTC.
 
+### 5.11.1 Drag to scroll
+- With a mouse on desktop, the calendar (every view) can be clicked and dragged to scroll, as on a touch screen, with a grab cursor.
+- A press that moves less than 5 px is still a click, so cells can be focused and Month's day cells still open. The click that ends a drag does nothing.
+- On release the calendar glides to a stop, as touch scrolling does; not under `prefers-reduced-motion`.
+- Touch and pens keep their native scrolling. Without JS, the calendar scrolls as usual.
+
 ### 5.12 Motion
 - **One effect: grow from the source.** Anything that appears grows out of the control that opened it (fade, scale from 0.96, a 6 px nudge from that side, with `transform-origin` at the control), and shrinks back into it when it goes. The eye travels from the thing that was clicked.
   - Download, Contact and Help dialogs: from the top right, where their buttons are; the backdrop fades with them.
@@ -429,6 +435,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
   - **Contact:** in the order above, each with its icon; every link has its own Copy button, right-aligned, and there's no text above the list.
   - **Theme colours:** light mode inverts the colour map (free is the yellow end), dark mode doesn't, and each step's dither level is the same in both.
+  - **Drag to scroll:** the glide slows down and stops; only the mouse is handled; a grab cursor shows.
   - **Motion:** under `prefers-reduced-motion` every animation and transition is off; only opacity and transforms animate; durations come from the shared tokens; dialogs and toasts grow from the top right.
   - **Layout:** the top bar has the three groups in order; the Range form has one inline "to" and no labels; dialog heads use the body's inline padding.
   - **Fonts:** the font files are served from `self`, and the CSP still has no external origins.

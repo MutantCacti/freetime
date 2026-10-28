@@ -217,6 +217,9 @@
     filterZones: filterZones,
     urlWithTz: urlWithTz,
     monthGrid: monthGrid,
+    glideStep: function (v, dt) {
+      return glideStep(v, dt);
+    },
   };
   globalThis.TimeApp = api;
 
@@ -987,6 +990,121 @@
     });
   }
 
+  // -------------------------------------------------------------- drag to scroll
+
+  /** Pixels a press must move before it counts as a drag rather than a click. */
+  var DRAG_THRESHOLD = 5;
+
+  /**
+   * Velocity (px/ms) after a glide step of dt ms. The glide slows
+   * exponentially, like touch scrolling, and stops below 0.02 px/ms.
+   */
+  function glideStep(v, dt) {
+    var next = v * Math.pow(0.995, dt);
+    return Math.abs(next) < 0.02 ? 0 : next;
+  }
+
+  /**
+   * Click and drag the calendar with a mouse, as on a touch screen. Only the
+   * mouse is handled: touch and pens already scroll natively. A press that
+   * moves less than DRAG_THRESHOLD stays a click, so cells can still be
+   * focused and Month's day links still open. After a drag, the click that
+   * would follow is swallowed. On release the calendar glides to a stop,
+   * except under reduced motion.
+   */
+  function initDragScroll() {
+    $$(".cal-scroll").forEach(function (el) {
+      var press = null; // { x, y, left, top, id, dragging, samples }
+      var glide = 0;
+      var swallowClick = false;
+
+      function stopGlide() {
+        if (glide) cancelAnimationFrame(glide);
+        glide = 0;
+      }
+
+      el.addEventListener("pointerdown", function (e) {
+        if (e.pointerType !== "mouse" || e.button !== 0) return;
+        stopGlide();
+        press = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop, id: e.pointerId, dragging: false, samples: [] };
+      });
+
+      el.addEventListener("pointermove", function (e) {
+        if (!press || e.pointerId !== press.id) return;
+        var dx = e.clientX - press.x;
+        var dy = e.clientY - press.y;
+        if (!press.dragging) {
+          if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+          press.dragging = true;
+          el.classList.add("is-dragging");
+          try {
+            el.setPointerCapture(press.id);
+          } catch (err) {
+            /* capture is a nicety */
+          }
+        }
+        el.scrollLeft = press.left - dx;
+        el.scrollTop = press.top - dy;
+        press.samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY });
+        if (press.samples.length > 5) press.samples.shift();
+        e.preventDefault();
+      });
+
+      function release(e) {
+        if (!press || e.pointerId !== press.id) return;
+        var was = press;
+        press = null;
+        if (!was.dragging) return;
+        el.classList.remove("is-dragging");
+        swallowClick = true;
+        setTimeout(function () {
+          swallowClick = false;
+        }, 0);
+        // Glide on with the speed of the last few moves.
+        var s = was.samples;
+        if (reducedMotion.matches || s.length < 2 || e.type === "pointercancel") return;
+        var a = s[0];
+        var b = s[s.length - 1];
+        var dt = Math.max(1, b.t - a.t);
+        if (e.timeStamp - b.t > 80) return; // the pointer had stopped before release
+        var vx = -(b.x - a.x) / dt;
+        var vy = -(b.y - a.y) / dt;
+        var last = performance.now();
+        function frame(now) {
+          var step = Math.min(50, now - last);
+          last = now;
+          el.scrollLeft += vx * step;
+          el.scrollTop += vy * step;
+          vx = glideStep(vx, step);
+          vy = glideStep(vy, step);
+          glide = vx || vy ? requestAnimationFrame(frame) : 0;
+        }
+        glide = requestAnimationFrame(frame);
+      }
+      el.addEventListener("pointerup", release);
+      el.addEventListener("pointercancel", release);
+
+      // The click that ends a drag doesn't open a day or focus a cell.
+      el.addEventListener(
+        "click",
+        function (e) {
+          if (!swallowClick) return;
+          swallowClick = false;
+          e.preventDefault();
+          e.stopPropagation();
+        },
+        true,
+      );
+      // Links (Month's day cells) would otherwise start a native link drag.
+      el.addEventListener("dragstart", function (e) {
+        e.preventDefault();
+      });
+      // A wheel or key scroll stops a glide.
+      el.addEventListener("wheel", stopGlide, { passive: true });
+      el.addEventListener("keydown", stopGlide);
+    });
+  }
+
   function start() {
     initToday();
     var toasts = initToasts();
@@ -994,6 +1112,7 @@
     initDialogs();
     initCopy(toasts);
     initCalendar();
+    initDragScroll();
     initZonePicker();
     initRangePicker();
   }

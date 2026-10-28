@@ -426,6 +426,11 @@ code { font-family: var(--font-mono); }
 .pill, .btn, .tab, .picker-day, .tz-opt { transition: background-color var(--motion-ui), color var(--motion-ui), scale var(--motion-ui); }
 .pill:active, .btn:active, .tab:active, .picker-day:active { scale: 0.97; }
 
+/* Drag to scroll with a mouse (JS): a grab cursor, and no text selection mid-drag. */
+.js .cal-scroll { cursor: grab; }
+.js .cal-scroll .daycell { cursor: pointer; -webkit-user-drag: none; }
+.cal-scroll.is-dragging, .cal-scroll.is-dragging * { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+
 /* No motion at all when the viewer asks for less. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after, ::backdrop {
