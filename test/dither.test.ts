@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { PALETTE, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
+import { PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -103,6 +103,16 @@ describe("palette", () => {
       expect(C).toBeLessThanOrEqual(C0 * PALETTE_CHROMA + 0.01);
       const dh = Math.abs(Math.atan2(Math.sin(h - h0), Math.cos(h - h0)));
       expect(dh, `hue ${i}`).toBeLessThan(0.08);
+    });
+  });
+
+  it("the past palette keeps each step's lightness and hue with less chroma", () => {
+    PALETTE.forEach((hex, i) => {
+      const [L, C, h] = rgbToOklch(rgb(hex));
+      const [Lp, Cp, hp] = rgbToOklch(rgb(PALETTE_PAST[i]!));
+      expect(Lp).toBeCloseTo(L, 1);
+      expect(Cp).toBeLessThanOrEqual(C * PAST_CHROMA + 0.01);
+      if (C > 0.02) expect(Math.abs(Math.atan2(Math.sin(hp - h), Math.cos(hp - h)))).toBeLessThan(0.1);
     });
   });
 

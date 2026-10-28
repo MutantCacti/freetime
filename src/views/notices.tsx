@@ -1,5 +1,5 @@
 import { RANGE_CAP_DAYS } from "../config";
-import { CloseIcon, ErrorIcon, MinimiseIcon, WarningIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, ErrorIcon, MinimiseIcon, WarningIcon } from "./icons";
 
 export type Severity = "warning" | "error";
 
@@ -84,6 +84,12 @@ export function LiveRegions() {
       </template>
       <template id="icon-minimise">
         <MinimiseIcon />
+      </template>
+      <template id="icon-left">
+        <ChevronLeftIcon />
+      </template>
+      <template id="icon-right">
+        <ChevronRightIcon />
       </template>
     </>
   );

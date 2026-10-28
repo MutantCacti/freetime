@@ -34,11 +34,11 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
   - a test fails the build if a hex colour appears anywhere except `tokens.css` and `src/parula.ts`;
   - light and dark mode follow `prefers-color-scheme`, with a manual override from the theme switcher (§5.10);
   - the page chrome is neutral, and the calendar carries the colour.
-- **Fonts:** Figtree for text, Fragment Mono for times (hour labels, column dates, the period label and the time-zone label).
+- **Fonts:** Figtree for text, including the period label; Fragment Mono for times (hour labels, column dates and the time-zone label).
   - Both are self-hosted as WOFF2 in `public/fonts/` (Latin and Latin Extended subsets, `font-display: swap`), with their SIL OFL licence files next to them. The two faces used above the fold are preloaded.
   - Fallback stacks: `Figtree, system-ui, sans-serif` and `"Fragment Mono", ui-monospace, monospace`.
   - Tabular figures wherever numbers line up.
-- **Favicon:** `public/favicon.svg` (`viewBox="0 0 32 32"`): two rounded day columns on a dark rounded tile in the grid colour, each with one busy block, in the toned palette's free, partly busy and busy tones. A 180 px `apple-touch-icon.png` is exported from it.
+- **Favicon:** `public/favicon.svg` (`viewBox="0 0 32 32"`), as supplied by Maxence: two rounded day columns on a dark rounded tile, with busy blocks in the calendar's colours. Its colours are written as `rgb()` so the hex rule holds. A 180 px `apple-touch-icon.png` is exported from it.
 - **Text standard:** all user-facing text follows the **PRINTED OUTPUT** method (§2.1). This matters most for `/help`. Maxence will rewrite `/help` heavily, so the agent produces a clean, well-structured template rather than final copy.
 - **Time:**
   - all calculations use UTC epoch seconds;
@@ -115,8 +115,8 @@ The main page (`/`) has three regions, plus a floating notice layer:
 |---|---|---|---|
 | 1 | View tabs: **Day · Week · Month · Range** | left | segmented control |
 | 2 | **Today** | left, directly after the tabs | pill |
-| 3 | **‹** (previous) | left | pill (round) |
-| 4 | **›** (next) | left | pill (round) |
+| 3 | **‹** (previous): a left chevron icon (a plain 90° angle) | left | pill (round) |
+| 4 | **›** (next): a right chevron icon | left | pill (round) |
 | 5 | Period label: months and year only (§5.0.2) | left, after the arrows | text |
 | 6 | **Time-zone selector**, always visible (§5.11) | left, after the label | pill, with chevron |
 | 7 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right | pill (round) |
@@ -131,7 +131,8 @@ The main page (`/`) has three regions, plus a floating notice layer:
 **Narrow screens (two rows):**
 
 - **Row 1, left to right:** period label (5) · time-zone selector (6) · notice indicator (7) · a **menu** button containing Download .ics, Contact me and Help (8–10) · theme switcher (11).
-- **Row 2, left-aligned:** view tabs as a compact segmented control (1) · **Today** (2) · **‹** (3) · **›** (4).
+- **Row 2, left-aligned:** view tabs as a compact segmented control (1) · **Today** (2) · **‹** (3) · **›** (4). Row 2 fills the width: the tabs share the free space, and every control in it is at least 44 px tall.
+- The period label has extra inline padding on narrow screens.
 
 The order of items in the HTML follows the wide-screen table, so keyboard and screen-reader order is the same at every width. Narrow-screen rows are achieved with CSS only.
 
@@ -172,14 +173,14 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 | Today | today | the week containing today | the month containing today | **keep the range's length and move it so it starts today** |
 | ‹ / › | previous / next day | previous / next week | previous / next month | shift the whole range back / forward by its own length |
 
-- Today is disabled when the current period already contains the present moment.
+- Today is always clickable. When the current period already contains the present moment it's a no-op (JS stops the click; without JS it reloads the same period).
 - Arrows and Today are links, so they work without JS.
 
 ### 5.6 Current time
 - In Day, Week and Range column layouts, a clear horizontal line marks the current time across today's column, using `--color-now`.
-- In Month view and the Range day-cell layout, today's cell is outlined.
 - Server rendering places the line correctly at request time, and JS moves it every minute.
-- **All past time is greyed out**, in every view: every slot and day cell before now, including all days before today (Month and Range day cells too). The slot holding now is split: its part before the line is grey, the rest normal, using the same `m0`–`m29` minute classes as the line (no inline styles).
+- **All past time is dimmed**, in every view: every slot and day cell before now, including all days before today (Month and Range day cells too). Dimming is a veil in the page colour over the cell, as for earlier slots today, plus slightly reduced saturation. The slot holding now is split: its part before the line is dimmed, the rest normal, using the same `m0`–`m29` minute classes as the line (no inline styles).
+- In Month view and the Range day-cell layout, today's cell is outlined in `--color-now`, in the same style as the current-time line.
 - The now line never covers the column headers: the headers stay sticky and above the line, and the line is clipped to the scrolling body.
 
 ### 5.7 Mobile
@@ -337,17 +338,19 @@ Any method other than GET or HEAD returns **405**. There are no forms that POST 
 - what the `.ics` export is;
 - why there's no booking or send button: you check here, then contact Maxence through any of the channels below.
 
-**Contact me** lists the following:
+**Contact me** lists the following, with no introductory text above it:
 - Discord (mutantcacti): https://discord.com/users/1129364853157535797
 - GitHub: https://github.com/MutantCacti
-- Email: `mutantcacti@gmail.com` as a **`mailto:` link, with a Copy button** next to it.
-  - Copy uses the Clipboard API.
-  - Confirmation happens **in the button itself**: its copy icon turns into a check mark with "Copied" for about 2 seconds, then returns. The button keeps its width, so nothing shifts.
-  - Screen readers hear "Copied" through a polite live region.
-  - If copying fails, the button shows a short failure state in the same place.
-  - Without JS, the Copy button is hidden and the link remains.
+- Email: `mutantcacti@gmail.com` as a **`mailto:` link**
 - LinkedIn: https://www.linkedin.com/in/moreldierckxm/
 - Instagram: https://instagram.com/maxencetmd
+
+**Every link has its own Copy button**, aligned to the right of the panel. Copy puts the link on the clipboard (the address, for email).
+- Copy uses the Clipboard API.
+- Confirmation happens **in the button itself**: its copy icon turns into a check mark with "Copied" for about 2 seconds, then returns. The button keeps its width, so nothing shifts.
+- Screen readers hear "Copied" through a polite live region.
+- If copying fails, the button shows a short failure state in the same place.
+- Without JS, the Copy buttons are hidden and the links remain.
 
 External links get `rel="noopener noreferrer"`. Use no third-party icons or scripts; inline SVG icons are fine.
 
@@ -395,7 +398,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Privacy:** no event title in any HTML or `.ics` response.
   - **Views:**
     - Day, Week, Month and Range each render;
-    - every row of the §5.5 navigation table works, including Today in Range;
+    - every row of the §5.5 navigation table works, including Today in Range; Today is always a link, marked as a no-op when the period contains now;
     - Range swaps reversed dates, enforces the cap, and falls back when a date is invalid.
   - **Current time:** the current-time line is rendered only when the period contains now.
   - **Time window:** columns contain all 48 half-hour rows, and the `#h08` anchors exist.
@@ -408,6 +411,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Past:** days before today are greyed in Day, Week, Month and Range; the slot holding now is split.
   - **Levels:** busy fractions map to 9 steps, and colour and dither use the same step; the colour bar shows the same 9 bands.
   - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
+  - **Contact:** every link has its own Copy button, right-aligned, and there's no text above the list.
   - **Fonts:** the font files are served from `self`, and the CSP still has no external origins.
   - **Toasts:** a stale cache produces a sticky warning that minimises but can't be dismissed; a transient toast hides itself; no more than three show at once.
   - **Theme:** the stored choice overrides the system setting; the page still renders when `localStorage` throws.

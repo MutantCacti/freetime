@@ -10,7 +10,7 @@ import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "
 import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
 import { fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
-import { expandBusy } from "./ical";
+import { expandBusyCached } from "./ical";
 import { Links } from "./links";
 import {
   type Period,
@@ -178,7 +178,7 @@ export function createApp(deps: AppDeps = {}) {
       const bounds = periodBounds(gridStart, gridEnd, zone.zone);
       let merged;
       try {
-        merged = mergeIntervals(expandBusy(feed.root, bounds.from, bounds.to));
+        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
       } catch (err) {
         throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
       }
@@ -313,7 +313,7 @@ export function createApp(deps: AppDeps = {}) {
       const feed = await feedFor(c);
       let merged;
       try {
-        merged = mergeIntervals(expandBusy(feed.root, bounds.from, bounds.to));
+        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
       } catch (err) {
         throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
       }

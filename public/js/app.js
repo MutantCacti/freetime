@@ -238,6 +238,11 @@
       region.textContent = message;
     }, 50);
   }
+  /** A copy of an inline SVG icon from a server-rendered <template>. */
+  function icon(id) {
+    var t = document.getElementById(id);
+    return t ? t.content.firstElementChild.cloneNode(true) : document.createTextNode("");
+  }
   function storage() {
     try {
       return window.localStorage;
@@ -743,12 +748,12 @@
       var prev = document.createElement("button");
       prev.type = "button";
       prev.className = "btn btn-icon";
-      prev.textContent = "‹"; // PRINTED OUTPUT: date picker / previous month glyph
+      prev.appendChild(icon("icon-left"));
       prev.setAttribute("aria-label", "Previous month"); // PRINTED OUTPUT: date picker / previous month
       var next = document.createElement("button");
       next.type = "button";
       next.className = "btn btn-icon";
-      next.textContent = "›"; // PRINTED OUTPUT: date picker / next month glyph
+      next.appendChild(icon("icon-right"));
       next.setAttribute("aria-label", "Next month"); // PRINTED OUTPUT: date picker / next month
       var title = document.createElement("span");
       title.setAttribute("aria-live", "polite");
@@ -866,7 +871,17 @@
     });
   }
 
+  // Today is always clickable; when the period already contains now it does nothing.
+  function initToday() {
+    $$("[data-noop]").forEach(function (el) {
+      el.addEventListener("click", function (e) {
+        e.preventDefault();
+      });
+    });
+  }
+
   function start() {
+    initToday();
     var toasts = initToasts();
     initTheme();
     initDialogs();

@@ -9,52 +9,62 @@ export const EMAIL = "mutantcacti@gmail.com";
 
 const EXTERNAL = { rel: "noopener noreferrer" } as const;
 
-/** The contact list, used by /contact and the overlay. */
+interface Channel {
+  name: string;
+  /** What the link shows. */
+  text: string;
+  href: string;
+  /** What Copy puts on the clipboard: the address for email, the link otherwise. */
+  copy: string;
+}
+
+const CHANNELS: Channel[] = [
+  // PRINTED OUTPUT: contact / channel names and handles
+  { name: "Discord", text: "mutantcacti", href: "https://discord.com/users/1129364853157535797", copy: "https://discord.com/users/1129364853157535797" },
+  { name: "GitHub", text: "MutantCacti", href: "https://github.com/MutantCacti", copy: "https://github.com/MutantCacti" },
+  { name: "Email", text: EMAIL, href: `mailto:${EMAIL}`, copy: EMAIL },
+  { name: "LinkedIn", text: "moreldierckxm", href: "https://www.linkedin.com/in/moreldierckxm/", copy: "https://www.linkedin.com/in/moreldierckxm/" },
+  { name: "Instagram", text: "maxencetmd", href: "https://instagram.com/maxencetmd", copy: "https://instagram.com/maxencetmd" },
+];
+
+/** A Copy button that keeps its width as it shows "Copied" or "Copy failed". Hidden without JS. */
+function CopyButton({ value, what }: { value: string; what: string }) {
+  return (
+    // PRINTED OUTPUT: contact / copy button accessible name
+    <button type="button" class="btn copy-btn" data-copy={value} hidden aria-label={`Copy ${what}`}>
+      {/* PRINTED OUTPUT: contact / copy button states */}
+      <span class="copy-state copy-idle">
+        <CopyIcon /> Copy
+      </span>
+      <span class="copy-state copy-done" aria-hidden="true">
+        <CheckIcon /> Copied
+      </span>
+      <span class="copy-state copy-fail" aria-hidden="true">
+        Copy failed
+      </span>
+    </button>
+  );
+}
+
+/** The contact list, used by /contact and the overlay. Each link has a Copy button, aligned right. */
 export function ContactContent() {
   return (
-    <>
-      {/* PRINTED OUTPUT: contact / intro */}
-      <p class="lede">Check a time here, then get in touch through any of these.</p>
-      <dl class="contact-list">
-        {/* PRINTED OUTPUT: contact / Discord */}
-        <dt>Discord</dt>
-        <dd>
-          <a href="https://discord.com/users/1129364853157535797" {...EXTERNAL}>mutantcacti</a>
-        </dd>
-        {/* PRINTED OUTPUT: contact / GitHub */}
-        <dt>GitHub</dt>
-        <dd>
-          <a href="https://github.com/MutantCacti" {...EXTERNAL}>MutantCacti</a>
-        </dd>
-        {/* PRINTED OUTPUT: contact / Email */}
-        <dt>Email</dt>
-        <dd class="email-row">
-          <a href={`mailto:${EMAIL}`}>{EMAIL}</a>
-          <button type="button" class="btn copy-btn" data-copy={EMAIL} hidden>
-            {/* PRINTED OUTPUT: contact / copy button states */}
-            <span class="copy-state copy-idle">
-              <CopyIcon /> Copy
-            </span>
-            <span class="copy-state copy-done" aria-hidden="true">
-              <CheckIcon /> Copied
-            </span>
-            <span class="copy-state copy-fail" aria-hidden="true">
-              Copy failed
-            </span>
-          </button>
-        </dd>
-        {/* PRINTED OUTPUT: contact / LinkedIn */}
-        <dt>LinkedIn</dt>
-        <dd>
-          <a href="https://www.linkedin.com/in/moreldierckxm/" {...EXTERNAL}>moreldierckxm</a>
-        </dd>
-        {/* PRINTED OUTPUT: contact / Instagram */}
-        <dt>Instagram</dt>
-        <dd>
-          <a href="https://instagram.com/maxencetmd" {...EXTERNAL}>maxencetmd</a>
-        </dd>
-      </dl>
-    </>
+    <dl class="contact-list">
+      {CHANNELS.map((c) => (
+        <div class="contact-row">
+          <dt>{c.name}</dt>
+          <dd>
+            <a href={c.href} {...(c.href.startsWith("http") ? EXTERNAL : {})}>
+              {c.text}
+            </a>
+          </dd>
+          <dd class="copy-cell">
+            {/* PRINTED OUTPUT: contact / copy target names, for example "Copy Discord link" */}
+            <CopyButton value={c.copy} what={c.name === "Email" ? "email address" : `${c.name} link`} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

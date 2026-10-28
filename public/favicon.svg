@@ -1,10 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Tile: the calendar grid colour (the color-grid token). -->
-  <rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="rgb(43,47,55)" stroke="rgb(78,84,96)"/>
-  <!-- Two day columns, free: a toned-palette blue, lifted from step 0 so it reads on the tile at 16 px. -->
-  <rect x="5" y="5" width="10" height="22" rx="3" fill="rgb(45,98,196)"/>
-  <rect x="17" y="5" width="10" height="22" rx="3" fill="rgb(45,98,196)"/>
-  <!-- One busy block in each: partly busy (teal-green, step 4) and busy (yellow, step 8). -->
-  <rect x="5" y="9" width="10" height="8" rx="3" fill="rgb(71,171,149)"/>
-  <rect x="17" y="14" width="10" height="10" rx="3" fill="rgb(229,232,67)"/>
+  <!-- time.mutantcacti.com: two day columns on the dark grid, with busy blocks in the calendar's colours -->
+  <rect width="32" height="32" rx="7" fill="rgb(27,34,48)"/>
+  <rect x="6"  y="6" width="9" height="20" rx="2" fill="rgb(62,90,138)"/>
+  <rect x="17" y="6" width="9" height="20" rx="2" fill="rgb(62,90,138)"/>
+  <rect x="6"  y="6" width="9" height="8"  rx="2" fill="rgb(216,196,110)"/>
+  <rect x="17" y="14" width="9" height="12" rx="2" fill="rgb(78,154,140)"/>
 </svg>

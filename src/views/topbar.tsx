@@ -1,7 +1,7 @@
 import type { Links } from "../links";
 import type { Navigation, Period, View, ViewParams, ZoneMode, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
-import { ChevronDownIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
@@ -81,23 +81,16 @@ export function TopBar(p: TopBarProps) {
           </a>
         ))}
       </nav>
-      {p.nav.todayDisabled ? (
-        <span class="pill tb-today" data-tb="today" aria-disabled="true">
-          {/* PRINTED OUTPUT: topbar / today button */}
-          Today
-        </span>
-      ) : (
-        <a class="pill tb-today" data-tb="today" href={p.links.view(p.nav.today)}>
-          {/* PRINTED OUTPUT: topbar / today button */}
-          Today
-        </a>
-      )}
-      {/* PRINTED OUTPUT: topbar / previous and next glyphs */}
+      {/* Always clickable. When the period already contains now it's a no-op (JS stops the click). */}
+      <a class="pill tb-today" data-tb="today" href={p.links.view(p.nav.today)} data-noop={p.nav.todayDisabled ? "" : undefined}>
+        {/* PRINTED OUTPUT: topbar / today button */}
+        Today
+      </a>
       <a class="pill round tb-prev" data-tb="prev" href={p.links.view(p.nav.prev)} aria-label={steps.prev} rel="prev">
-        ‹
+        <ChevronLeftIcon />
       </a>
       <a class="pill round tb-next" data-tb="next" href={p.links.view(p.nav.next)} aria-label={steps.next} rel="next">
-        ›
+        <ChevronRightIcon />
       </a>
       <h1 class="period-label" data-tb="period">
         <span aria-hidden="true">{p.periodLabel}</span>

@@ -4,7 +4,7 @@
 import { RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherSvg } from "./dither";
 import { NOW_STEPS } from "./calendar";
-import { PALETTE } from "./parula";
+import { PALETTE, PALETTE_PAST } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -26,6 +26,9 @@ export function calendarCss(): string {
   const out: string[] = [];
   out.push(`:root{${PALETTE.map((c, i) => `--palette-${i}:${c}`).join(";")}}`);
   PALETTE.forEach((_, i) => out.push(`.p${i}{background-color:var(--palette-${i})}`));
+  // Past time: the same step, less saturated (the veil on top is in app.css).
+  out.push(`:root{${PALETTE_PAST.map((c, i) => `--palette-past-${i}:${c}`).join(";")}}`);
+  PALETTE_PAST.forEach((_, i) => out.push(`.past.p${i}{background-color:var(--palette-past-${i})}`));
   const tile = DOT_PX * 4;
   for (let level = DITHER_MIN_LEVEL + 1; level <= DITHER_MAX_LEVEL; level++) {
     for (const tone of ["k", "w"] as const) {

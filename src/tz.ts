@@ -31,13 +31,22 @@ function formatter(tz: string): Intl.DateTimeFormat {
  */
 export function canonicalZone(value: string | undefined | null): string | null {
   if (!value || value.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(value)) return null;
+  const hit = zoneMemo.get(value);
+  if (hit !== undefined) return hit;
+  let out: string | null;
   try {
     const resolved = new Intl.DateTimeFormat("en-GB", { timeZone: value }).resolvedOptions().timeZone;
-    return resolved.toLowerCase() === value.toLowerCase() ? resolved : value;
+    out = resolved.toLowerCase() === value.toLowerCase() ? resolved : value;
   } catch {
-    return null;
+    out = null;
   }
+  if (zoneMemo.size > 1000) zoneMemo.clear();
+  zoneMemo.set(value, out);
+  return out;
 }
+
+// Building an Intl.DateTimeFormat is slow, and this runs for every event time.
+const zoneMemo = new Map<string, string | null>();
 
 export interface ZonedParts {
   y: number;
@@ -56,11 +65,23 @@ export function zonedParts(epochSec: number, tz: string): ZonedParts {
   return { y: out.year!, m: out.month!, d: out.day!, h: out.hour!, min: out.minute!, s: out.second! };
 }
 
-/** The zone's offset from UTC at an instant, in seconds. */
+const offsetMemo = new Map<string, number>();
+const OFFSET_BUCKET = 900;
+
+/**
+ * The zone's offset from UTC at an instant, in seconds. Memoised per
+ * 15-minute bucket: modern zone changes happen on quarter-hour boundaries.
+ */
 export function offsetSeconds(epochSec: number, tz: string): number {
   const t = Math.floor(epochSec);
+  const key = `${tz}|${Math.floor(t / OFFSET_BUCKET)}`;
+  const hit = offsetMemo.get(key);
+  if (hit !== undefined) return hit;
   const p = zonedParts(t, tz);
-  return Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) / 1000 - t;
+  const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min, p.s) / 1000 - t;
+  if (offsetMemo.size > 50_000) offsetMemo.clear();
+  offsetMemo.set(key, offset);
+  return offset;
 }
 
 /**

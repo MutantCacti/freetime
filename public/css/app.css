@@ -10,7 +10,7 @@ body {
   color: var(--color-text);
   font: 15px/1.45 var(--font-sans);
 }
-.mono, .timelabel, .colhead, .period-label, .tz-text, .debug code { font-family: var(--font-mono); }
+.mono, .timelabel, .colhead, .tz-text, .debug code { font-family: var(--font-mono); }
 .timelabel, .colhead, .daynum, .dow, .picker-day, .tz-opt .off, .debug, .period-label { font-variant-numeric: tabular-nums; }
 a { color: var(--color-link); }
 :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
@@ -77,6 +77,7 @@ code { font-family: var(--font-mono); }
 .tz-button { gap: var(--space-1); padding: 0.2rem 0.6rem 0.2rem 0.85rem; min-height: 2rem; font-size: 0.85rem; color: var(--color-text-muted); max-width: 100%; }
 .tz-button:hover { color: var(--color-text); }
 .tz-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.icon-step { width: 18px; height: 18px; }
 /* Everything after the zone selector sits on the right. */
 .tz-button { margin-right: auto; }
 .tb-menu { display: none; }
@@ -137,13 +138,16 @@ code { font-family: var(--font-mono); }
   outline: 3px solid var(--color-focus); outline-offset: -3px; z-index: 5;
   box-shadow: inset 0 0 0 5px var(--color-bg);
 }
-/* Past time is greyed out: colour removed, a light veil on top; the dither still shows. */
+/*
+ * Past time is dimmed: a veil in the page colour over a less saturated palette
+ * colour (.past.pN in calendar.css). The dither still shows. Only the slot
+ * holding now uses a backdrop filter, for its past part; one cell is cheap.
+ */
 .slot.past::after, .slot.split::after, .daycell.past::after {
   content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: var(--color-past);
-  -webkit-backdrop-filter: grayscale(1); backdrop-filter: grayscale(1);
+  background: var(--color-veil);
 }
-.slot.split::after { bottom: auto; }
+.slot.split::after { bottom: auto; -webkit-backdrop-filter: saturate(0.5); backdrop-filter: saturate(0.5); }
 .daycell.out::before {
   content: ""; position: absolute; inset: 0; z-index: 1; background: var(--color-veil); pointer-events: none;
 }
@@ -170,8 +174,9 @@ code { font-family: var(--font-mono); }
   background: var(--color-bg); color: var(--color-text); font-size: 0.8rem; font-weight: 600;
 }
 .daycell.out .daynum { color: var(--color-text-muted); }
-.daycell.is-today { outline: 3px solid var(--color-text); outline-offset: -3px; z-index: 3; }
-.daycell.is-today::before { content: ""; position: absolute; inset: 3px; z-index: 3; box-shadow: 0 0 0 2px var(--color-bg); pointer-events: none; }
+/* Today: the now line's red, with the same thin page-colour edge. */
+.daycell.is-today { outline: 3px solid var(--color-now); outline-offset: -3px; z-index: 3; }
+.daycell.is-today::before { content: ""; position: absolute; inset: 3px; z-index: 3; box-shadow: 0 0 0 1px var(--color-bg); pointer-events: none; }
 
 /* ---------------------------------------------------------------- colour bar */
 .colourbar {
@@ -286,10 +291,11 @@ code { font-family: var(--font-mono); }
 
 /* ---------------------------------------------------------------- contact */
 .lede { font-size: 1rem; }
-.contact-list { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-4); align-items: center; margin: var(--space-4) 0 0; }
+.contact-list { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); align-items: center; margin: 0; }
+.contact-row { display: contents; }
 .contact-list dt { color: var(--color-text-muted); }
 .contact-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.email-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.contact-list .copy-cell { justify-self: end; }
 .copy-btn { display: inline-grid; min-height: 2rem; padding: 0.2rem 0.55rem; }
 .copy-state { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); visibility: hidden; }
 .copy-btn:not([data-state]) .copy-idle,
@@ -320,10 +326,12 @@ code { font-family: var(--font-mono); }
   .topbar { flex-wrap: wrap; gap: var(--space-2) var(--space-1); padding: var(--space-2); }
   .topbar::after { content: ""; flex-basis: 100%; order: 1; height: 0; }
   .tb-tabs, .tb-today, .tb-prev, .tb-next { order: 2; }
-  .tab { padding: 0.25rem 0.45rem; font-size: 0.85rem; min-height: 2rem; }
-  .tb-today { padding: 0.25rem 0.65rem; min-height: 2rem; margin-left: var(--space-1); }
-  .pill.round.tb-prev, .pill.round.tb-next { width: 2rem; min-height: 2rem; }
-  .period-label { margin: 0; font-size: 0.82rem; flex: none; letter-spacing: -0.02em; }
+  /* Row 2 fills the width with bigger tap targets: the tabs share the free space. */
+  .tb-tabs { flex: 1 1 auto; }
+  .tab { flex: 1 1 auto; justify-content: center; padding: 0.25rem 0.3rem; font-size: 0.85rem; min-height: 2.75rem; }
+  .tb-today { padding: 0.25rem 0.6rem; min-height: 2.75rem; margin-left: var(--space-1); }
+  .pill.round.tb-prev, .pill.round.tb-next { width: 2.5rem; min-height: 2.75rem; }
+  .period-label { margin: 0; padding-inline: var(--space-2) var(--space-1); font-size: 0.9rem; flex: none; }
   /* Zero basis: the zone selector takes what row 1 has left and truncates, so nothing wraps. */
   .tz-button { font-size: 0.8rem; flex: 1 1 0; min-width: 0; margin-right: var(--space-1); padding: 0.2rem 0.4rem 0.2rem 0.6rem; justify-content: space-between; }
   .tb-menu { display: inline-flex; }

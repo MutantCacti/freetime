@@ -41,6 +41,11 @@ function toEpoch(t: Time, tzid: string | null): number {
   return zonedToEpoch(t.year, t.month, t.day, t.hour, t.minute, DEFAULT_TZ);
 }
 
+/** A time's wall-clock reading as if it were UTC: cheap, and within 14 hours of the real instant. */
+function localSeconds(t: Time): number {
+  return Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second) / 1000;
+}
+
 function tzidOf(comp: Component, name: string): string | null {
   const v = comp.getFirstProperty(name)?.getParameter("tzid");
   return typeof v === "string" ? v : null;
@@ -64,16 +69,20 @@ function occurrenceInterval(item: Event, start: Time, end: Time, recurring: bool
   return { start: s, end: e };
 }
 
-/**
- * Busy intervals overlapping [from, to), in no particular order.
- * Handles RRULE/RDATE, EXDATE, RECURRENCE-ID overrides, all-day events and
- * TZID times. TRANSPARENT and CANCELLED events are ignored.
- */
-export function expandBusy(root: Component, from: number, to: number): Interval[] {
+interface Prepared {
+  masters: Map<string, Event>;
+  singles: Event[];
+}
+
+// Building events and linking overrides is done once per parsed feed.
+const preparedMemo = new WeakMap<Component, Prepared>();
+
+function prepared(root: Component): Prepared {
+  const hit = preparedMemo.get(root);
+  if (hit) return hit;
   const masters = new Map<string, Event>();
   const exceptions: Component[] = [];
   const singles: Event[] = [];
-
   for (const vevent of root.getAllSubcomponents("vevent")) {
     const uid = String(vevent.getFirstPropertyValue("uid") ?? "");
     if (vevent.hasProperty("recurrence-id")) exceptions.push(vevent);
@@ -85,7 +94,44 @@ export function expandBusy(root: Component, from: number, to: number): Interval[
     if (master) master.relateException(ex);
     else singles.push(new ICAL.Event(ex));
   }
+  const out = { masters, singles };
+  preparedMemo.set(root, out);
+  return out;
+}
 
+const WINDOW = 35 * 86_400;
+const windowMemo = new WeakMap<Component, Map<string, Interval[]>>();
+
+/**
+ * expandBusy over aligned 5-week windows, remembered per parsed feed, so
+ * moving between neighbouring periods doesn't expand the same weeks again.
+ * The result may include intervals outside [from, to); callers clip.
+ */
+export function expandBusyCached(root: Component, from: number, to: number): Interval[] {
+  let memo = windowMemo.get(root);
+  if (!memo) {
+    memo = new Map();
+    windowMemo.set(root, memo);
+  }
+  const start = Math.floor(from / WINDOW) * WINDOW;
+  const end = Math.ceil(to / WINDOW) * WINDOW;
+  const key = `${start}:${end}`;
+  let hit = memo.get(key);
+  if (!hit) {
+    hit = expandBusy(root, start, end);
+    if (memo.size >= 24) memo.delete(memo.keys().next().value!);
+    memo.set(key, hit);
+  }
+  return hit.map((iv) => ({ ...iv }));
+}
+
+/**
+ * Busy intervals overlapping [from, to), in no particular order.
+ * Handles RRULE/RDATE, EXDATE, RECURRENCE-ID overrides, all-day events and
+ * TZID times. TRANSPARENT and CANCELLED events are ignored.
+ */
+export function expandBusy(root: Component, from: number, to: number): Interval[] {
+  const { masters, singles } = prepared(root);
   const out: Interval[] = [];
   const keep = (iv: Interval | null) => {
     if (iv && iv.end > from && iv.start < to) out.push(iv);
@@ -99,10 +145,15 @@ export function expandBusy(root: Component, from: number, to: number): Interval[
   for (const ev of masters.values()) {
     if (!ev.startDate) continue;
     const it = ev.iterator();
-    const startTz = tzidOf(ev.component, "dtstart");
+    // Occurrences are filtered on their local clock time, which is within
+    // 14 hours of the real instant, so the costly zone conversion only runs
+    // near the range. Overrides can move an instance by days, hence a week of margin.
+    const duration = Math.max(0, localSeconds(ev.endDate ?? ev.startDate) - localSeconds(ev.startDate));
+    const margin = 7 * 86_400 + 14 * 3600;
     for (let i = 0, next = it.next(); next && i < MAX_OCCURRENCES_PER_EVENT; i++, next = it.next()) {
-      // Overrides can move an instance by days, so stop a week past the range.
-      if (toEpoch(next, startTz) >= to + 7 * 86_400) break;
+      const local = localSeconds(next);
+      if (local - margin >= to) break;
+      if (local + duration + margin <= from) continue;
       const details = ev.getOccurrenceDetails(next);
       keep(occurrenceInterval(details.item, details.startDate, details.endDate, details.item === ev));
     }

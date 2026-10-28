@@ -63,7 +63,6 @@
   --color-on-accent: var(--raw-white);
   --color-grid: var(--raw-grid);
   --color-divider: var(--raw-grey-200);
-  --color-past: color-mix(in srgb, var(--raw-white) 30%, transparent);
   --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
   color-scheme: light;
@@ -86,7 +85,6 @@
     --color-on-accent: var(--raw-ink-950);
     --color-grid: var(--raw-grid);
     --color-divider: var(--raw-ink-700);
-    --color-past: color-mix(in srgb, var(--raw-ink-950) 35%, transparent);
     --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
     --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
     color-scheme: dark;
@@ -109,7 +107,6 @@
   --color-on-accent: var(--raw-ink-950);
   --color-grid: var(--raw-grid);
   --color-divider: var(--raw-ink-700);
-  --color-past: color-mix(in srgb, var(--raw-ink-950) 35%, transparent);
   --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
   color-scheme: dark;

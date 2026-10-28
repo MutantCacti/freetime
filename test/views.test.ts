@@ -66,14 +66,15 @@ describe("period label: months and year only", () => {
 });
 
 describe("navigation (§5.5)", () => {
-  const cases: [string, string, Record<string, string>, Record<string, string>, Record<string, string> | "disabled"][] = [
+  // The last column is Today's target; "noop" marks a period that already contains now.
+  const cases: [string, string, Record<string, string>, Record<string, string>, Record<string, string>, ("noop" | "")?][] = [
     // path, name, prev, next, today
     ["/?view=day&date=2026-11-12", "day", { view: "day", date: "2026-11-11" }, { view: "day", date: "2026-11-13" }, { view: "day", date: "2026-11-03" }],
-    ["/?view=day&date=2026-11-03", "day today", { view: "day", date: "2026-11-02" }, { view: "day", date: "2026-11-04" }, "disabled"],
+    ["/?view=day&date=2026-11-03", "day today", { view: "day", date: "2026-11-02" }, { view: "day", date: "2026-11-04" }, { view: "day", date: "2026-11-03" }, "noop"],
     ["/?view=week&date=2026-11-12", "week", { view: "week", date: "2026-11-02" }, { view: "week", date: "2026-11-16" }, { view: "week", date: "2026-11-02" }],
-    ["/?view=week&date=2026-11-05", "week today", { view: "week", date: "2026-10-26" }, { view: "week", date: "2026-11-09" }, "disabled"],
+    ["/?view=week&date=2026-11-05", "week today", { view: "week", date: "2026-10-26" }, { view: "week", date: "2026-11-09" }, { view: "week", date: "2026-11-02" }, "noop"],
     ["/?view=month&date=2027-01-15", "month", { view: "month", date: "2026-12-01" }, { view: "month", date: "2027-02-01" }, { view: "month", date: "2026-11-01" }],
-    ["/?view=month&date=2026-11-30", "month today", { view: "month", date: "2026-10-01" }, { view: "month", date: "2026-12-01" }, "disabled"],
+    ["/?view=month&date=2026-11-30", "month today", { view: "month", date: "2026-10-01" }, { view: "month", date: "2026-12-01" }, { view: "month", date: "2026-11-01" }, "noop"],
     [
       "/?view=range&from=2026-11-10&to=2026-11-16",
       "range",
@@ -87,11 +88,12 @@ describe("navigation (§5.5)", () => {
       "range today",
       { view: "range", from: "2026-10-12", to: "2026-10-31" },
       { view: "range", from: "2026-11-21", to: "2026-12-10" },
-      "disabled",
+      { view: "range", from: "2026-11-03", to: "2026-11-22" },
+      "noop",
     ],
   ];
 
-  it.each(cases)("%s (%s)", async (path, _name, prev, next, todayTarget) => {
+  it.each(cases)("%s (%s)", async (path, _name, prev, next, todayTarget, noop) => {
     const html = await app.html(path);
     const check = (href: string | null, expected: Record<string, string>) => {
       expect(href).not.toBeNull();
@@ -100,13 +102,12 @@ describe("navigation (§5.5)", () => {
     };
     check(topbarHref(html, "prev"), prev);
     check(topbarHref(html, "next"), next);
+    // Today is always a clickable link; when the period already contains now, JS makes it a no-op.
     const today = tagWith(html, 'data-tb="today"');
-    if (todayTarget === "disabled") {
-      expect(today).toContain('aria-disabled="true"');
-      expect(attr(today, "href")).toBeNull();
-    } else {
-      check(attr(today, "href"), todayTarget);
-    }
+    expect(today).toMatch(/^<a /);
+    expect(today).not.toContain("aria-disabled");
+    check(attr(today, "href"), todayTarget);
+    expect(attr(today, "data-noop") !== null).toBe(noop === "noop");
   });
 
   it("arrows and Today are plain links", async () => {
@@ -191,6 +192,16 @@ describe("current time", () => {
     expect(cellClass(html, "Wed 4 Nov, 08:00–08:30, 100% busy")).not.toContain("past");
     const css = await (await app.get("/css/calendar.css")).text();
     expect(css).toContain(".slot.split.m20::after{height:66.667%}");
+  });
+
+  it("dims past cells with the veil over a less saturated palette, and outlines today in the now colour", async () => {
+    const css = await (await app.get("/css/calendar.css")).text();
+    for (let i = 0; i < LEVELS; i++) expect(css).toContain(`.past.p${i}{background-color:var(--palette-past-${i})}`);
+    const appCss = files["/public/css/app.css"]!;
+    expect(appCss).toMatch(/\.slot\.past::after, \.slot\.split::after, \.daycell\.past::after \{[^}]*background: var\(--color-veil\)/);
+    // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does.
+    expect(appCss.match(/backdrop-filter/g)?.length).toBe(2);
+    expect(appCss).toMatch(/\.daycell\.is-today \{ outline: 3px solid var\(--color-now\)/);
   });
 
   it("greys out days before today in Day, Week, Month and Range", async () => {

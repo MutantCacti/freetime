@@ -96,11 +96,20 @@ export function toneTable(source: readonly string[], chroma = PALETTE_CHROMA, lM
 /** The toned 64-entry table, generated at start-up. */
 export const PARULA_TONED: readonly string[] = toneTable(PARULA_SOURCE);
 
+/** Chroma scale for time that has passed: the same colours, less saturated. */
+export const PAST_CHROMA = 0.5;
+
 /** The calendar's palette: the toned table sampled at the LEVELS steps, low to high. */
 export const PALETTE: readonly string[] = Array.from(
   { length: LEVELS },
   (_, step) => PARULA_TONED[Math.round((step / (LEVELS - 1)) * (PARULA_TONED.length - 1))]!,
 );
+
+/** The palette for past time: each step with chroma scaled by PAST_CHROMA. */
+export const PALETTE_PAST: readonly string[] = PALETTE.map((hex) => {
+  const [L, C, h] = rgbToOklch(hexToRgb(hex));
+  return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
+});
 
 export function luminance(hex: string): number {
   const [r, g, b] = hexToRgb(hex).map(toLinear) as RGB;

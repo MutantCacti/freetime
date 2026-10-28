@@ -60,6 +60,18 @@ export const MenuIcon = () => (
   </svg>
 );
 
+export const ChevronLeftIcon = () => (
+  <svg {...base} class="icon icon-step" stroke-width={2}>
+    <path d="M10 3.5 5.5 8l4.5 4.5" />
+  </svg>
+);
+
+export const ChevronRightIcon = () => (
+  <svg {...base} class="icon icon-step" stroke-width={2}>
+    <path d="M6 3.5 10.5 8 6 12.5" />
+  </svg>
+);
+
 export const ChevronDownIcon = () => (
   <svg {...base} class="icon icon-chevron">
     <path d="M4 6l4 4 4-4" />
