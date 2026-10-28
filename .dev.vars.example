@@ -1,0 +1,3 @@
+# Copy to .dev.vars to run against the real feed with `npm run dev:live`.
+# `npm run dev` doesn't need this: it uses test/fixtures/dev.ics.
+ICAL_URL="https://calendar.google.com/calendar/ical/.../basic.ics"

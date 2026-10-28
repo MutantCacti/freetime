@@ -1,0 +1,22 @@
+{
+  "name": "time-mutantcacti",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --env dev",
+    "dev:live": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "4.13.14",
+    "ical.js": "2.2.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.23.0",
+    "@cloudflare/workers-types": "5.20261028.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.12",
+    "wrangler": "4.124.0"
+  }
+}

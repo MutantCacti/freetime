@@ -1,0 +1,30 @@
+name = "time-mutantcacti"
+main = "src/index.ts"
+compatibility_date = "2026-08-15"
+workers_dev = false
+routes = [
+  { pattern = "time.mutantcacti.com", custom_domain = true }
+]
+
+# The Worker runs first for every request, so security headers and the
+# GET/HEAD-only rule also cover static files.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.ics"]
+fallthrough = true
+
+# `npm run dev`: same app, fed from test/fixtures/dev.ics. No secret needed.
+[env.dev]
+main = "src/dev.ts"
+workers_dev = true
+routes = []
+
+[env.dev.assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
