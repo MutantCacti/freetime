@@ -2,7 +2,6 @@
 // busy fraction, so a pattern never changes because a neighbour changed.
 
 import { LEVELS, busyStep } from "./levels";
-import { dotTone } from "./parula";
 
 /** Dots at fraction 0 (free). */
 export const DITHER_MIN_LEVEL = 0;
@@ -55,15 +54,14 @@ export function ditherSvg(level: number, tone: "k" | "w"): string {
 }
 
 /**
- * The classes that colour and dither a cell: `p<step>` for the palette colour
- * and `d<level><tone>` for the dots. Every view uses this one function, so a
- * fraction always looks the same.
+ * The class that colours and dithers a cell: `p<step>`. The generated CSS
+ * gives each step its colour and dot pattern for the current theme. Every
+ * view uses this one function, so a fraction always looks the same.
  */
 export function cellClasses(fraction: number): string {
   return stepClasses(busyStep(fraction));
 }
 
 export function stepClasses(step: number): string {
-  const level = ditherLevelForStep(step);
-  return level === 0 ? `p${step}` : `p${step} d${level}${dotTone(step)}`;
+  return `p${step}`;
 }

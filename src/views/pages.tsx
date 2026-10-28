@@ -244,7 +244,7 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           <H id="help-colour">Reading the colour and the dots</H>
           <p>Each cell shows how much of its time is busy.</p>
           <ul>
-            <li>Colour runs in nine steps from dark blue (free) to yellow (busy), as on the colour bar.</li>
+            <li>Colour runs in nine steps, as on the colour bar: in light mode from yellow (free) to dark blue (busy), in dark mode the other way round.</li>
             <li>Dots get denser as a cell gets busier. A fully busy cell still shows some colour between the dots.</li>
             <li>Each cell's label gives the exact amount, for example "50% busy".</li>
             <li>Time that has already passed is greyed out.</li>

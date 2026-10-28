@@ -148,6 +148,13 @@ describe("Range validation", () => {
     expect(html).toContain('<button type="submit" class="btn btn-primary">Apply</button>');
   });
 
+  it("puts a single inline \"to\" between the two date fields, with no From/To labels", async () => {
+    const html = await app.html("/?view=range&from=2026-11-02&to=2026-11-08");
+    const form = html.slice(html.indexOf('<form class="range-form"'), html.indexOf("</form>"));
+    expect(form).toMatch(/<input type="date" name="from"[^>]*aria-label="Start date"\/><span class="range-to" aria-hidden="true">to<\/span><input type="date" name="to"[^>]*aria-label="End date"\/>/);
+    expect(form).not.toMatch(/<label|>From<|>To</);
+  });
+
   it("uses columns up to 14 days and day cells beyond", async () => {
     expect(await app.html("/?view=range&from=2026-11-01&to=2026-11-14")).toContain('data-layout="columns"');
     expect(await app.html("/?view=range&from=2026-11-01&to=2026-11-15")).toContain('data-layout="cells"');
@@ -196,7 +203,7 @@ describe("current time", () => {
 
   it("dims past cells with the veil over a less saturated palette, and outlines today in the now colour", async () => {
     const css = await (await app.get("/css/calendar.css")).text();
-    for (let i = 0; i < LEVELS; i++) expect(css).toContain(`.past.p${i}{background-color:var(--palette-past-${i})}`);
+    for (let i = 0; i < LEVELS; i++) expect(css).toContain(`.past.p${i}{background-color:var(--cell-past-${i})}`);
     const appCss = files["/public/css/app.css"]!;
     expect(appCss).toMatch(/\.slot\.past::after, \.slot\.split::after, \.daycell\.past::after \{[^}]*background: var\(--color-veil\)/);
     // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does.
@@ -251,8 +258,8 @@ describe("colour and dither", () => {
   it("gives a fraction the same colour and Bayer level in every view", async () => {
     const half = cellClasses(0.5);
     const full = cellClasses(1);
-    expect(half).toMatch(/^p4 d6[kw]$/);
-    expect(full).toBe(`p${LEVELS - 1} d${DITHER_MAX_LEVEL}k`);
+    expect(half).toBe("p4");
+    expect(full).toBe(`p${LEVELS - 1}`);
     // A half-busy 30-minute slot, in each column view.
     for (const path of ["/?view=day&date=2026-11-03", "/?view=week&date=2026-11-02", "/?view=range&from=2026-11-01&to=2026-11-05"]) {
       expect(cellClass(await app.html(path), "Tue 3 Nov, 14:00–14:30, 50% busy"), path).toContain(half);
@@ -278,9 +285,11 @@ describe("colour and dither", () => {
 
   it("serves the generated colour CSS and dither tiles", async () => {
     const css = await (await app.get("/css/calendar.css")).text();
-    expect(css).toContain(".p8{background-color:var(--palette-8)}");
+    expect(css).toContain(".p8{background-color:var(--cell-8);background-image:var(--dots-8);background-size:8px 8px}");
     expect(css).not.toContain(".p9{");
-    expect(css).toContain(`.d${DITHER_MAX_LEVEL}k{background-image:url(/img/dither/${DITHER_MAX_LEVEL}k.svg)`);
+    // Fully busy: level 12 dots in both themes (the dot tone follows the colour underneath).
+    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(3);
+    expect(css.match(/--dots-0:none/g)?.length).toBe(3);
     const svg = await app.get(`/img/dither/${DITHER_MAX_LEVEL}k.svg`);
     expect(svg.headers.get("content-type")).toBe("image/svg+xml");
     expect((await svg.text()).match(/<rect /g)?.length).toBe(DITHER_MAX_LEVEL);
@@ -306,6 +315,29 @@ describe("top bar", () => {
     expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "download", "contact", "help", "theme"]);
     const tabs = [...topbar.matchAll(/<a class="tab"[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
     expect(tabs).toEqual(["Day", "Week", "Month", "Range"]);
+  });
+
+  it("groups the top bar: controls left, context centred, pages right", async () => {
+    const html = await app.html("/?view=week&date=2026-11-02");
+    const topbar = html.slice(html.indexOf('<header class="topbar"'), html.indexOf("</header>"));
+    const groups = [...topbar.matchAll(/<div class="(tb-left|tb-centre|tb-right)">/g)].map((m) => m[1]);
+    expect(groups).toEqual(["tb-left", "tb-centre", "tb-right"]);
+    const between = (a: string, b: string) => topbar.slice(topbar.indexOf(a), b ? topbar.indexOf(b) : undefined);
+    expect([...between('class="tb-left"', 'class="tb-centre"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["tabs", "today", "prev", "next"]);
+    expect([...between('class="tb-centre"', 'class="tb-right"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["period", "tz"]);
+    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "download", "contact", "help", "theme"]);
+    const css = files["/public/css/app.css"]!;
+    expect(css).toMatch(/grid-template-columns: minmax\(max-content, 1fr\) minmax\(0, max-content\) minmax\(max-content, 1fr\);\s*grid-template-areas: "left centre right"/);
+  });
+
+  it("dialog heads use the body's inline padding, so Close lines up with the content's right edge", () => {
+    const css = files["/public/css/app.css"]!;
+    const head = /\.dialog-head \{[^}]*padding: var\(--space-3\) (var\(--space-6\));/.exec(css)?.[1];
+    const body = /\.dialog-body \{ padding: var\(--space-4\) (var\(--space-6\)) /.exec(css)?.[1];
+    expect(head).toBe("var(--space-6)");
+    expect(body).toBe(head);
+    expect(css).toContain(".dialog-head { padding-inline: var(--space-4); }");
+    expect(css).toMatch(/\.dialog-body \{ padding: var\(--space-3\) var\(--space-4\) var\(--space-4\); \}/);
   });
 
   it("uses pills for Today, the arrows, the zone selector and the right-hand buttons, and keeps tabs as a segmented control", async () => {

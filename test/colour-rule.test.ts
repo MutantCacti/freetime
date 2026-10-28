@@ -60,12 +60,12 @@ const darkSystem = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (syst
 const darkChosen = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (chosen)")));
 
 describe("contrast (WCAG AA) in both modes", () => {
-  it("the calendar grid colour is a dark neutral in both themes", () => {
-    for (const t of [light, darkChosen]) {
-      expect(luminance(t["--color-grid"]!)).toBeLessThan(0.05);
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(t["--color-grid"]!.slice(i, i + 2), 16));
-      expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThan(16);
-    }
+  it("grid lines are the page colour in light mode and a dark neutral in dark mode", () => {
+    expect(light["--color-grid"]).toBe(light["--color-bg"]);
+    const dark = darkChosen["--color-grid"]!;
+    expect(luminance(dark)).toBeLessThan(0.05);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(dark.slice(i, i + 2), 16));
+    expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThan(16);
   });
 
   it("defines the same dark set for the system setting and the switcher", () => {

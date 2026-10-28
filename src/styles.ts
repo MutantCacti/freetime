@@ -2,9 +2,10 @@
 // Generating it keeps the colour table and the dither levels in one place.
 
 import { RANGE_COLUMN_MAX_DAYS } from "./config";
-import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherSvg } from "./dither";
+import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
+import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
-import { PALETTE, PALETTE_PAST } from "./parula";
+import { THEME_PALETTES, type Theme, toneFor } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -24,16 +25,26 @@ let css: string | null = null;
 export function calendarCss(): string {
   if (css) return css;
   const out: string[] = [];
-  out.push(`:root{${PALETTE.map((c, i) => `--palette-${i}:${c}`).join(";")}}`);
-  PALETTE.forEach((_, i) => out.push(`.p${i}{background-color:var(--palette-${i})}`));
-  // Past time: the same step, less saturated (the veil on top is in app.css).
-  out.push(`:root{${PALETTE_PAST.map((c, i) => `--palette-past-${i}:${c}`).join(";")}}`);
-  PALETTE_PAST.forEach((_, i) => out.push(`.past.p${i}{background-color:var(--palette-past-${i})}`));
+  // Per-theme variables for each step: its colour, its past colour, and its dots.
+  const vars = (theme: Theme) => {
+    const { colours, past } = THEME_PALETTES[theme];
+    return colours
+      .map((c, i) => {
+        const level = ditherLevelForStep(i);
+        const dots = level === 0 ? "none" : `url(${ditherAssetPath(level, toneFor(c))})`;
+        return `--cell-${i}:${c};--cell-past-${i}:${past[i]};--dots-${i}:${dots}`;
+      })
+      .join(";");
+  };
+  // Same structure as tokens.css: light by default, dark from the system or the switcher.
+  out.push(`:root{${vars("light")}}`);
+  out.push(`@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars("dark")}}}`);
+  out.push(`:root[data-theme="dark"]{${vars("dark")}}`);
   const tile = DOT_PX * 4;
-  for (let level = DITHER_MIN_LEVEL + 1; level <= DITHER_MAX_LEVEL; level++) {
-    for (const tone of ["k", "w"] as const) {
-      out.push(`.d${level}${tone}{background-image:url(${ditherAssetPath(level, tone)});background-size:${tile}px ${tile}px}`);
-    }
+  for (let i = 0; i < LEVELS; i++) {
+    out.push(`.p${i}{background-color:var(--cell-${i});background-image:var(--dots-${i});background-size:${tile}px ${tile}px}`);
+    // Past time: the same step, less saturated (the veil on top is in app.css).
+    out.push(`.past.p${i}{background-color:var(--cell-past-${i})}`);
   }
   for (let step = 0; step < NOW_STEPS; step++) {
     const pct = ((step / NOW_STEPS) * 100).toFixed(3);

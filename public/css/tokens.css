@@ -61,7 +61,8 @@
   --color-warning: var(--raw-amber-700);
   --color-error: var(--raw-red-700);
   --color-on-accent: var(--raw-white);
-  --color-grid: var(--raw-grid);
+  /* Light: grid lines in the page colour (the inverted map keeps busy cells dark). */
+  --color-grid: var(--raw-white);
   --color-divider: var(--raw-grey-200);
   --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);

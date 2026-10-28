@@ -1,7 +1,8 @@
+import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
 import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
+import { THEME_PALETTES, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -24,7 +25,8 @@ describe("dither", () => {
     const dots = ditherSvg(DITHER_MAX_LEVEL, "k").match(/<rect /g)?.length;
     expect(dots).toBe(12);
     expect(dots).toBeLessThan(16);
-    expect(cellClasses(1)).toContain(`d${DITHER_MAX_LEVEL}`);
+    expect(cellClasses(1)).toBe(`p${LEVELS - 1}`);
+    expect(ditherLevelForStep(LEVELS - 1)).toBe(DITHER_MAX_LEVEL);
   });
 
   it("a free cell has no dots", () => {
@@ -76,7 +78,7 @@ describe("levels", () => {
   it("colour and dither use the same step", () => {
     for (let f = 0; f <= 1.0001; f += 0.01) {
       const step = busyStep(f);
-      expect(cellClasses(f)).toMatch(new RegExp(`^p${step}( d${ditherLevelForStep(step)}[kw])?$`));
+      expect(cellClasses(f)).toBe(`p${step}`);
     }
   });
 });
@@ -114,6 +116,29 @@ describe("palette", () => {
       expect(Cp).toBeLessThanOrEqual(C * PAST_CHROMA + 0.01);
       if (C > 0.02) expect(Math.abs(Math.atan2(Math.sin(hp - h), Math.cos(hp - h)))).toBeLessThan(0.1);
     });
+  });
+
+  it("light mode inverts the colours, not the dither: free is yellow, busy is dark", () => {
+    const { light, dark } = THEME_PALETTES;
+    expect(dark.colours).toEqual(PALETTE);
+    for (let i = 0; i < LEVELS; i++) {
+      expect(light.colours[i]).toBe(PALETTE[LEVELS - 1 - i]);
+      expect(light.past[i]).toBe(PALETTE_PAST[LEVELS - 1 - i]);
+    }
+    const css = calendarCss();
+    const lightBlock = /^:root\{([^}]*)\}/m.exec(css)![1]!;
+    const darkBlock = /:root\[data-theme="dark"\]\{([^}]*)\}/.exec(css)![1]!;
+    expect(lightBlock).toContain(`--cell-0:${PALETTE[LEVELS - 1]}`);
+    expect(lightBlock).toContain(`--cell-${LEVELS - 1}:${PALETTE[0]}`);
+    expect(darkBlock).toContain(`--cell-0:${PALETTE[0]}`);
+    // Same dither level per step in both themes; the tone follows the colour.
+    for (let i = 0; i < LEVELS; i++) {
+      const level = ditherLevelForStep(i);
+      const dots = (block: string) => new RegExp(`--dots-${i}:([^;]*)`).exec(block)![1];
+      for (const [block, colour] of [[lightBlock, light.colours[i]!], [darkBlock, dark.colours[i]!]] as const) {
+        expect(dots(block)).toBe(level === 0 ? "none" : `url(/img/dither/${level}${toneFor(colour)}.svg)`);
+      }
+    }
   });
 
   it("gets lighter from free to busy", () => {

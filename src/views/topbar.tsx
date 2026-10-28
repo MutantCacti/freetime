@@ -73,6 +73,8 @@ export function TopBar(p: TopBarProps) {
   const steps = STEP_NAMES[p.period.view];
   return (
     <header class="topbar" id="topbar">
+      {/* Three groups: controls on the left, context in the centre, pages on the right. */}
+      <div class="tb-left">
       {/* PRINTED OUTPUT: topbar / view tabs group name */}
       <nav class="tb-tabs" data-tb="tabs" aria-label="View">
         {(Object.keys(TAB_LABELS) as View[]).map((view) => (
@@ -92,6 +94,8 @@ export function TopBar(p: TopBarProps) {
       <a class="pill round tb-next" data-tb="next" href={p.links.view(p.nav.next)} aria-label={steps.next} rel="next">
         <ChevronRightIcon />
       </a>
+      </div>
+      <div class="tb-centre">
       <h1 class="period-label" data-tb="period">
         <span aria-hidden="true">{p.periodLabel}</span>
         <span class="sr-only">{p.periodFull}</span>
@@ -109,6 +113,8 @@ export function TopBar(p: TopBarProps) {
         <span class="tz-text">{p.zone.text}</span>
         <ChevronDownIcon />
       </a>
+      </div>
+      <div class="tb-right">
       {/* PRINTED OUTPUT: topbar / notice indicator accessible name */}
       <button type="button" class="pill round tb-indicator" id="notice-indicator" data-tb="indicator" hidden aria-label="Show notice">
         <WarningIcon />
@@ -124,6 +130,7 @@ export function TopBar(p: TopBarProps) {
         <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
       </div>
       <ThemeButton tb />
+      </div>
     </header>
   );
 }

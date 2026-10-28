@@ -29,7 +29,7 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
   Any link can be shared, and Back works.
 - **Styling** uses two layers of tokens in `public/css/tokens.css`:
   - raw values first, then semantic tokens (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-divider`, `--color-grid`, `--color-link`, `--color-focus`, `--color-now`, `--color-warning`, `--color-error`);
-  - `--color-grid` is the calendar's grid lines: a dark neutral in **both** themes. `--color-divider` is the subtler line used for the top bar and panels;
+  - `--color-grid` is the calendar's grid lines: the page colour (white) in light mode, a dark neutral in dark mode. `--color-divider` is the subtler line used for the top bar and panels;
   - component CSS uses only `var(--…)`;
   - a test fails the build if a hex colour appears anywhere except `tokens.css` and `src/parula.ts`;
   - light and dark mode follow `prefers-color-scheme`, with a manual override from the theme switcher (§5.10);
@@ -109,7 +109,7 @@ The main page (`/`) has three regions, plus a floating notice layer:
 4. **Notices** (§5.9): a floating layer anchored just below the top bar (and below the colour-bar strip on narrow screens), overlaying the top of the calendar. It is not a region of the layout and never pushes the calendar down.
 
 ### 5.0.1 Top bar: exact order
-**Wide screens (one row), left to right:**
+**Wide screens (one row), left to right,** in three groups: controls on the left, context (items 5 and 6) centred in the bar, pages on the right.
 
 | # | Item | Group | Shape |
 |---|---|---|---|
@@ -117,8 +117,8 @@ The main page (`/`) has three regions, plus a floating notice layer:
 | 2 | **Today** | left, directly after the tabs | pill |
 | 3 | **‹** (previous): a left chevron icon (a plain 90° angle) | left | pill (round) |
 | 4 | **›** (next): a right chevron icon | left | pill (round) |
-| 5 | Period label: months and year only (§5.0.2) | left, after the arrows | text |
-| 6 | **Time-zone selector**, always visible (§5.11) | left, after the label | pill, with chevron |
+| 5 | Period label: months and year only (§5.0.2) | centre | text |
+| 6 | **Time-zone selector**, always visible (§5.11) | centre, after the label | pill, with chevron |
 | 7 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right | pill (round) |
 | 8 | **Download .ics** | right | pill |
 | 9 | **Contact me** | right | pill |
@@ -128,9 +128,9 @@ The main page (`/`) has three regions, plus a floating notice layer:
 - "Pill" means `border-radius: 9999px`, with more inline padding than the tabs. The view tabs keep their segmented shape, so the two kinds of control look different.
 - **The view tabs never change size.** The active tab is marked by fill and an underline plus `aria-current`; it never changes font weight or anything else that changes its width, so no tab moves when you switch views.
 
-**Narrow screens (two rows):**
+**When the three groups don't fit in one centred row (up to 1160 px wide): two rows.**
 
-- **Row 1, left to right:** period label (5) · time-zone selector (6) · notice indicator (7) · a **menu** button containing Download .ics, Contact me and Help (8–10) · theme switcher (11).
+- **Row 1:** period label (5) · time-zone selector (6) on the left; the right-hand group (7–11) on the right. On phones (up to 640 px), items 8–10 go into a **menu** button.
 - **Row 2, left-aligned:** view tabs as a compact segmented control (1) · **Today** (2) · **‹** (3) · **›** (4). Row 2 fills the width: the tabs share the free space, and every control in it is at least 44 px tall.
 - The period label has extra inline padding on narrow screens.
 
@@ -159,6 +159,7 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 - **Picker:** a date picker for start and end that looks like shadcn's calendar, plus an **Apply** button.
   - Nothing updates until Apply is pressed.
   - Without JS, the picker is a GET form with two `<input type="date">` fields.
+  - The two date fields sit on one line with a single inline "to" between them, and no "From"/"To" labels above, so the form takes little vertical space. Each field's accessible name says which date it is ("Start date", "End date").
 - **Validation:**
   - if the end date is before the start date, the dates are swapped;
   - ranges are capped at **62 days**;
@@ -230,7 +231,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
   - Wrap every `localStorage` read and write in `try/catch`; if storage is unavailable, the toggle still works for that page view.
   - Apply the stored theme with a tiny script in `<head>` **before first paint**, so the page doesn't flash the wrong theme. Because the CSP forbids inline scripts, serve it as its own small file loaded with `<script src>` in `<head>` (not deferred).
 - **Tokens:** `tokens.css` defines the light set on `:root`, the dark set under `@media (prefers-color-scheme: dark)` for `:root:not([data-theme="light"])`, and the dark set again under `:root[data-theme="dark"]`.
-- Parula and the dither are the same in both themes; only the chrome changes. Check that the dither dots still read against both backgrounds.
+- The dither is the same in both themes. The colours are not: light mode inverts the colour map (§6), so busy cells stay dark against a white page. Check that the dither dots still read in both.
 - **Without JS:** the button is hidden and the page follows the system setting.
 
 ### 5.11 Time zone
@@ -280,7 +281,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 ## 6. Colour, dither and colour bar
 
 - **Levels:** the busy fraction is quantised into **`LEVELS = 9` steps** (0, 1/8, …, 1), set in one constant. Colour and dither both use the same step. Cell labels still state the real percentage.
-- **Colour:** MATLAB's **parula** colormap, toned down slightly. `src/parula.ts` keeps the original 64-entry table for reference and derives the toned table from it at start-up, through OKLCH:
+- **Colour:** MATLAB's **parula** colormap, toned down slightly. **In dark mode, free is the low (dark purple) end and busy the high (yellow) end; in light mode the map is inverted**, so free is yellow and busy is dark purple. Only the colours change between themes; each step's dither level is the same, and the dot colour (black or white) follows the colour underneath. `src/parula.ts` keeps the original 64-entry table for reference and derives the toned table from it at start-up, through OKLCH:
   - same hue path;
   - chroma scaled by `PALETTE_CHROMA = 0.85`;
   - lightness compressed into `PALETTE_L_MIN = 0.36` … `PALETTE_L_MAX = 0.90`.
@@ -325,7 +326,7 @@ Any method other than GET or HEAD returns **405**. There are no forms that POST 
 
 **Help** opens as a modal with JS, rendered into the page like Contact and Download. Without JS, the Help link goes to `/help`.
 
-**Close at the top right, everywhere.** Help, Contact and Download, as modals or as pages, all have a Close (×) button at the top right. There are no "back" links.
+**Close at the top right, everywhere.** Help, Contact and Download, as modals or as pages, all have a Close (×) button at the top right. There are no "back" links. In a modal, Close is aligned with the content, not with the dialog's edge: its right edge lines up with the content's right edge (Download's Cancel button, Contact's Copy buttons).
 - On a page, Close is a link back to the calendar with the same view state (view, date or range, `dtz`, `tz`).
 - In a modal, Close closes it, and so does Escape. Focus returns to the button that opened it.
 - Contact me has no other close control. Download keeps its Cancel button next to Download.
@@ -338,12 +339,12 @@ Any method other than GET or HEAD returns **405**. There are no forms that POST 
 - what the `.ics` export is;
 - why there's no booking or send button: you check here, then contact Maxence through any of the channels below.
 
-**Contact me** lists the following, with no introductory text above it:
+**Contact me** lists the following, in this order, with no introductory text above it. Each medium has an icon before its name: Tabler Icons v3.2.0 outline (`mail`, `brand-discord`, `brand-github`, `brand-instagram`, `brand-linkedin`), taken from the tagged release (never `main`) and inlined as SVG. Tabler Icons is MIT licensed; the licence is kept next to the icons in the source.
+- Email: `mutantcacti@gmail.com` as a **`mailto:` link**
 - Discord (mutantcacti): https://discord.com/users/1129364853157535797
 - GitHub: https://github.com/MutantCacti
-- Email: `mutantcacti@gmail.com` as a **`mailto:` link**
-- LinkedIn: https://www.linkedin.com/in/moreldierckxm/
 - Instagram: https://instagram.com/maxencetmd
+- LinkedIn: https://www.linkedin.com/in/moreldierckxm/
 
 **Every link has its own Copy button**, aligned to the right of the panel. Copy puts the link on the clipboard (the address, for email).
 - Copy uses the Clipboard API.
@@ -352,7 +353,7 @@ Any method other than GET or HEAD returns **405**. There are no forms that POST 
 - If copying fails, the button shows a short failure state in the same place.
 - Without JS, the Copy buttons are hidden and the links remain.
 
-External links get `rel="noopener noreferrer"`. Use no third-party icons or scripts; inline SVG icons are fine.
+External links get `rel="noopener noreferrer"`. Use no third-party scripts, and load nothing from other origins; icons are inline SVG.
 
 ## 9. Headers and deployment
 
@@ -411,7 +412,9 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Past:** days before today are greyed in Day, Week, Month and Range; the slot holding now is split.
   - **Levels:** busy fractions map to 9 steps, and colour and dither use the same step; the colour bar shows the same 9 bands.
   - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
-  - **Contact:** every link has its own Copy button, right-aligned, and there's no text above the list.
+  - **Contact:** in the order above, each with its icon; every link has its own Copy button, right-aligned, and there's no text above the list.
+  - **Theme colours:** light mode inverts the colour map (free is the yellow end), dark mode doesn't, and each step's dither level is the same in both.
+  - **Layout:** the top bar has the three groups in order; the Range form has one inline "to" and no labels; dialog heads use the body's inline padding.
   - **Fonts:** the font files are served from `self`, and the CSP still has no external origins.
   - **Toasts:** a stale cache produces a sticky warning that minimises but can't be dismissed; a transient toast hides itself; no more than three show at once.
   - **Theme:** the stored choice overrides the system setting; the page still renders when `localStorage` throws.

@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { attr, decode, makeApp } from "./helpers";
 
 const app = makeApp();
+// Email first, LinkedIn last, the rest in their original order.
 const LINKS: [string, string, string][] = [
+  ["Email", "mutantcacti@gmail.com", "Copy email address"],
   ["Discord", "https://discord.com/users/1129364853157535797", "Copy Discord link"],
   ["GitHub", "https://github.com/MutantCacti", "Copy GitHub link"],
-  ["Email", "mutantcacti@gmail.com", "Copy email address"],
-  ["LinkedIn", "https://www.linkedin.com/in/moreldierckxm/", "Copy LinkedIn link"],
   ["Instagram", "https://instagram.com/maxencetmd", "Copy Instagram link"],
+  ["LinkedIn", "https://www.linkedin.com/in/moreldierckxm/", "Copy LinkedIn link"],
 ];
 
 describe("contact", () => {
@@ -18,7 +19,8 @@ describe("contact", () => {
     expect(rows.length).toBe(LINKS.length);
     rows.forEach((row, i) => {
       const [name, value, label] = LINKS[i]!;
-      expect(row).toContain(`<dt>${name}</dt>`);
+      // Each medium has its Tabler icon, decorative, before its name.
+      expect(row).toMatch(new RegExp(`^<dt><svg [^>]*aria-hidden="true"[^>]*class="icon icon-brand">.*?</svg>${name}</dt>`));
       const button = /<button [^>]*class="btn copy-btn"[^>]*>/.exec(row)?.[0] ?? null;
       expect(attr(button, "data-copy")).toBe(value);
       expect(attr(button, "aria-label")).toBe(label);

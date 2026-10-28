@@ -3,6 +3,7 @@ import { debugLine } from "../errors";
 import { HOUR_ANCHOR, type Links } from "../links";
 import type { Notice } from "./notices";
 import { InlineNotice } from "./notices";
+import { DiscordIcon, GitHubIcon, InstagramIcon, LinkedInIcon, MailIcon } from "./brand-icons";
 import { CalendarIcon, CheckIcon, CopyIcon, ErrorIcon } from "./icons";
 
 export const EMAIL = "mutantcacti@gmail.com";
@@ -11,6 +12,7 @@ const EXTERNAL = { rel: "noopener noreferrer" } as const;
 
 interface Channel {
   name: string;
+  Icon: typeof MailIcon;
   /** What the link shows. */
   text: string;
   href: string;
@@ -20,11 +22,11 @@ interface Channel {
 
 const CHANNELS: Channel[] = [
   // PRINTED OUTPUT: contact / channel names and handles
-  { name: "Discord", text: "mutantcacti", href: "https://discord.com/users/1129364853157535797", copy: "https://discord.com/users/1129364853157535797" },
-  { name: "GitHub", text: "MutantCacti", href: "https://github.com/MutantCacti", copy: "https://github.com/MutantCacti" },
-  { name: "Email", text: EMAIL, href: `mailto:${EMAIL}`, copy: EMAIL },
-  { name: "LinkedIn", text: "moreldierckxm", href: "https://www.linkedin.com/in/moreldierckxm/", copy: "https://www.linkedin.com/in/moreldierckxm/" },
-  { name: "Instagram", text: "maxencetmd", href: "https://instagram.com/maxencetmd", copy: "https://instagram.com/maxencetmd" },
+  { name: "Email", Icon: MailIcon, text: EMAIL, href: `mailto:${EMAIL}`, copy: EMAIL },
+  { name: "Discord", Icon: DiscordIcon, text: "mutantcacti", href: "https://discord.com/users/1129364853157535797", copy: "https://discord.com/users/1129364853157535797" },
+  { name: "GitHub", Icon: GitHubIcon, text: "MutantCacti", href: "https://github.com/MutantCacti", copy: "https://github.com/MutantCacti" },
+  { name: "Instagram", Icon: InstagramIcon, text: "maxencetmd", href: "https://instagram.com/maxencetmd", copy: "https://instagram.com/maxencetmd" },
+  { name: "LinkedIn", Icon: LinkedInIcon, text: "moreldierckxm", href: "https://www.linkedin.com/in/moreldierckxm/", copy: "https://www.linkedin.com/in/moreldierckxm/" },
 ];
 
 /** A Copy button that keeps its width as it shows "Copied" or "Copy failed". Hidden without JS. */
@@ -52,7 +54,10 @@ export function ContactContent() {
     <dl class="contact-list">
       {CHANNELS.map((c) => (
         <div class="contact-row">
-          <dt>{c.name}</dt>
+          <dt>
+            <c.Icon />
+            {c.name}
+          </dt>
           <dd>
             <a href={c.href} {...(c.href.startsWith("http") ? EXTERNAL : {})}>
               {c.text}
@@ -125,15 +130,12 @@ export function RangeForm({ links, from, to, notices }: RangeFormProps) {
   return (
     <form class="range-form" id="range-form" method="get" action={`/#${HOUR_ANCHOR}`}>
       <input type="hidden" name="view" value="range" />
-      {/* PRINTED OUTPUT: range form / labels and buttons */}
-      <label>
-        <span>From</span>
-        <input type="date" name="from" id="range-from" value={from} required />
-      </label>
-      <label>
-        <span>To</span>
-        <input type="date" name="to" id="range-to" value={to} required />
-      </label>
+      {/* PRINTED OUTPUT: range form / date field names, the inline "to", and Apply */}
+      <input type="date" name="from" id="range-from" value={from} required aria-label="Start date" />
+      <span class="range-to" aria-hidden="true">
+        to
+      </span>
+      <input type="date" name="to" id="range-to" value={to} required aria-label="End date" />
       {/* PRINTED OUTPUT: range form / date-picker button accessible name */}
       <button type="button" class="btn btn-icon" id="range-pick" hidden aria-label="Pick dates on a calendar">
         <CalendarIcon />

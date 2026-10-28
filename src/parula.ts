@@ -117,10 +117,28 @@ export function luminance(hex: string): number {
 }
 
 /**
- * Whether dither dots on a palette step are dark ("k") or light ("w"):
- * whichever contrasts more with the colour underneath. Same in both themes.
+ * Whether dither dots on a colour are dark ("k") or light ("w"): whichever
+ * contrasts more with the colour underneath.
  */
-export function dotTone(step: number): "k" | "w" {
-  const l = luminance(PALETTE[step]!);
+export function toneFor(hex: string): "k" | "w" {
+  const l = luminance(hex);
   return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? "k" : "w";
 }
+
+/** Dot tone for a step of the dark-theme palette. */
+export function dotTone(step: number): "k" | "w" {
+  return toneFor(PALETTE[step]!);
+}
+
+export type Theme = "light" | "dark";
+
+/**
+ * The colours each step uses in each theme. Dark: free is dark purple, busy
+ * is yellow. Light: the map is inverted, so free is yellow and busy is dark
+ * purple, which reads as "busy" against a white page. The dither is the same
+ * in both; only the colours (and the dot tone that suits them) change.
+ */
+export const THEME_PALETTES: Record<Theme, { colours: readonly string[]; past: readonly string[] }> = {
+  dark: { colours: PALETTE, past: PALETTE_PAST },
+  light: { colours: [...PALETTE].reverse(), past: [...PALETTE_PAST].reverse() },
+};
