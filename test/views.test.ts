@@ -288,8 +288,9 @@ describe("colour and dither", () => {
     expect(css).toContain(".p8{background-color:var(--cell-8);background-image:var(--dots-8);background-size:8px 8px}");
     expect(css).not.toContain(".p9{");
     // Fully busy: level 12 dots in both themes (the dot tone follows the colour underneath).
-    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(3);
-    expect(css.match(/--dots-0:none/g)?.length).toBe(3);
+    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(2);
+    expect(css.match(/--dots-0:none/g)?.length).toBe(2);
+    expect(css).not.toContain("prefers-color-scheme");
     const svg = await app.get(`/img/dither/${DITHER_MAX_LEVEL}k.svg`);
     expect(svg.headers.get("content-type")).toBe("image/svg+xml");
     expect((await svg.text()).match(/<rect /g)?.length).toBe(DITHER_MAX_LEVEL);

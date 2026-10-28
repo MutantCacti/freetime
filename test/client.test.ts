@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import "../public/js/head.js";
 import "../public/js/app.js";
 import tokens from "../public/css/tokens.css?raw";
+
+const allCss = import.meta.glob(["/public/css/*.css", "/public/js/*.js", "/src/**/*.{ts,tsx}"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 import { makeApp } from "./helpers";
 
 interface Toast {
@@ -90,6 +92,41 @@ describe("toasts", () => {
   });
 });
 
+describe("motion", () => {
+  const css = allCss["/public/css/app.css"]!;
+
+  it("turns every animation and transition off under prefers-reduced-motion", () => {
+    const block = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(block).toContain("animation-duration: 0s !important");
+    expect(block).toContain("transition-duration: 0s !important");
+    expect(block).toMatch(/\*, \*::before, \*::after, ::backdrop/);
+    // JS skips its exit waits too.
+    expect(allCss["/public/js/app.js"]).toContain('matchMedia("(prefers-reduced-motion: reduce)")');
+  });
+
+  it("animates only opacity and transforms, so it stays cheap", () => {
+    const frames = [...css.matchAll(/@keyframes [\w-]+ \{(.*)\}/g)].map((m) => m[1]!);
+    expect(frames.length).toBeGreaterThanOrEqual(6);
+    for (const f of frames) {
+      for (const [, prop] of f.matchAll(/([a-z-]+):/g)) expect(["opacity", "scale", "translate", "rotate"]).toContain(prop);
+    }
+  });
+
+  it("uses the same short durations everywhere", () => {
+    expect(tokens).toMatch(/--motion-in: 160ms/);
+    expect(tokens).toMatch(/--motion-out: 110ms/);
+    for (const [, d] of css.matchAll(/(?:animation|transition)[^;{]*?(\d+m?s)/g)) {
+      expect(["0s", "100ms"]).toContain(d);
+    }
+  });
+
+  it("dialogs and toasts grow from the top right, where their buttons are", () => {
+    expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
+    expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
+    expect(css).toMatch(/\.tb-menu-items:popover-open \{ transform-origin: top right;/);
+  });
+});
+
 describe("starting scroll position", () => {
   // 48 rows of 30 px under a 32 px header; the window shows 24 rows.
   const geometry = { header: 32, viewport: 32 + 24 * 30, content: 32 + 48 * 30, anchorY: 32 + 16 * 30 };
@@ -168,11 +205,11 @@ describe("theme", () => {
     expect(TimeHead.readTheme(null)).toBeNull();
   });
 
-  it("tokens.css lets data-theme override the system setting", () => {
-    // System dark applies only when no light choice was made…
-    expect(tokens).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{/);
-    // …and a dark choice applies regardless of the system setting.
-    expect(tokens).toMatch(/\n:root\[data-theme="dark"\] \{/);
+  it("tokens.css defaults to dark everywhere; only a stored light choice changes it", () => {
+    // Dark on :root, light only under data-theme="light", and no system preference.
+    expect(tokens).toMatch(/semantic: dark \(default\)[^\n]*\n[^\n]*\n:root \{\n  --color-bg: var\(--raw-ink-950\)/);
+    expect(tokens).toMatch(/\n:root\[data-theme="light"\] \{/);
+    for (const [path, text] of Object.entries(allCss)) expect(text, path).not.toContain("prefers-color-scheme");
   });
 
   describe("running the head script", () => {

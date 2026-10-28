@@ -238,6 +238,48 @@
       region.textContent = message;
     }, 50);
   }
+  // -------------------------------------------------------------- motion helpers
+
+  var reducedMotion = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+
+  /**
+   * Play an exit (or any one-off) animation class, then call done. With
+   * reduced motion, or if the animation never reports back, done runs anyway.
+   */
+  function play(el, cls, done) {
+    if (reducedMotion.matches) {
+      if (done) done();
+      return;
+    }
+    var finished = false;
+    function end(e) {
+      if (finished || (e && e.target !== el)) return;
+      finished = true;
+      el.removeEventListener("animationend", end);
+      el.classList.remove(cls);
+      if (done) done();
+    }
+    el.classList.remove(cls);
+    void el.offsetWidth; // restart the animation if the class was just used
+    el.classList.add(cls);
+    el.addEventListener("animationend", end);
+    setTimeout(end, 400);
+  }
+
+  /** "dx dy" from el's centre to target's centre, for animations that shrink into or grow out of a point. */
+  function vectorTo(el, target) {
+    var a = el.getBoundingClientRect();
+    var b = target.getBoundingClientRect();
+    return b.left + b.width / 2 - (a.left + a.width / 2) + "px " + (b.top + b.height / 2 - (a.top + a.height / 2)) + "px";
+  }
+
+  /** Make a popover grow from just under the control that opened it. */
+  function originAt(pop, anchor) {
+    var a = anchor.getBoundingClientRect();
+    var p = pop.getBoundingClientRect();
+    pop.style.transformOrigin = Math.round(a.left + a.width / 2 - p.left) + "px 0";
+  }
+
   /** A copy of an inline SVG icon from a server-rendered <template>. */
   function icon(id) {
     var t = document.getElementById(id);
@@ -272,7 +314,6 @@
         btn.addEventListener("click", function () {
           queue.minimise(id);
           render();
-          if (indicator) indicator.focus();
         });
       }
     });
@@ -301,6 +342,17 @@
       return el;
     }
 
+    // Toasts grow in at the top right and shrink away. A sticky toast that is
+    // minimised shrinks into the notice indicator, and grows back out of it.
+    function setIndicator() {
+      if (!indicator) return;
+      var sev = queue.indicator();
+      var wasHidden = indicator.hidden;
+      indicator.hidden = !sev;
+      indicator.classList.toggle("sev-error", sev === "error");
+      if (sev && wasHidden) play(indicator, "anim-in");
+    }
+
     function render() {
       var now = Date.now();
       var visible = queue.visible(now);
@@ -313,30 +365,66 @@
           el = build(t);
           nodes[t.id] = el;
         }
+        // Server-rendered sticky toasts are already on screen, so they don't animate on load.
+        var appearing = fresh || el.hidden || el.getAttribute("data-leaving");
+        el.removeAttribute("data-leaving");
         el.hidden = false;
         if (layer.children[i] !== el) layer.insertBefore(el, layer.children[i] || null);
+        if (appearing) {
+          if (el.getAttribute("data-restoring") && indicator && !indicator.hidden) {
+            el.style.setProperty("--point", vectorTo(el, indicator));
+            play(el, "anim-from-point");
+          } else {
+            play(el, "anim-in");
+          }
+        }
+        el.removeAttribute("data-restoring");
         if (fresh) announce(t.message, t.severity === "error");
       });
+      var minimisedNow = false;
       Object.keys(nodes).forEach(function (id) {
         if (keep[id]) return;
-        var still = queue.all().some(function (t) {
+        var el = nodes[id];
+        if (el.hidden || el.getAttribute("data-leaving")) return;
+        var item = queue.all().filter(function (t) {
           return t.id === id;
-        });
-        if (still) nodes[id].hidden = true;
-        else {
-          nodes[id].remove();
-          delete nodes[id];
+        })[0];
+        el.setAttribute("data-leaving", "1");
+        if (item && item.minimised && indicator) {
+          // Into the indicator, which then appears where the toast went.
+          minimisedNow = true;
+          var hadFocus = el.contains(document.activeElement);
+          indicator.hidden = false;
+          el.style.setProperty("--point", vectorTo(el, indicator));
+          indicator.hidden = true;
+          play(el, "anim-to-point", function () {
+            if (!el.getAttribute("data-leaving")) return;
+            el.removeAttribute("data-leaving");
+            el.hidden = true;
+            setIndicator();
+            // Focus follows the notice into the indicator.
+            if (hadFocus) indicator.focus();
+          });
+        } else if (item) {
+          // Waiting for a free place: just hide it.
+          el.removeAttribute("data-leaving");
+          el.hidden = true;
+        } else {
+          play(el, "anim-out", function () {
+            if (!el.getAttribute("data-leaving")) return;
+            el.remove();
+            delete nodes[id];
+          });
         }
       });
-      if (indicator) {
-        var sev = queue.indicator();
-        indicator.hidden = !sev;
-        indicator.classList.toggle("sev-error", sev === "error");
-      }
+      if (!minimisedNow) setIndicator();
     }
 
     if (indicator) {
       indicator.addEventListener("click", function () {
+        Object.keys(nodes).forEach(function (id) {
+          if (nodes[id].hidden) nodes[id].setAttribute("data-restoring", "1");
+        });
         queue.restoreAll();
         render();
         var btn = $(".toast [data-action='minimise']", layer);
@@ -366,11 +454,9 @@
 
   function initTheme() {
     var store = storage();
-    var media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    // Dark unless the viewer chose light; the system setting isn't used.
     function current() {
-      var set = document.documentElement.getAttribute("data-theme");
-      if (set === "light" || set === "dark") return set;
-      return media && media.matches ? "dark" : "light";
+      return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
     }
     $$(".theme-toggle").forEach(function (btn) {
       function label() {
@@ -385,7 +471,6 @@
         if (globalThis.TimeHead) globalThis.TimeHead.writeTheme(store, next);
         label();
       });
-      if (media && media.addEventListener) media.addEventListener("change", label);
     });
   }
 
@@ -417,14 +502,26 @@
         dlg.showModal();
       });
     });
+    // Closing plays the exit (shrinking back towards the top right) before the dialog goes.
+    function closeAnimated(dlg) {
+      if (!dlg.open || dlg.classList.contains("is-closing")) return;
+      play(dlg, "is-closing", function () {
+        dlg.close();
+      });
+    }
     $$("dialog.dialog").forEach(function (dlg) {
       $$("[data-close]", dlg).forEach(function (b) {
         b.addEventListener("click", function () {
-          dlg.close();
+          closeAnimated(dlg);
         });
       });
       dlg.addEventListener("click", function (e) {
-        if (e.target === dlg) dlg.close();
+        if (e.target === dlg) closeAnimated(dlg);
+      });
+      // Escape: run the same animated close instead of the instant native one.
+      dlg.addEventListener("cancel", function (e) {
+        e.preventDefault();
+        closeAnimated(dlg);
       });
       // Escape closes natively; either way focus goes back to what opened it.
       dlg.addEventListener("close", function () {
@@ -575,8 +672,11 @@
 
     function close(focusButton) {
       if (!pop) return;
-      pop.remove();
+      var leaving = pop;
       pop = null;
+      play(leaving, "anim-out", function () {
+        leaving.remove();
+      });
       button.setAttribute("aria-expanded", "false");
       document.removeEventListener("mousedown", outside);
       if (focusButton) button.focus();
@@ -684,6 +784,8 @@
       pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + "px";
       button.setAttribute("aria-expanded", "true");
       fill();
+      originAt(pop, button);
+      play(pop, "anim-in");
       input.addEventListener("input", fill);
       input.addEventListener("keydown", function (e) {
         if (e.key === "ArrowDown") {
@@ -732,8 +834,11 @@
 
     function close(focusTrigger) {
       if (!pop) return;
-      pop.remove();
+      var leaving = pop;
       pop = null;
+      play(leaving, "anim-out", function () {
+        leaving.remove();
+      });
       trigger.setAttribute("aria-expanded", "false");
       document.removeEventListener("mousedown", outside);
       if (focusTrigger) trigger.focus();
@@ -868,6 +973,8 @@
       trigger.setAttribute("aria-expanded", "true");
       document.addEventListener("mousedown", outside);
       render();
+      originAt(pop, trigger);
+      play(pop, "anim-in");
     });
   }
 

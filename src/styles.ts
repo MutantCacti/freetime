@@ -36,10 +36,9 @@ export function calendarCss(): string {
       })
       .join(";");
   };
-  // Same structure as tokens.css: light by default, dark from the system or the switcher.
-  out.push(`:root{${vars("light")}}`);
-  out.push(`@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars("dark")}}}`);
-  out.push(`:root[data-theme="dark"]{${vars("dark")}}`);
+  // Same structure as tokens.css: dark by default, light only when chosen.
+  out.push(`:root{${vars("dark")}}`);
+  out.push(`:root[data-theme="light"]{${vars("light")}}`);
   const tile = DOT_PX * 4;
   for (let i = 0; i < LEVELS; i++) {
     out.push(`.p${i}{background-color:var(--cell-${i});background-image:var(--dots-${i});background-size:${tile}px ${tile}px}`);

@@ -97,13 +97,7 @@ code { font-family: var(--font-mono); }
 .tb-indicator { color: var(--color-warning); border-color: var(--color-warning); }
 .tb-indicator.sev-error { color: var(--color-error); border-color: var(--color-error); }
 
-.icon-sun { display: none; }
-:root[data-theme="dark"] .icon-sun { display: inline; }
-:root[data-theme="dark"] .icon-moon { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .icon-sun { display: inline; }
-  :root:not([data-theme="light"]) .icon-moon { display: none; }
-}
+/* Dark by default: the toggle shows the sun (switch to light), the moon in light mode. See "motion". */
 
 /* ---------------------------------------------------------------- main regions */
 .main {
@@ -206,15 +200,12 @@ code { font-family: var(--font-mono); }
   background: var(--color-surface); color: var(--color-text);
   border: 1px solid var(--color-border); border-left: 4px solid var(--color-warning); border-radius: var(--radius);
   box-shadow: 0 4px 16px var(--color-shadow);
-  animation: toast-in 160ms ease-out;
 }
 .toast > .icon, .toast-icon .icon { margin-top: 0.15rem; color: var(--color-warning); }
 .toast-error { border-left-color: var(--color-error); }
 .toast-error > .icon, .toast-error .toast-icon .icon { color: var(--color-error); }
 .toast-msg { margin: 0; flex: 1; font-size: 0.9rem; padding-top: 0.05rem; }
 .toast-btn { width: 1.75rem; min-height: 1.75rem; font-size: 1rem; }
-@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
 .inline-notice {
   display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) var(--space-3);
@@ -365,6 +356,8 @@ code { font-family: var(--font-mono); }
     box-shadow: 0 8px 28px var(--color-shadow);
   }
   .tb-menu-items:not(:popover-open) { display: none; }
+  /* Grows from the menu button. Its exit is instant: popovers close natively. */
+  .tb-menu-items:popover-open { transform-origin: top right; --grow-from: var(--grow-nudge) calc(-1 * var(--grow-nudge)); animation: grow-in var(--motion-in); }
 
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "bar" "cal"; }
   .colourbar { flex-direction: row-reverse; border-left: 0; border-bottom: 1px solid var(--color-divider); padding: 2px var(--space-2); }
@@ -374,4 +367,70 @@ code { font-family: var(--font-mono); }
   .month { grid-auto-rows: minmax(3rem, 1fr); }
   .dialog-head { padding-inline: var(--space-4); }
   .dialog-body { padding: var(--space-3) var(--space-4) var(--space-4); }
+}
+
+/* ================================================================ motion */
+/*
+ * "Grow from the source": everything that appears grows out of the control
+ * that opened it (transform-origin plus a small nudge from that side), and
+ * shrinks back into it when it goes. Exits are quicker than entrances.
+ * JS adds .is-closing / .anim-* classes for exits; see public/js/app.js.
+ */
+@keyframes grow-in { from { opacity: 0; scale: var(--grow-scale); translate: var(--grow-from, 0 0); } }
+@keyframes grow-out { to { opacity: 0; scale: var(--grow-scale); translate: var(--grow-from, 0 0); } }
+/* A sticky toast shrinking into the notice indicator, and coming back out of it. */
+@keyframes shrink-to-point { to { opacity: 0; scale: 0.2; translate: var(--point, 0 0); } }
+@keyframes grow-from-point { from { opacity: 0; scale: 0.2; translate: var(--point, 0 0); } }
+@keyframes pop-in { from { opacity: 0; scale: 0.6; } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+
+/* Dialogs open from the top right, where Download, Contact and Help are. */
+.dialog { transform-origin: top right; --grow-from: var(--grow-nudge) calc(-1 * var(--grow-nudge)); }
+.dialog[open] { animation: grow-in var(--motion-in); }
+.dialog[open]::backdrop { animation: fade-in var(--motion-in); }
+.dialog.is-closing { animation: grow-out var(--motion-out) forwards; }
+.dialog.is-closing::backdrop { animation: fade-out var(--motion-out) forwards; }
+
+/* Toasts sit at the top right and grow from there. */
+.toast { transform-origin: top right; --grow-from: var(--grow-nudge) calc(-1 * var(--grow-nudge)); }
+.toast.anim-in { animation: grow-in var(--motion-in); }
+.toast.anim-out { animation: grow-out var(--motion-out) forwards; }
+.toast.anim-to-point { transform-origin: center; animation: shrink-to-point var(--motion-in) forwards; }
+.toast.anim-from-point { transform-origin: center; animation: grow-from-point var(--motion-in); }
+.tb-indicator.anim-in { animation: pop-in var(--motion-in); }
+
+/* Popovers built by JS: JS sets transform-origin under the control that opened them. */
+.tz-pop, .picker { --grow-from: 0 calc(-1 * var(--grow-nudge)); }
+.tz-pop.anim-in, .picker.anim-in { animation: grow-in var(--motion-in); }
+.tz-pop.anim-out, .picker.anim-out { animation: grow-out var(--motion-out) forwards; }
+
+/* Copy: the label cross-fades in place; the button's width never changes. */
+.copy-state { opacity: 0; transition: opacity var(--motion-ui), visibility 0s linear 100ms; }
+.copy-btn:not([data-state]) .copy-idle,
+.copy-btn[data-state="idle"] .copy-idle,
+.copy-btn[data-state="done"] .copy-done,
+.copy-btn[data-state="fail"] .copy-fail { opacity: 1; transition: opacity var(--motion-ui), visibility 0s; }
+
+/* Theme icons swap with a quarter turn. Page colours switch instantly. */
+.theme-toggle { display: inline-grid; place-items: center; }
+.theme-toggle .icon { grid-area: 1 / 1; display: inline; transition: opacity var(--motion-in), rotate var(--motion-in); }
+.theme-toggle .icon-moon, :root[data-theme="light"] .theme-toggle .icon-sun { opacity: 0; rotate: -90deg; }
+:root[data-theme="light"] .theme-toggle .icon-moon { opacity: 1; rotate: 0deg; }
+
+/* The now line and the split slot glide to their new place each minute. */
+.now-line { transition: top var(--motion-glide); }
+.slot.split::after { transition: height var(--motion-glide); }
+
+/* Hover and press, the same on every control. */
+.pill, .btn, .tab, .picker-day, .tz-opt { transition: background-color var(--motion-ui), color var(--motion-ui), scale var(--motion-ui); }
+.pill:active, .btn:active, .tab:active, .picker-day:active { scale: 0.97; }
+
+/* No motion at all when the viewer asks for less. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::backdrop {
+    animation-duration: 0s !important; animation-delay: 0s !important;
+    transition-duration: 0s !important; transition-delay: 0s !important;
+  }
+  .pill:active, .btn:active, .tab:active, .picker-day:active { scale: none; }
 }

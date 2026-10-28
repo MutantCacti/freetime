@@ -55,9 +55,8 @@ function semanticSet(block: string): Record<string, string> {
   return out;
 }
 
-const light = semanticSet(tokens.slice(tokens.indexOf("semantic: light"), tokens.indexOf("semantic: dark (system)")));
-const darkSystem = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (system)"), tokens.indexOf("semantic: dark (chosen)")));
-const darkChosen = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (chosen)")));
+const darkChosen = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (default)"), tokens.indexOf("semantic: light (chosen)")));
+const light = semanticSet(tokens.slice(tokens.indexOf("semantic: light (chosen)")));
 
 describe("contrast (WCAG AA) in both modes", () => {
   it("grid lines are the page colour in light mode and a dark neutral in dark mode", () => {
@@ -68,9 +67,8 @@ describe("contrast (WCAG AA) in both modes", () => {
     expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThan(16);
   });
 
-  it("defines the same dark set for the system setting and the switcher", () => {
+  it("defines the same tokens for dark (default) and light (chosen)", () => {
     expect(Object.keys(light).length).toBeGreaterThan(10);
-    expect(darkSystem).toEqual(darkChosen);
     expect(Object.keys(light).sort()).toEqual(Object.keys(darkChosen).sort());
   });
 

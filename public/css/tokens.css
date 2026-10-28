@@ -39,6 +39,17 @@
   --space-4: 16px;
   --space-6: 24px;
 
+  /*
+   * Motion. One effect everywhere: things grow out of the control that opened
+   * them and shrink back into it. Only opacity and transform animate.
+   */
+  --motion-in: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-out: 110ms cubic-bezier(0.4, 0, 1, 1);
+  --motion-ui: 100ms ease-out;
+  --motion-glide: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --grow-scale: 0.96;
+  --grow-nudge: 6px;
+
   /* Calendar sizing. See "Changing settings" in the README. */
   --visible-hours: 12;
   --row-min: 24px;
@@ -47,8 +58,31 @@
   --head-h: 2rem;
 }
 
-/* ---------------------------------------------------------------- semantic: light */
+/* ---------------------------------------------------------------- semantic: dark (default) */
+/* Dark is the default everywhere; the system setting is not consulted. */
 :root {
+  --color-bg: var(--raw-ink-950);
+  --color-surface: var(--raw-ink-900);
+  --color-surface-2: var(--raw-ink-800);
+  --color-text: var(--raw-ink-100);
+  --color-text-muted: var(--raw-ink-300);
+  --color-border: var(--raw-ink-600);
+  --color-link: var(--raw-blue-300);
+  --color-focus: var(--raw-blue-300);
+  --color-now: var(--raw-red-300);
+  --color-warning: var(--raw-amber-300);
+  --color-error: var(--raw-red-300);
+  --color-on-accent: var(--raw-ink-950);
+  --color-grid: var(--raw-grid);
+  --color-divider: var(--raw-ink-700);
+  --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
+  --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------- semantic: light (chosen) */
+/* Only when the viewer picks light with the theme switcher. */
+:root[data-theme="light"] {
   --color-bg: var(--raw-white);
   --color-surface: var(--raw-grey-50);
   --color-surface-2: var(--raw-grey-100);
@@ -67,48 +101,4 @@
   --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
   color-scheme: light;
-}
-
-/* ---------------------------------------------------------------- semantic: dark (system) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-bg: var(--raw-ink-950);
-    --color-surface: var(--raw-ink-900);
-    --color-surface-2: var(--raw-ink-800);
-    --color-text: var(--raw-ink-100);
-    --color-text-muted: var(--raw-ink-300);
-    --color-border: var(--raw-ink-600);
-    --color-link: var(--raw-blue-300);
-    --color-focus: var(--raw-blue-300);
-    --color-now: var(--raw-red-300);
-    --color-warning: var(--raw-amber-300);
-    --color-error: var(--raw-red-300);
-    --color-on-accent: var(--raw-ink-950);
-    --color-grid: var(--raw-grid);
-    --color-divider: var(--raw-ink-700);
-    --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
-    --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
-    color-scheme: dark;
-  }
-}
-
-/* ---------------------------------------------------------------- semantic: dark (chosen) */
-:root[data-theme="dark"] {
-  --color-bg: var(--raw-ink-950);
-  --color-surface: var(--raw-ink-900);
-  --color-surface-2: var(--raw-ink-800);
-  --color-text: var(--raw-ink-100);
-  --color-text-muted: var(--raw-ink-300);
-  --color-border: var(--raw-ink-600);
-  --color-link: var(--raw-blue-300);
-  --color-focus: var(--raw-blue-300);
-  --color-now: var(--raw-red-300);
-  --color-warning: var(--raw-amber-300);
-  --color-error: var(--raw-red-300);
-  --color-on-accent: var(--raw-ink-950);
-  --color-grid: var(--raw-grid);
-  --color-divider: var(--raw-ink-700);
-  --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
-  --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
-  color-scheme: dark;
 }

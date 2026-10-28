@@ -32,7 +32,7 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
   - `--color-grid` is the calendar's grid lines: the page colour (white) in light mode, a dark neutral in dark mode. `--color-divider` is the subtler line used for the top bar and panels;
   - component CSS uses only `var(--…)`;
   - a test fails the build if a hex colour appears anywhere except `tokens.css` and `src/parula.ts`;
-  - light and dark mode follow `prefers-color-scheme`, with a manual override from the theme switcher (§5.10);
+  - dark mode is the default on every browser and device; light mode is only used when the viewer chooses it with the theme switcher (§5.10). `prefers-color-scheme` is not used;
   - the page chrome is neutral, and the calendar carries the colour.
 - **Fonts:** Figtree for text, including the period label; Fragment Mono for times (hour labels, column dates and the time-zone label).
   - Both are self-hosted as WOFF2 in `public/fonts/` (Latin and Latin Extended subsets, `font-display: swap`), with their SIL OFL licence files next to them. The two faces used above the fold are preloaded.
@@ -215,7 +215,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 - **Stacking:** at most **three** toasts at once, sticky ones above transient ones, errors above warnings. Further transient toasts wait their turn.
 - **Announcements:** warnings and transient toasts use a polite live region; errors use an assertive one. Showing a toast never moves keyboard focus.
 - **Without JS:** sticky toasts are rendered by the server in the same floating position and simply stay open (no minimise). Transient toasts are not used without JS; their message appears inline where relevant (for example, beside the Range form).
-- **Motion:** toasts slide or fade in briefly, and appear without animation under `prefers-reduced-motion`.
+- **Motion:** toasts follow §5.12: they grow in at the top right and shrink away; a minimised sticky toast shrinks into the notice indicator and grows back out of it.
 - **Fatal errors** (the calendar can't be drawn at all, for example the feed has failed and there's no saved copy, or it can't be parsed):
   - the error **replaces the calendar** in a larger panel, styled with `--color-error`;
   - it has a plain, readable **title** ("The calendar couldn't be loaded") and a short **description** of what that means for the visitor and what they can do (try again later, or use Contact me);
@@ -227,12 +227,12 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 
 ### 5.10 Theme switcher
 - A single icon button at the far right of the top bar (§5.0.1, item 11). It shows a **moon** in light mode (switch to dark) and a **sun** in dark mode (switch to light). Its `aria-label` says what pressing it does ("Switch to dark mode").
-- **Default:** follow `prefers-color-scheme`. Once the viewer chooses, the choice is stored in `localStorage` and applied as `data-theme="light"` or `data-theme="dark"` on `<html>`, overriding the system setting.
+- **Default:** dark, on every browser and device; the system setting (`prefers-color-scheme`) is ignored. Once the viewer chooses, the choice is stored in `localStorage` and applied as `data-theme="light"` or `data-theme="dark"` on `<html>`.
   - Wrap every `localStorage` read and write in `try/catch`; if storage is unavailable, the toggle still works for that page view.
   - Apply the stored theme with a tiny script in `<head>` **before first paint**, so the page doesn't flash the wrong theme. Because the CSP forbids inline scripts, serve it as its own small file loaded with `<script src>` in `<head>` (not deferred).
-- **Tokens:** `tokens.css` defines the light set on `:root`, the dark set under `@media (prefers-color-scheme: dark)` for `:root:not([data-theme="light"])`, and the dark set again under `:root[data-theme="dark"]`.
+- **Tokens:** `tokens.css` defines the dark set on `:root` and the light set under `:root[data-theme="light"]`.
 - The dither is the same in both themes. The colours are not: light mode inverts the colour map (§6), so busy cells stay dark against a white page. Check that the dither dots still read in both.
-- **Without JS:** the button is hidden and the page follows the system setting.
+- **Without JS:** the button is hidden and the page is dark.
 
 ### 5.11 Time zone
 - **The calendar is shown in the viewer's device time zone.** Everything that depends on the zone follows it: day boundaries, which column is "today", the current-time line, the hour labels, the period label, Today and the arrows.
@@ -277,6 +277,21 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
   - `/help` explains that times are shown in the visitor's own time zone unless a link pins one, how to read the label, and how to choose another zone.
   - The download dialog states the range in the zone being shown. The export link carries the zone (it's a download, not the page URL). The `.ics` file itself uses UTC times, so calendar apps convert it correctly.
   - The fatal-error debug line stays in UTC.
+
+### 5.12 Motion
+- **One effect: grow from the source.** Anything that appears grows out of the control that opened it (fade, scale from 0.96, a 6 px nudge from that side, with `transform-origin` at the control), and shrinks back into it when it goes. The eye travels from the thing that was clicked.
+  - Download, Contact and Help dialogs: from the top right, where their buttons are; the backdrop fades with them.
+  - Narrow-screen menu: from the menu button (top right).
+  - Time-zone dropdown and date picker: from just under the button that opened them.
+  - Toasts: grow in at the top right. Minimising a sticky toast shrinks it into the notice indicator, which then pops in, and focus follows it; restoring grows the toast back out of the indicator.
+  - Copy: the label cross-fades in place ("Copied", "Copy failed"); the width never changes.
+  - Theme switcher: the sun and moon swap with a quarter turn. **Page colours switch instantly**; they are never animated.
+  - The current-time line and the split slot glide to their new place each minute.
+  - Hover and press look the same on every control: a quick background change, and a 0.97 scale while pressed.
+- **Fast:** entrances 160 ms, exits 110 ms (exits are quicker), hover 100 ms, set once as tokens in `tokens.css`.
+- **Plain CSS where possible**, with a little JS so exits also animate where CSS can't (dialog exits in Firefox): JS plays the exit animation, then closes or removes the element. Only `opacity` and transforms animate.
+- **Nothing animates across page loads**: navigation (tabs, arrows, Today, the Range form) is a plain page load. Focus rings never animate.
+- **`prefers-reduced-motion: reduce` turns all of it off**: every animation and transition is instant, and JS doesn't wait for exits.
 
 ## 6. Colour, dither and colour bar
 
@@ -414,10 +429,11 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
   - **Contact:** in the order above, each with its icon; every link has its own Copy button, right-aligned, and there's no text above the list.
   - **Theme colours:** light mode inverts the colour map (free is the yellow end), dark mode doesn't, and each step's dither level is the same in both.
+  - **Motion:** under `prefers-reduced-motion` every animation and transition is off; only opacity and transforms animate; durations come from the shared tokens; dialogs and toasts grow from the top right.
   - **Layout:** the top bar has the three groups in order; the Range form has one inline "to" and no labels; dialog heads use the body's inline padding.
   - **Fonts:** the font files are served from `self`, and the CSP still has no external origins.
   - **Toasts:** a stale cache produces a sticky warning that minimises but can't be dismissed; a transient toast hides itself; no more than three show at once.
-  - **Theme:** the stored choice overrides the system setting; the page still renders when `localStorage` throws.
+  - **Theme:** dark is the default with no system-preference rules anywhere; a stored light choice applies it; the page still renders when `localStorage` throws.
   - **Time zone:**
     - the zone rule: `tz` beats `dtz`, which beats Europe/London; `tz` equal to `dtz` gives the same result;
     - the mode marker is "pinned" only when `tz` is present and differs from `dtz`;

@@ -16,7 +16,7 @@ export function Document({ title, bodyClass, children }: DocumentProps) {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta name="color-scheme" content="light dark" />
+          <meta name="color-scheme" content="dark light" />
           <meta name="robots" content="noindex" />
           <title>{title}</title>
           <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

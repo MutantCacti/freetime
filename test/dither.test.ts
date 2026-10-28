@@ -126,8 +126,8 @@ describe("palette", () => {
       expect(light.past[i]).toBe(PALETTE_PAST[LEVELS - 1 - i]);
     }
     const css = calendarCss();
-    const lightBlock = /^:root\{([^}]*)\}/m.exec(css)![1]!;
-    const darkBlock = /:root\[data-theme="dark"\]\{([^}]*)\}/.exec(css)![1]!;
+    const darkBlock = /^:root\{([^}]*)\}/m.exec(css)![1]!;
+    const lightBlock = /:root\[data-theme="light"\]\{([^}]*)\}/.exec(css)![1]!;
     expect(lightBlock).toContain(`--cell-0:${PALETTE[LEVELS - 1]}`);
     expect(lightBlock).toContain(`--cell-${LEVELS - 1}:${PALETTE[0]}`);
     expect(darkBlock).toContain(`--cell-0:${PALETTE[0]}`);
