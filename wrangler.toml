@@ -1,6 +1,6 @@
 name = "time-mutantcacti"
 main = "src/index.ts"
-compatibility_date = "2026-08-15"
+compatibility_date = "2026-10-01"
 workers_dev = false
 routes = [
   { pattern = "time.mutantcacti.com", custom_domain = true }
