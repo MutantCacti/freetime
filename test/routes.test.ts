@@ -32,6 +32,8 @@ describe("routes", () => {
       ["/js/head.js", "javascript"],
       ["/js/app.js", "javascript"],
       ["/favicon.svg", "image/svg+xml"],
+      ["/apple-touch-icon.png", "image/png"],
+      ["/fonts/figtree-latin-wght-normal.woff2", "font/woff2"],
     ] as const) {
       const res = await app.get(path);
       expect(res.status, path).toBe(200);

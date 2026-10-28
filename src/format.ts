@@ -37,6 +37,24 @@ export function monthLabel(date: ISODate): string {
   return `${monthLongFmt.format(asDate(date))} ${parts(date).y}`; // PRINTED OUTPUT: date / month and year
 }
 
+/** "Oct 2026" */
+export function monthShortYear(date: ISODate): string {
+  return `${monthShortFmt.format(asDate(date))} ${parts(date).y}`; // PRINTED OUTPUT: period label / month and year
+}
+
+/**
+ * The visible period label: months and year only, since the calendar shows
+ * the dates. "Oct 2026", "Oct – Nov 2026", "Dec 2026 – Jan 2027".
+ */
+export function periodMonthsLabel(start: ISODate, end: ISODate): string {
+  const a = parts(start);
+  const b = parts(end);
+  if (a.y === b.y && a.m === b.m) return monthShortYear(start);
+  const month = (d: ISODate) => monthShortFmt.format(asDate(d));
+  // PRINTED OUTPUT: period label / month span, same year and across a year
+  return a.y === b.y ? `${month(start)} – ${month(end)} ${b.y}` : `${monthShortYear(start)} – ${monthShortYear(end)}`;
+}
+
 /**
  * "Mon 2 – Sun 8 Nov 2026", "Mon 30 Nov – Sun 6 Dec 2026",
  * "Mon 28 Dec 2026 – Sun 3 Jan 2027".

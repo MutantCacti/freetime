@@ -367,7 +367,7 @@
       if (set === "light" || set === "dark") return set;
       return media && media.matches ? "dark" : "light";
     }
-    $$("#theme-toggle").forEach(function (btn) {
+    $$(".theme-toggle").forEach(function (btn) {
       function label() {
         // PRINTED OUTPUT: theme switcher / accessible names
         btn.setAttribute("aria-label", current() === "dark" ? "Switch to light mode" : "Switch to dark mode");
@@ -387,20 +387,32 @@
   // -------------------------------------------------------------- dialogs
 
   function initDialogs() {
-    [
-      ["open-download", "dlg-download"],
-      ["open-contact", "dlg-contact"],
-    ].forEach(function (pair) {
-      var link = document.getElementById(pair[0]);
-      var dlg = document.getElementById(pair[1]);
-      if (!link || !dlg || typeof dlg.showModal !== "function") return;
+    var opener = null; // where focus goes back to
+    var switching = false; // one dialog is replacing another
+    // Any link with data-dialog opens that dialog instead of its page.
+    $$("[data-dialog]").forEach(function (link) {
+      var dlg = document.getElementById(link.getAttribute("data-dialog"));
+      if (!dlg || typeof dlg.showModal !== "function") return;
       link.addEventListener("click", function (e) {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
         e.preventDefault();
         var menu = document.getElementById("tb-menu-items");
         if (menu && menu.hidePopover && menu.matches(":popover-open")) menu.hidePopover();
+        // A link inside another dialog keeps the original opener.
+        var returnTo = link.closest("dialog") ? opener : link;
+        // A link in the closed narrow-screen menu can't take focus; use the menu button.
+        if (returnTo && !returnTo.offsetParent) returnTo = $(".tb-menu") || returnTo;
+        var current = $("dialog[open]");
+        if (current && current !== dlg) {
+          switching = true;
+          current.close();
+          switching = false;
+        }
+        opener = returnTo;
         dlg.showModal();
       });
+    });
+    $$("dialog.dialog").forEach(function (dlg) {
       $$("[data-close]", dlg).forEach(function (b) {
         b.addEventListener("click", function () {
           dlg.close();
@@ -408,6 +420,12 @@
       });
       dlg.addEventListener("click", function (e) {
         if (e.target === dlg) dlg.close();
+      });
+      // Escape closes natively; either way focus goes back to what opened it.
+      dlg.addEventListener("close", function () {
+        if (switching || !opener) return;
+        opener.focus();
+        opener = null;
       });
     });
   }
@@ -475,32 +493,36 @@
       scroller.scrollLeft = Math.max(0, todayHead.offsetLeft - (timeCol ? timeCol.offsetWidth : 0));
     }
 
-    // Move the line and the dimming every minute.
+    // Move the line and the greying every minute.
     function tick() {
       var now = Date.now() / 1000;
-      var slots = $$(".slot.is-today", scroller);
       var current = null;
-      slots.forEach(function (s) {
+      $$(".slot", scroller).forEach(function (s) {
         var start = Number(s.getAttribute("data-s"));
         var end = Number(s.getAttribute("data-e"));
-        s.classList.toggle("past", end <= now);
-        if (start <= now && now < end) current = { el: s, start: start, end: end };
+        var isNow = start <= now && now < end;
+        s.classList.toggle("past", end <= now && !isNow);
+        s.className = s.className.replace(/\s?\bm\d+\b/g, "");
+        s.classList.toggle("split", isNow);
+        if (isNow) current = { el: s, start: start, end: end };
       });
       var el = document.getElementById("now-line");
       if (!current) {
         if (el) el.remove();
         return;
       }
+      var step = Math.min(29, Math.floor(((now - current.start) / (current.end - current.start)) * 30));
+      current.el.classList.add("m" + step);
+      if (!current.el.classList.contains("is-today")) return;
       if (!el) {
         el = document.createElement("div");
         el.id = "now-line";
         el.setAttribute("aria-hidden", "true");
       }
-      var step = Math.min(29, Math.floor(((now - current.start) / (current.end - current.start)) * 30));
       el.className = "now-line m" + step;
       if (el.parentElement !== current.el) current.el.appendChild(el);
     }
-    if ($(".slot.is-today", scroller)) {
+    if ($(".slot", scroller)) {
       setTimeout(function () {
         tick();
         setInterval(tick, 60000);
@@ -627,6 +649,13 @@
       }
       pop = document.createElement("div");
       pop.className = "tz-pop";
+      var summary = button.getAttribute("data-summary");
+      if (summary) {
+        var cur = document.createElement("p");
+        cur.className = "tz-current";
+        cur.textContent = summary; // built and marked on the server (topbar / zoneLabel)
+        pop.appendChild(cur);
+      }
       input = document.createElement("input");
       input.type = "search";
       input.setAttribute("role", "combobox");

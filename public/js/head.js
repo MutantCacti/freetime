@@ -10,8 +10,7 @@
   "use strict";
 
   var THEME_KEY = "time.theme";
-  var GUARD_KEY = "time.head-replaced-at";
-  var GUARD_MS = 5000;
+  var GUARD_KEY = "time.head-replaced-to";
   var NARROW_QUERY = "(max-width: 640px)";
 
   /** The stored theme, or null. Never throws, even if storage does. */
@@ -40,16 +39,14 @@
    * - keeps every other parameter, including `tz`, and the hash;
    * - on "/" with no `view` on a narrow screen, adds view=day;
    * - never replaces twice: not again in this page view (state.replaced),
-   *   and not again within a few seconds of the last replace (lastReplaceAt),
-   *   so a zone the server rewrites can't cause a loop.
+   *   and not when this page is the one the last replace went to (lastTarget):
+   *   if that page still needs a change, replacing again would loop.
    */
   function headRedirect(href, deviceZone, options) {
     var o = options || {};
     var state = o.state || {};
     if (state.replaced) return null;
-    if (typeof o.lastReplaceAt === "number" && typeof o.now === "number" && o.now - o.lastReplaceAt < GUARD_MS) {
-      return null;
-    }
+    if (o.lastTarget && o.lastTarget === href) return null;
     var url = new URL(href);
     var changed = false;
     if (deviceZone && url.searchParams.get("dtz") !== deviceZone) {
@@ -105,7 +102,7 @@
   }
   var last = null;
   try {
-    last = session ? Number(session.getItem(GUARD_KEY)) || null : null;
+    last = session ? session.getItem(GUARD_KEY) : null;
   } catch (e) {
     last = null;
   }
@@ -117,13 +114,12 @@
   }
   var target = headRedirect(location.href, deviceZone(), {
     narrow: narrow,
-    lastReplaceAt: last,
-    now: Date.now(),
+    lastTarget: last,
     state: api,
   });
   if (target) {
     try {
-      if (session) session.setItem(GUARD_KEY, String(Date.now()));
+      if (session) session.setItem(GUARD_KEY, new URL(target, location.href).href);
     } catch (e) {
       /* storage unavailable: the in-page guard still applies */
     }

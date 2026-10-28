@@ -38,7 +38,7 @@ npm test
 npm run typecheck
 ```
 
-Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-pool-workers`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`.
+Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`.
 
 ## Layout
 
@@ -51,11 +51,14 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-pool-worke
 | `src/state.ts`, `src/links.ts` | URL state, the zone rule, navigation, and the one link builder |
 | `src/tz.ts`, `src/dates.ts`, `src/format.ts` | Time-zone arithmetic (Intl only), civil dates, labels |
 | `src/feed.ts` | Fetching `ICAL_URL`, the Cache API copy, stale/fatal handling |
-| `src/parula.ts`, `src/dither.ts`, `src/styles.ts` | Colour table, Bayer dither, and the generated `/css/calendar.css` |
+| `src/levels.ts` | `LEVELS` (9) and the busy fraction → step mapping |
+| `src/parula.ts`, `src/dither.ts`, `src/styles.ts` | Source parula table, the toned palette derived from it, Bayer dither, and the generated `/css/calendar.css` |
 | `src/export-ics.ts` | The busy-only `.ics` file |
 | `src/views/` | JSX for the top bar, calendar, notices, panels and pages |
 | `src/config.ts` | Settings you might change (see below) |
 | `public/css/tokens.css` | Design tokens: raw values, then semantic tokens, light and dark |
+| `public/css/fonts.css`, `public/fonts/` | Self-hosted Figtree and Fragment Mono (WOFF2) and their OFL licences |
+| `public/favicon.svg`, `public/apple-touch-icon.png` | The site icon, and a 180 px export of it |
 | `public/css/app.css` | Component styles (tokens only) |
 | `public/js/head.js` | Runs before first paint: applies the theme, corrects `dtz` |
 | `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
@@ -68,10 +71,14 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-pool-worke
 | `hono` | runtime | Router and server-side JSX (`hono/jsx`). The spec names it. Small, with no dependencies, and built for Workers. |
 | `ical.js` | runtime | Parses iCal and expands RRULE, RDATE, EXDATE and RECURRENCE-ID overrides. Recurrence is easy to get wrong. This is Mozilla's parser (used by Thunderbird), and it has no dependencies. |
 | `wrangler` | dev | Local dev server and deploys. |
-| `vitest`, `@cloudflare/vitest-pool-workers` | dev | Tests that run in the Workers runtime, as the spec asks. |
+| `vitest`, `@cloudflare/vitest-plugin` | dev | Tests that run in the Workers runtime. `@cloudflare/vitest-plugin` is the renamed `@cloudflare/vitest-pool-workers`; moving to it fixed every `npm audit` finding. |
 | `typescript`, `@cloudflare/workers-types` | dev | Strict type checking (`npm run typecheck`). |
 
 There's no UI framework, no date library (Intl does all the time-zone work) and no third-party script or icon set. Icons are inline SVG.
+
+**Fonts** are files, not packages: Figtree (variable, 300–900) and Fragment Mono 400, Latin and Latin Extended subsets, taken from Fontsource 5.3.0 and committed to `public/fonts/` with their SIL OFL 1.1 licences. They're served from the site itself because the CSP allows `self` only.
+
+`npm audit` reports 0 vulnerabilities, for production and dev dependencies alike.
 
 ## Deploy
 
@@ -195,8 +202,10 @@ If a fetch fails but a good copy from the last 7 days is saved, the page still r
 | **Window height** (hours visible at once) | `--visible-hours` in `public/css/tokens.css` (default 12). `--row-min` sets the smallest row height (24 px). |
 | **Starting hour** (where the window opens when the period doesn't contain now) | `START_HOUR` in `src/config.ts`. The anchors (`#h08`), links and client JS follow it. |
 | **Range cap** | `RANGE_CAP_DAYS` in `src/config.ts`. The export, the notice text and `/help` follow it. `RANGE_COLUMN_MAX_DAYS` sets where Range switches from columns to day cells. |
-| **Chrome colours** | The raw values at the top of `public/css/tokens.css`. Each semantic token maps onto them for light and dark. `test/colour-rule.test.ts` checks AA contrast for both modes. |
-| **Calendar colours** | The `PARULA` table in `src/parula.ts`. The cell CSS is generated from it. |
+| **Chrome colours** | The raw values at the top of `public/css/tokens.css`. Each semantic token maps onto them for light and dark. `test/colour-rule.test.ts` checks AA contrast for both modes. `--color-grid` (calendar grid lines) and `--color-divider` (top bar and panel lines) are there too. |
+| **Calendar colours** | `PALETTE_CHROMA`, `PALETTE_L_MIN` and `PALETTE_L_MAX` in `src/parula.ts` tone the source table (`PARULA_SOURCE`). The cell CSS is generated from the result. |
+| **Number of steps** | `LEVELS` in `src/levels.ts` (9). Colour, dither and the colour bar all follow it. |
+| **Fonts** | `public/css/fonts.css` (faces) and `--font-sans` / `--font-mono` in `tokens.css` (stacks). Update the two preloads in `src/views/layout.tsx` if the above-the-fold files change. |
 | **Dither range** | `DITHER_MIN_LEVEL` and `DITHER_MAX_LEVEL` in `src/dither.ts`. They're checked at start-up (`0 ≤ MIN < MAX ≤ 15`). |
 | **Default zone** (no JS, all-day and floating events) | `DEFAULT_TZ` in `src/config.ts`. |
 | **Feed freshness** | `FEED_FRESH_SECONDS` and `FEED_KEEP_SECONDS` in `src/config.ts`. |
@@ -225,13 +234,32 @@ Anything not checked against current documentation is marked **(unverified)**.
 | `FEED_*` → 503; `RANGE_EXPAND` and `INTERNAL` → 500. `FEED_STATUS_<n>` for any non-2xx. | `RANGE_EXPAND` as 503 | Matches "503 for feed problems, 500 for anything else". Expansion failing is a bug here, not the feed being down. | — |
 | `.ics` export as one `VEVENT` per merged busy block ("Busy"), clipped to the range, in UTC | One `VFREEBUSY` | Both are allowed. Google Calendar and Apple Calendar import `VEVENT`s, but many apps ignore `VFREEBUSY` on import **(unverified)**. | A request for VFREEBUSY. |
 | Zone names are validated by Intl. Casing is normalised; aliases are kept as given | Intl's canonical name | Intl turns `Asia/Kolkata` into `Asia/Calcutta`. That would rename the viewer's choice and disagree with the browser's name, so the head script would rewrite `dtz` on every page. | — |
-| Mode marker `default` when neither `tz` nor `dtz` is set (no JS) | Show "device" | The spec says the no-JS label "says so", and "device" would be wrong there. | — |
+| Mode `default` when neither `tz` nor `dtz` is set (no JS) | Show "device" | The spec says the no-JS label "says so", and "device" would be wrong there. Since review 1 the mode appears in the accessible name, the dropdown summary and on `/tz`, not on the button. | — |
 | Narrow-screen default view: the head script adds `view=day` (at ≤ 640 px, path `/`, no `view`) in the same `location.replace` as `dtz` | Detect on the server; CSS only | The server can't know the width, and one replace keeps the "at most once" rule. An explicit `view` always wins. | — |
-| Head-script loop guard: once per page view, and not again within 5 s (sessionStorage, wrapped in try/catch) | A URL marker | Stops a loop even if a zone name gets rewritten. Leaves no trace in shared links. | — |
 | `/tz` without JS: a GET form to `/tz?apply=1…` that redirects (302) to the clean calendar URL | A form straight to `/` | A GET form can't omit an empty field. Without the redirect, "Device default" would leave `tz=` in the URL instead of removing it. It's still read-only. | — |
 | Invalid `date` in Day/Week/Month falls back to today silently. Range adjustments (swap, cap, invalid) each show a notice. | A notice for both | The spec only describes Range adjustments, so the other views use the simplest option. | Confused visitors. |
 | No inline styles. Cell colours and dither are classes in a generated `/css/calendar.css`, and dither tiles are generated SVGs at `/img/dither/<level><tone>.svg`. | `style=""` attributes; data URIs | The CSP is `self` only, with no `unsafe-inline`. Generating the CSS from `parula.ts` keeps the hex values in one file. | — |
-| Dither dots are black or white at 42% opacity, picked per parula entry by contrast, and the same in both themes | One dot colour | Dark dots vanish on dark blue and light dots on yellow. A test checks that the dots differ in lightness at every step, so the pattern reads in greyscale. | — |
+| Dither dots are black or white at 42% opacity, picked per palette step by contrast, and the same in both themes | One dot colour | Dark dots vanish on dark blue and light dots on yellow. A test checks that the dots differ in lightness at every step of the toned palette, so the pattern reads in greyscale. | — |
+| Toned palette: OKLCH conversion written out in `src/parula.ts` (about 60 lines). Out-of-gamut colours keep L and h and reduce chroma by bisection. The source table's own lightness range (0.36–0.96) is mapped linearly onto 0.36–0.90 (review 1) | A colour library; CSS `oklch()` | No dependency, and the generated CSS stays plain hex, which every browser renders the same. With the starting constants the change is subtle: lightness drops by at most 0.05, and hues stay within 0.08 rad of the source (tested). | It looking muddy: raise `PALETTE_CHROMA` towards 1 first. |
+| Busy fraction → 9 steps by rounding, except that any busy time is at least step 1 and anything short of fully busy is at most step 7 (review 1) | Plain rounding | With plain rounding, a slot with 3 busy minutes would look free and a slot one minute short of full would look fully busy. That's the wrong way round for a page people use to find free time. Labels still give the exact percentage. | Maxence preferring plain rounding. |
+| Palette step `s` uses toned-table entry `round(s / 8 × 63)` | Re-deriving 9 colours directly | The review asks for "the toned table sampled at the 9 steps". Ends are exact (steps 0 and 8 are the table's first and last entries). | — |
+| Fonts from Fontsource 5.3.0: Figtree **variable** (one file per subset, weights 300–900) and Fragment Mono 400 (review 1) | Static Figtree weights | One file covers every weight used (400, 600), so preloading one Figtree file is enough. Fragment Mono only comes in 400. | — |
+| Fonts preloaded: Figtree Latin and Fragment Mono Latin (the Latin Extended files load only if a character needs them) | Preload all four | Those are the two faces above the fold for English text. | Non-Latin zone names becoming common. |
+| Fragment Mono for hour labels, column dates, the period label, the zone label and the debug line; tabular figures on those plus day numbers, the date picker and offsets | Mono everywhere numbers appear | Matches the review's list. The debug line is code, so mono reads better. | — |
+| Top-bar rows on narrow screens use a flex row with an `::after` line break and `order` (review 1) | CSS grid areas | Row 2 is left-aligned and its items differ in width from row 1's, which a shared grid can't do without one row's widths shaping the other's. The zone selector takes row 1's leftover space (`flex: 1 1 0`) and truncates with an ellipsis rather than wrapping. | — |
+| Active tab: background fill plus a 2 px inset underline (`box-shadow`), no weight change (review 1) | A border-bottom; bold | `box-shadow` and background never affect layout, so no tab can move. A Playwright check confirmed identical tab widths and positions in all four views. | — |
+| Period label: visible months-and-year text is `aria-hidden`, and a visually hidden span gives the full dates (review 1) | `aria-label` on the `<h1>` | Screen readers reliably read text content; `aria-label` on headings is unevenly supported. `<title>` keeps the full dates too. | — |
+| Months are formatted by `Intl` (en-GB short), so September is "Sept" | A fixed three-letter table | Display uses `Intl.DateTimeFormat` throughout, per §2. | Maxence wanting "Sep". |
+| Zone selector shows the zone name only; the offset and mode are in the accessible name, a summary line at the top of the dropdown ("Europe/Paris · UTC+1 · device") and on `/tz` (review 1) | A tooltip | Visible on demand without a hover-only control. | — |
+| Past time is greyed with `backdrop-filter: grayscale(1)` plus a light veil, on a `::after` layer (review 1) | `filter: grayscale()` on the cell; a plain veil | The overlay can cover just part of the slot holding now (height from the `m0`–`m29` classes), which `filter` on the cell can't. The dither stays visible, so the busy amount still reads. Browsers without `backdrop-filter` get the veil alone. | — |
+| The slot holding now is split; slots on earlier days and earlier today are fully greyed. JS keeps both up to date each minute (review 1) | Grey only whole slots | It needed no refactor, only one generated rule per minute step. | — |
+| `--color-grid` is one value in both themes (review 1) | A per-theme value | "A dark neutral in both themes": one value keeps the calendar identical across themes, like parula and the dither. | — |
+| Dividers (top bar, panels, dialogs) use a new `--color-divider`; buttons and inputs keep `--color-border` (review 1) | Lighten `--color-border` | Controls keep their visible edges while lines that only separate regions get subtler. | — |
+| Help, Contact and Download are `<dialog>`s rendered into the page. Any link with `data-dialog` opens one; a link inside a dialog (Help → Contact) switches dialogs and keeps the original opener for focus return (review 1) | One handler per dialog | One rule covers all three. | — |
+| `/tz` also gets the top-right Close (review 1) | Leave it with a back link | "Remove the back links" plus the same page header everywhere. | — |
+| Favicon drawn from the review's description, because the `favicon.svg` it refers to wasn't attached (review 1) | Wait for the file | It's a single file to swap. The description gives the shapes (dark rounded tile, two rounded columns, one busy block each, no now line) and the palette gives the colours: tile `--color-grid`; columns a blue lifted from step 0 to step 1 so they read on the tile at 16 px; teal-green step 4 and yellow step 8 blocks. A faint lighter edge keeps the tile visible on dark browser chrome. The SVG uses `rgb()` so the hex rule holds. | The intended `favicon.svg`. |
+| `apple-touch-icon.png` has a square tile | Rounded with transparent corners | iOS rounds the icon itself and fills transparency with black. | — |
+| Head-script loop guard: once per page view, and never again on the exact URL the last replace went to (review 1 fix) | A 5-second window | The 5-second window could skip a legitimate `dtz` fix if a visitor opened several typed URLs quickly (found while testing review 1). Matching the exact URL is what a loop would actually repeat. | — |
 | Wall-clock rows on DST days: always 48 rows. Skipped half-hours are labelled "skipped by clock change", and the repeated hour folds into the 01:30 row. | 46 or 50 rows | Keeps columns aligned across a week, and the spec asks for 48 rows. | — |
 | Current-time line and slot positions use classes (`m0`–`m29`) rather than inline `top:` | Inline style | CSP. JS moves it by changing the class. | — |
 | Narrow menu is a native `popover` (works without JS); on wide screens CSS shows the same items inline | A `<details>` menu; JS menu | One element serves both widths, keeps the HTML order of §5.0.1, and needs no JS. | Needing to support browsers without popover (they show the items inline). |
@@ -242,9 +270,9 @@ Anything not checked against current documentation is marked **(unverified)**.
 | HSTS `max-age=31536000; includeSubDomains`, no `preload` | `preload` | Preload commits the whole domain, which is out of scope. `includeSubDomains` only covers `*.time.mutantcacti.com`. | — |
 | `run_worker_first = true` for static assets **(unverified)** | Assets served before the Worker; `_headers` file | Security headers and the GET/HEAD-only rule then apply to every response, from one place. | Asset request costs. |
 | Dev fixture via `[env.dev]` with its own `main` (`src/dev.ts`) | A flag in production code | The fixture never ships, and `npm run dev` needs no secret. | — |
-| `compatibility_date = "2026-08-15"` | Today's date | The newest date the bundled `workerd` in the test pool supports. | Upgrading Wrangler. |
-| `@cloudflare/vitest-pool-workers` kept, though it now prints a notice that it's been renamed to `@cloudflare/vitest-plugin` | Migrate | The spec names it. Moving is one codemod (`npx @cloudflare/codemods vitest:pool-workers-to-vitest-plugin`). | It stops working with a newer Vitest. |
+| `compatibility_date = "2026-10-01"` | Today's date | A recent date the bundled `workerd` supports. | Upgrading Wrangler. |
+| Tests use `@cloudflare/vitest-plugin` 1.4.9 and Wrangler 4.154.0 (review 1) | Keep `@cloudflare/vitest-pool-workers` 0.23.0; `npm audit fix --force` | All six high `npm audit` findings (undici, sharp, zod, and miniflare and wrangler, which pull them in) came only through the deprecated pool package, which pins exact old versions. `npm audit fix` couldn't move them, and `--force` would *downgrade* the pool to 0.12. Its deprecation notice says it was renamed, and here the move changed only the import name. Production dependencies (hono, ical.js) had no findings. | A regression in the plugin. |
 | Range tab from Day/Week/Month opens the current period as a range | This week | Keeps the visitor's place. | — |
 | Today is disabled whenever the period contains now, including a Range that contains today but starts earlier | Enable it for Range | Follows §5.5 literally. | — |
-| Parula values are the widely circulated 64-entry `parula(64)` table **(unverified)** against MATLAB's current output | — | MATLAB isn't available here. | A visible mismatch. |
+| The source values are the widely circulated 64-entry `parula(64)` table **(unverified)** against MATLAB's current output | — | MATLAB isn't available here. | A visible mismatch. |
 | Time-zone search matches the zone IDs the browser lists, which may use older names (Chrome lists `Asia/Calcutta`) | Alias table | Smallest option. | Visitors not finding their zone. |

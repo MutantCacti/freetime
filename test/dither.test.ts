@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherSvg } from "../src/dither";
-import { PARULA, parulaIndex } from "../src/parula";
+import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg } from "../src/dither";
+import { LEVELS, busyStep } from "../src/levels";
+import { PALETTE, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -8,13 +9,14 @@ describe("dither", () => {
     expect(DITHER_MAX_LEVEL).toBe(12);
   });
 
-  it("maps the fraction linearly onto the level range", () => {
+  it("maps each step linearly onto the level range", () => {
     expect(ditherLevel(0)).toBe(0);
     expect(ditherLevel(0.5)).toBe(6);
     expect(ditherLevel(1)).toBe(12);
-    for (let f = 0; f <= 1; f += 0.01) {
-      expect(ditherLevel(f)).toBe(Math.round(DITHER_MIN_LEVEL + f * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL)));
+    for (let step = 0; step < LEVELS; step++) {
+      expect(ditherLevelForStep(step)).toBe(Math.round(DITHER_MIN_LEVEL + (step / (LEVELS - 1)) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL)));
     }
+    expect(Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s))).toEqual([0, 2, 3, 5, 6, 8, 9, 11, 12]);
   });
 
   it("a fully busy cell is at DITHER_MAX_LEVEL and never solid", () => {
@@ -49,11 +51,63 @@ describe("dither", () => {
     expect(() => assertDitherConstants(2, 9)).not.toThrow();
   });
 
-  it("maps fractions onto the 64-entry parula table, low to high", () => {
-    expect(PARULA.length).toBe(64);
-    expect(parulaIndex(0)).toBe(0);
-    expect(parulaIndex(1)).toBe(63);
-    expect(parulaIndex(-1)).toBe(0);
-    expect(parulaIndex(2)).toBe(63);
+});
+
+describe("levels", () => {
+  it("has 9 steps", () => expect(LEVELS).toBe(9));
+
+  it("quantises busy fractions into steps 0, 1/8, … 1", () => {
+    expect(busyStep(0)).toBe(0);
+    expect(busyStep(1 / 8)).toBe(1);
+    expect(busyStep(0.5)).toBe(4);
+    expect(busyStep(0.55)).toBe(4);
+    expect(busyStep(0.57)).toBe(5);
+    expect(busyStep(7 / 8)).toBe(7);
+    expect(busyStep(1)).toBe(8);
+    expect(busyStep(-1)).toBe(0);
+    expect(busyStep(2)).toBe(8);
+  });
+
+  it("never shows busy time as free, or part-free time as fully busy", () => {
+    expect(busyStep(0.001)).toBe(1);
+    expect(busyStep(0.999)).toBe(7);
+  });
+
+  it("colour and dither use the same step", () => {
+    for (let f = 0; f <= 1.0001; f += 0.01) {
+      const step = busyStep(f);
+      expect(cellClasses(f)).toMatch(new RegExp(`^p${step}( d${ditherLevelForStep(step)}[kw])?$`));
+    }
+  });
+});
+
+describe("palette", () => {
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
+
+  it("keeps the source table and derives the toned one from it", () => {
+    expect(PARULA_SOURCE.length).toBe(64);
+    expect(PARULA_TONED.length).toBe(64);
+    expect(PALETTE.length).toBe(LEVELS);
+    expect(PALETTE[0]).toBe(PARULA_TONED[0]);
+    expect(PALETTE[LEVELS - 1]).toBe(PARULA_TONED[63]);
+  });
+
+  it("compresses lightness into [L_MIN, L_MAX], reduces chroma, and keeps the hue path", () => {
+    expect(PALETTE_CHROMA).toBe(0.85);
+    expect([PALETTE_L_MIN, PALETTE_L_MAX]).toEqual([0.36, 0.9]);
+    PARULA_TONED.forEach((hex, i) => {
+      const [L, C, h] = rgbToOklch(rgb(hex));
+      const [, C0, h0] = rgbToOklch(rgb(PARULA_SOURCE[i]!));
+      expect(L).toBeGreaterThanOrEqual(PALETTE_L_MIN - 0.005);
+      expect(L).toBeLessThanOrEqual(PALETTE_L_MAX + 0.005);
+      expect(C).toBeLessThanOrEqual(C0 * PALETTE_CHROMA + 0.01);
+      const dh = Math.abs(Math.atan2(Math.sin(h - h0), Math.cos(h - h0)));
+      expect(dh, `hue ${i}`).toBeLessThan(0.08);
+    });
+  });
+
+  it("gets lighter from free to busy", () => {
+    const ls = PALETTE.map((h) => rgbToOklch(rgb(h))[0]);
+    for (let i = 1; i < ls.length; i++) expect(ls[i]!).toBeGreaterThan(ls[i - 1]!);
   });
 });

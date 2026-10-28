@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import tokens from "../public/css/tokens.css?raw";
-import { PARULA, dotTone } from "../src/parula";
+import { PALETTE, dotTone } from "../src/parula";
 
 const ALLOWED = new Set(["/public/css/tokens.css", "/src/parula.ts"]);
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9A-Za-z_-])/g;
 
 const files = {
-  ...import.meta.glob(["/src/**/*", "/public/**/*", "/test/**/*"], { query: "?raw", import: "default", eager: true }),
+  // Text files only: binary fonts and PNGs can contain "#" followed by hex digits by chance.
+  ...import.meta.glob(["/src/**/*.{ts,tsx}", "/public/**/*.{css,js,svg,txt,html}", "/test/**/*.{ts,ics}"], { query: "?raw", import: "default", eager: true }),
   ...import.meta.glob(["/README.md", "/wrangler.toml", "/vitest.config.ts", "/tsconfig.json", "/package.json"], { query: "?raw", import: "default", eager: true }),
 } as Record<string, string>;
 
@@ -59,6 +60,14 @@ const darkSystem = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (syst
 const darkChosen = semanticSet(tokens.slice(tokens.indexOf("semantic: dark (chosen)")));
 
 describe("contrast (WCAG AA) in both modes", () => {
+  it("the calendar grid colour is a dark neutral in both themes", () => {
+    for (const t of [light, darkChosen]) {
+      expect(luminance(t["--color-grid"]!)).toBeLessThan(0.05);
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(t["--color-grid"]!.slice(i, i + 2), 16));
+      expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThan(16);
+    }
+  });
+
   it("defines the same dark set for the system setting and the switcher", () => {
     expect(Object.keys(light).length).toBeGreaterThan(10);
     expect(darkSystem).toEqual(darkChosen);
@@ -92,12 +101,12 @@ describe("contrast (WCAG AA) in both modes", () => {
 describe("dither in greyscale", () => {
   it("dots differ in lightness from the colour under them at every step of the ramp", () => {
     const OPACITY = 0.42;
-    for (let i = 0; i < PARULA.length; i++) {
-      const base = PARULA[i]!;
+    for (let i = 0; i < PALETTE.length; i++) {
+      const base = PALETTE[i]!;
       const dot = dotTone(i) === "k" ? 0 : 255;
       const blended = [1, 3, 5].map((k) => Math.round(parseInt(base.slice(k, k + 2), 16) * (1 - OPACITY) + dot * OPACITY));
       const hex = "#" + blended.map((v) => v.toString(16).padStart(2, "0")).join("");
-      expect(contrast(base, hex), `parula ${i}`).toBeGreaterThanOrEqual(1.4);
+      expect(contrast(base, hex), `step ${i}`).toBeGreaterThanOrEqual(1.4);
     }
   });
 });

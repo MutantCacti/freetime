@@ -4,7 +4,7 @@
 import { RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherSvg } from "./dither";
 import { NOW_STEPS } from "./calendar";
-import { PARULA } from "./parula";
+import { PALETTE } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -24,8 +24,8 @@ let css: string | null = null;
 export function calendarCss(): string {
   if (css) return css;
   const out: string[] = [];
-  out.push(`:root{${PARULA.map((c, i) => `--parula-${i}:${c}`).join(";")}}`);
-  PARULA.forEach((_, i) => out.push(`.p${i}{background-color:var(--parula-${i})}`));
+  out.push(`:root{${PALETTE.map((c, i) => `--palette-${i}:${c}`).join(";")}}`);
+  PALETTE.forEach((_, i) => out.push(`.p${i}{background-color:var(--palette-${i})}`));
   const tile = DOT_PX * 4;
   for (let level = DITHER_MIN_LEVEL + 1; level <= DITHER_MAX_LEVEL; level++) {
     for (const tone of ["k", "w"] as const) {
@@ -33,7 +33,10 @@ export function calendarCss(): string {
     }
   }
   for (let step = 0; step < NOW_STEPS; step++) {
-    out.push(`.now-line.m${step}{top:${((step / NOW_STEPS) * 100).toFixed(3)}%}`);
+    const pct = ((step / NOW_STEPS) * 100).toFixed(3);
+    out.push(`.now-line.m${step}{top:${pct}%}`);
+    // The slot holding now: its past part is greyed, up to the line.
+    out.push(`.slot.split.m${step}::after{height:${pct}%}`);
   }
   for (let n = 1; n <= RANGE_COLUMN_MAX_DAYS; n++) {
     out.push(`.cols.n${n}{grid-template-columns:var(--time-col-w) repeat(${n},minmax(var(--day-col-min),1fr))}`);

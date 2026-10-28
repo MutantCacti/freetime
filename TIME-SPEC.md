@@ -28,18 +28,24 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 
   Any link can be shared, and Back works.
 - **Styling** uses two layers of tokens in `public/css/tokens.css`:
-  - raw values first, then semantic tokens (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-link`, `--color-focus`, `--color-now`, `--color-warning`, `--color-error`);
+  - raw values first, then semantic tokens (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-divider`, `--color-grid`, `--color-link`, `--color-focus`, `--color-now`, `--color-warning`, `--color-error`);
+  - `--color-grid` is the calendar's grid lines: a dark neutral in **both** themes. `--color-divider` is the subtler line used for the top bar and panels;
   - component CSS uses only `var(--…)`;
   - a test fails the build if a hex colour appears anywhere except `tokens.css` and `src/parula.ts`;
   - light and dark mode follow `prefers-color-scheme`, with a manual override from the theme switcher (§5.10);
   - the page chrome is neutral, and the calendar carries the colour.
+- **Fonts:** Figtree for text, Fragment Mono for times (hour labels, column dates, the period label and the time-zone label).
+  - Both are self-hosted as WOFF2 in `public/fonts/` (Latin and Latin Extended subsets, `font-display: swap`), with their SIL OFL licence files next to them. The two faces used above the fold are preloaded.
+  - Fallback stacks: `Figtree, system-ui, sans-serif` and `"Fragment Mono", ui-monospace, monospace`.
+  - Tabular figures wherever numbers line up.
+- **Favicon:** `public/favicon.svg` (`viewBox="0 0 32 32"`): two rounded day columns on a dark rounded tile in the grid colour, each with one busy block, in the toned palette's free, partly busy and busy tones. A 180 px `apple-touch-icon.png` is exported from it.
 - **Text standard:** all user-facing text follows the **PRINTED OUTPUT** method (§2.1). This matters most for `/help`. Maxence will rewrite `/help` heavily, so the agent produces a clean, well-structured template rather than final copy.
 - **Time:**
   - all calculations use UTC epoch seconds;
   - display uses `Intl.DateTimeFormat` in **the viewer's device time zone** (§5.11);
   - weeks start on **Monday**.
 - **Tests:**
-  - Vitest with `@cloudflare/vitest-pool-workers`;
+  - Vitest with `@cloudflare/vitest-plugin` (the renamed `@cloudflare/vitest-pool-workers`);
   - **tests never fetch the real feed**, only `.ics` fixtures in `test/fixtures/`.
 - **Dependencies:** keep them to a minimum.
   - An iCal/RRULE library is acceptable, because recurrence is easy to get wrong.
@@ -105,25 +111,33 @@ The main page (`/`) has three regions, plus a floating notice layer:
 ### 5.0.1 Top bar: exact order
 **Wide screens (one row), left to right:**
 
-| # | Item | Group |
-|---|---|---|
-| 1 | View tabs: **Day · Week · Month · Range** | left |
-| 2 | **Today** | centre |
-| 3 | **‹** (previous) | centre |
-| 4 | **›** (next) | centre |
-| 5 | Period label (for example "Mon 2 – Sun 8 Nov 2026"), followed by the **time-zone selector**, which is always visible (§5.11) | centre |
-| 6 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right |
-| 7 | **Download .ics** | right |
-| 8 | **Help** | right |
-| 9 | **Contact me** | right |
-| 10 | Theme switcher: a sun or moon icon, at the far right (§5.10) | right |
+| # | Item | Group | Shape |
+|---|---|---|---|
+| 1 | View tabs: **Day · Week · Month · Range** | left | segmented control |
+| 2 | **Today** | left, directly after the tabs | pill |
+| 3 | **‹** (previous) | left | pill (round) |
+| 4 | **›** (next) | left | pill (round) |
+| 5 | Period label: months and year only (§5.0.2) | left, after the arrows | text |
+| 6 | **Time-zone selector**, always visible (§5.11) | left, after the label | pill, with chevron |
+| 7 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right | pill (round) |
+| 8 | **Download .ics** | right | pill |
+| 9 | **Contact me** | right | pill |
+| 10 | **Help** | right | pill |
+| 11 | Theme switcher: a sun or moon icon (§5.10) | far right | pill (round) |
+
+- "Pill" means `border-radius: 9999px`, with more inline padding than the tabs. The view tabs keep their segmented shape, so the two kinds of control look different.
+- **The view tabs never change size.** The active tab is marked by fill and an underline plus `aria-current`; it never changes font weight or anything else that changes its width, so no tab moves when you switch views.
 
 **Narrow screens (two rows):**
 
-- **Row 1, left to right:** period label and time-zone label (item 5) · notice indicator (6) · a **menu** button containing Download .ics, Help and Contact me (7–9) · theme switcher (10).
-- **Row 2, left to right:** view tabs as a compact segmented control (1) · **Today** (2) · **‹** (3) · **›** (4).
+- **Row 1, left to right:** period label (5) · time-zone selector (6) · notice indicator (7) · a **menu** button containing Download .ics, Contact me and Help (8–10) · theme switcher (11).
+- **Row 2, left-aligned:** view tabs as a compact segmented control (1) · **Today** (2) · **‹** (3) · **›** (4).
 
 The order of items in the HTML follows the wide-screen table, so keyboard and screen-reader order is the same at every width. Narrow-screen rows are achieved with CSS only.
+
+### 5.0.2 Period label
+- Months and year only, since the calendar already shows the dates: one month "Oct 2026"; two or more months "Oct – Nov 2026"; across a year "Dec 2026 – Jan 2027". This applies to every view.
+- Its accessible name spells out the full dates ("Mon 26 Oct – Sun 1 Nov 2026").
 
 ### 5.1 Day
 - A single column of 30-minute rows, wide enough to read comfortably on a phone.
@@ -165,7 +179,8 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 - In Day, Week and Range column layouts, a clear horizontal line marks the current time across today's column, using `--color-now`.
 - In Month view and the Range day-cell layout, today's cell is outlined.
 - Server rendering places the line correctly at request time, and JS moves it every minute.
-- Slots earlier than now on today's date are slightly dimmed.
+- **All past time is greyed out**, in every view: every slot and day cell before now, including all days before today (Month and Range day cells too). The slot holding now is split: its part before the line is grey, the rest normal, using the same `m0`–`m29` minute classes as the line (no inline styles).
+- The now line never covers the column headers: the headers stay sticky and above the line, and the line is clipped to the scrolling body.
 
 ### 5.7 Mobile
 - **Default view:** Day on narrow screens, Week on wide screens. An explicit `?view=` in the URL always wins.
@@ -192,7 +207,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 
   | Kind | Used for | Behaviour |
   |---|---|---|
-  | **Sticky** | a condition that is still true while the page is open (for example, "Showing a saved copy. Times may be out of date.", or a part of the page that failed to load) | Stays until the condition ends. Its button **minimises** it rather than dismissing it: it shrinks to the notice indicator in the top bar (§5.0.1, item 6), shown in the toast's severity colour. Selecting the indicator re-opens the toast. The condition can't be hidden entirely, only minimised. |
+  | **Sticky** | a condition that is still true while the page is open (for example, "Showing a saved copy. Times may be out of date.", or a part of the page that failed to load) | Stays until the condition ends. Its button **minimises** it rather than dismissing it: it shrinks to the notice indicator in the top bar (§5.0.1, item 7), shown in the toast's severity colour. Selecting the indicator re-opens the toast. The condition can't be hidden entirely, only minimised. |
   | **Transient** | a one-off event (for example, a failed copy that also shows in the button, or a range that was adjusted: "Range shortened to 62 days.") | Shows for about **6 seconds**, then hides itself. It pauses while hovered or focused, and has a close button. |
 
 - **Stacking:** at most **three** toasts at once, sticky ones above transient ones, errors above warnings. Further transient toasts wait their turn.
@@ -209,7 +224,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 - The error codes and what each one means are listed in the README.
 
 ### 5.10 Theme switcher
-- A single icon button at the far right of the top bar (§5.0.1, item 10). It shows a **moon** in light mode (switch to dark) and a **sun** in dark mode (switch to light). Its `aria-label` says what pressing it does ("Switch to dark mode").
+- A single icon button at the far right of the top bar (§5.0.1, item 11). It shows a **moon** in light mode (switch to dark) and a **sun** in dark mode (switch to light). Its `aria-label` says what pressing it does ("Switch to dark mode").
 - **Default:** follow `prefers-color-scheme`. Once the viewer chooses, the choice is stored in `localStorage` and applied as `data-theme="light"` or `data-theme="dark"` on `<html>`, overriding the system setting.
   - Wrap every `localStorage` read and write in `try/catch`; if storage is unavailable, the toggle still works for that page view.
   - Apply the stored theme with a tiny script in `<head>` **before first paint**, so the page doesn't flash the wrong theme. Because the CSP forbids inline scripts, serve it as its own small file loaded with `<script src>` in `<head>` (not deferred).
@@ -241,18 +256,18 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 - **Privacy:** a shared link reveals the sharer's device zone in `dtz` until the recipient's browser replaces it. Accepted: a time zone is low-risk and already implied by the times shown.
 - **Without JS:** `dtz` is never set, so the page uses `tz` if present, otherwise `Europe/London`, and the label says so.
 
-#### The time-zone selector (top bar, item 5)
+#### The time-zone selector (top bar, item 6)
 - The time-zone label is a **button that opens a dropdown** to choose another zone.
-- **Label:** always visible, showing the zone, its UTC offset and the mode, for example **"Europe/Paris · UTC+1"** with a small "device" or "pinned" marker.
-  - If the visible period crosses a daylight-saving change, show both offsets: "Europe/London · UTC+1 → UTC+0".
-  - Its accessible name spells it out ("Time zone: Europe/Paris, UTC plus 1, device default. Change").
+- **Label:** always visible, showing only the zone name, for example **"Europe/London"**, with a chevron at every width so it's obviously a control.
+  - The UTC offset and the mode ("device", "pinned", or "default" without JS) are in its accessible name ("Time zone: Europe/Paris, UTC plus 1, device default. Change") and at the top of the dropdown ("Europe/Paris · UTC+1 · device").
+  - If the visible period crosses a daylight-saving change, the dropdown summary and accessible name show both offsets ("UTC+1 → UTC+0"); the label doesn't.
 - **Dropdown:**
   - a search field at the top, filtering the list as you type;
   - the first option is **"Device default"**, which removes `tz` from the URL;
   - then every IANA zone from `Intl.supportedValuesOf('timeZone')`, each with its current offset, grouped by region;
   - choosing a zone navigates to the current URL with `tz` set (all other parameters kept, including `dtz`). Choosing your own device's zone by name still sets `tz`, so a shared link pins it for others;
   - keyboard-operable: arrow keys move, Enter chooses, Escape closes and returns focus to the button.
-- **Without JS:** the button links to `/tz?…`, a plain page with a GET form (a `<select>` of zones with "Device default" first, and an **Apply** button) that returns to the same view with `tz` set or removed. Without JS, "Device default" means Europe/London, and the page says so.
+- **Without JS:** the button links to `/tz?…`, a plain page showing the same summary, with a GET form (a `<select>` of zones with "Device default" first, and an **Apply** button) that returns to the same view with `tz` set or removed. Without JS, "Device default" means Europe/London, and the page says so.
 - **Validation:** only zone names that `Intl` accepts are used.
   - An invalid `tz` is ignored, so `dtz` is used, and a transient toast says so ("Unknown time zone. Showing device default.").
   - An invalid `dtz` is ignored; the head script replaces it with the real device zone.
@@ -263,19 +278,24 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 
 ## 6. Colour, dither and colour bar
 
-- **Colour:** the busy fraction maps through MATLAB's **parula** colormap, from low to high. Store it as a fixed lookup table in `src/parula.ts`.
+- **Levels:** the busy fraction is quantised into **`LEVELS = 9` steps** (0, 1/8, …, 1), set in one constant. Colour and dither both use the same step. Cell labels still state the real percentage.
+- **Colour:** MATLAB's **parula** colormap, toned down slightly. `src/parula.ts` keeps the original 64-entry table for reference and derives the toned table from it at start-up, through OKLCH:
+  - same hue path;
+  - chroma scaled by `PALETTE_CHROMA = 0.85`;
+  - lightness compressed into `PALETTE_L_MIN = 0.36` … `PALETTE_L_MAX = 0.90`.
+  - The calendar's palette is the toned table sampled at the 9 steps.
 - **Dither:**
-  - the same fraction drives an **ordered (Bayer 4×4) dither**, layered over the colour;
+  - the same step drives an **ordered (Bayer 4×4) dither**, layered over the colour;
   - **the dither never reaches solid.** Even a fully busy cell keeps a visible pattern. Two constants in one place (`src/dither.ts`) set the range:
-    - `DITHER_MIN_LEVEL = 0`: a free cell (fraction 0) has no dots;
-    - `DITHER_MAX_LEVEL = 12`: a fully busy cell (fraction 1) has 12 of the 16 Bayer cells filled, which is 75% coverage.
-  - map the fraction linearly onto that range, `level = round(MIN + fraction × (MAX − MIN))`, and draw each level as a small repeating SVG or CSS pattern;
+    - `DITHER_MIN_LEVEL = 0`: a free cell (step 0) has no dots;
+    - `DITHER_MAX_LEVEL = 12`: a fully busy cell (step 8) has 12 of the 16 Bayer cells filled, which is 75% coverage.
+  - map the step linearly onto that range, `level = round(DITHER_MIN_LEVEL + step / (LEVELS − 1) × (DITHER_MAX_LEVEL − DITHER_MIN_LEVEL))`, and draw each level as a small repeating SVG or CSS pattern;
   - the constants are validated at start-up (`0 ≤ MIN < MAX ≤ 15`), so a later change can't make busy cells solid by accident;
   - Use Bayer rather than Floyd–Steinberg because each cell's pattern depends only on its own value. Error diffusion would spread across neighbouring cells, so a pattern would change whenever a neighbour changed.
-  - The dither must stay visible in greyscale, so colour is never the only signal.
+  - The dither must stay visible in greyscale, so colour is never the only signal; the dot colour (black or white) must contrast with the colour under it at every step.
 - **Accessible labels:** every cell has one, for example "Tue 3 Nov, 14:00–14:30, 50% busy". Cells can be focused with the keyboard and have a visible focus ring.
 - **Colour bar:**
-  - a vertical bar on the right, showing the parula ramp with the dither over it, using the same capped dither range as the cells;
+  - a vertical bar on the right, showing the same 9 steps as the cells as 9 separate bands (not a smooth ramp), each with its dither;
   - "Busy" at the top and "Free" at the bottom, with no other legend;
   - on narrow screens, it moves to a thin horizontal bar under the top bar, reading "Free" on the left and "Busy" on the right.
 
@@ -294,13 +314,20 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 Any method other than GET or HEAD returns **405**. There are no forms that POST and no stored state.
 
 ### 7.1 Download dialog
-- A **Download .ics** button in the top bar, near Help, opens a dialog. The dialog:
+- A **Download .ics** button in the top bar opens a dialog. The dialog:
   - states the exact range that will be exported (for example, "Busy times from Mon 2 Nov to Sun 8 Nov 2026, Europe/London");
   - says the file contains busy blocks only;
-  - has **Download** and **Cancel** buttons. Download is a plain link to `/free-busy.ics` with the current range.
+  - has **Download** and **Cancel** buttons, plus the Close (×) at the top right (§8). Cancel and × do the same thing. Download is a plain link to `/free-busy.ics` with the current range.
 - Without JS, the button links to `/export`, a page with the same content.
 
 ## 8. Help and contact
+
+**Help** opens as a modal with JS, rendered into the page like Contact and Download. Without JS, the Help link goes to `/help`.
+
+**Close at the top right, everywhere.** Help, Contact and Download, as modals or as pages, all have a Close (×) button at the top right. There are no "back" links.
+- On a page, Close is a link back to the calendar with the same view state (view, date or range, `dtz`, `tz`).
+- In a modal, Close closes it, and so does Escape. Focus returns to the button that opened it.
+- Contact me has no other close control. Download keeps its Cancel button next to Download.
 
 **`/help`** is a template with these sections:
 - what time. is;
@@ -375,8 +402,13 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Export:** the `.ics` range matches the viewed range, respects the cap and the privacy rule, uses the filename `mutantcacti-busy.ics`, and `/export` states the range.
   - **Notices and errors:** a stale cache shows the warning notice; a fatal feed failure replaces the calendar with the error panel, returns 503, and shows a code and reference but no stack trace, path, URL or upstream body; the same reference is written to the log.
   - **Scroll clamp:** at 00:15 and 23:45 the starting scroll stays within the column.
-  - **Colour and dither:** the busy fraction gives the same Bayer level and parula colour in every view; a fully busy cell is at `DITHER_MAX_LEVEL` and never solid; invalid dither constants are rejected.
-  - **Top bar:** the HTML order matches §5.0.1; the notice indicator appears only while a sticky toast is minimised.
+  - **Colour and dither:** the busy fraction gives the same step, Bayer level and palette colour in every view; a fully busy cell is at `DITHER_MAX_LEVEL` and never solid; invalid dither constants are rejected.
+  - **Top bar:** the HTML order matches §5.0.1; the notice indicator appears only while a sticky toast is minimised; the rendered tab widths don't depend on which tab is active (no weight or size change on the active tab).
+  - **Period label:** one month, two months and across a year, in each view.
+  - **Past:** days before today are greyed in Day, Week, Month and Range; the slot holding now is split.
+  - **Levels:** busy fractions map to 9 steps, and colour and dither use the same step; the colour bar shows the same 9 bands.
+  - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
+  - **Fonts:** the font files are served from `self`, and the CSP still has no external origins.
   - **Toasts:** a stale cache produces a sticky warning that minimises but can't be dismissed; a transient toast hides itself; no more than three show at once.
   - **Theme:** the stored choice overrides the system setting; the page still renders when `localStorage` throws.
   - **Time zone:**
@@ -386,7 +418,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
     - an invalid `tz` falls back to `dtz` with a toast; an invalid `dtz` falls back to Europe/London;
     - the head-script logic (a unit test of the function it uses) replaces a missing or wrong `dtz`, keeps `tz`, and never replaces twice in one page view;
     - in zones like Pacific/Auckland and America/Los_Angeles, day boundaries, "today", the current-time line and Today/‹ › follow that zone;
-    - the label shows both offsets when a period crosses a DST change;
+    - the label shows only the zone name; its summary and accessible name show both offsets when a period crosses a DST change;
     - no `Set-Cookie` is ever sent;
     - the `/tz` no-JS page sets and removes `tz` correctly; the `.ics` file is in UTC.
   - **Routes:** 405 for POST, PUT and DELETE.

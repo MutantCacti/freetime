@@ -39,6 +39,8 @@ export interface DayCell {
   /** Inside the month (Month) or the range (Range). */
   inPeriod: boolean;
   isToday: boolean;
+  /** A day before today. */
+  isPast: boolean;
   fraction: number;
   classes: string;
   label: string;
@@ -75,7 +77,8 @@ export function buildColumns(period: Period, zone: string, merged: Interval[], n
         fraction,
         classes: cellClasses(fraction),
         label: slotLabel(date, hhmm(hour, minute), to, fraction, skipped),
-        past: isToday && end <= nowSec,
+        // Everything before now is greyed, on every day; the slot holding now is split.
+        past: !skipped ? end <= nowSec : start <= nowSec,
         nowStep: hasNow ? Math.min(NOW_STEPS - 1, Math.floor(((nowSec - start) / (end - start)) * NOW_STEPS)) : null,
       });
     }
@@ -98,6 +101,7 @@ export function buildDayCells(period: Period, zone: string, merged: Interval[], 
       dayOfMonth: parts(date).d,
       inPeriod: period.start <= date && date <= lastDay,
       isToday: date === todayDate,
+      isPast: date < todayDate,
       fraction,
       classes: cellClasses(fraction),
       label: dayCellLabel(date, fraction),

@@ -1,7 +1,8 @@
 // Ordered (Bayer 4×4) dither. Each cell's pattern depends only on its own
 // busy fraction, so a pattern never changes because a neighbour changed.
 
-import { dotTone, parulaIndex } from "./parula";
+import { LEVELS, busyStep } from "./levels";
+import { dotTone } from "./parula";
 
 /** Dots at fraction 0 (free). */
 export const DITHER_MIN_LEVEL = 0;
@@ -24,9 +25,14 @@ export const BAYER_4X4: readonly (readonly number[])[] = [
   [15, 7, 13, 5],
 ];
 
+/** Dither level for a step: level = round(MIN + step / (LEVELS − 1) × (MAX − MIN)). */
+export function ditherLevelForStep(step: number): number {
+  return Math.round(DITHER_MIN_LEVEL + (step / (LEVELS - 1)) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
+}
+
+/** Dither level for a busy fraction, through its step. */
 export function ditherLevel(fraction: number): number {
-  const f = Math.min(1, Math.max(0, fraction));
-  return Math.round(DITHER_MIN_LEVEL + f * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
+  return ditherLevelForStep(busyStep(fraction));
 }
 
 /** Pixel size of one Bayer cell in the pattern tile. */
@@ -49,11 +55,15 @@ export function ditherSvg(level: number, tone: "k" | "w"): string {
 }
 
 /**
- * The classes that colour and dither a cell. Every view uses this one
- * function, so a fraction always looks the same.
+ * The classes that colour and dither a cell: `p<step>` for the palette colour
+ * and `d<level><tone>` for the dots. Every view uses this one function, so a
+ * fraction always looks the same.
  */
 export function cellClasses(fraction: number): string {
-  const p = parulaIndex(fraction);
-  const level = ditherLevel(fraction);
-  return level === 0 ? `p${p}` : `p${p} d${level}${dotTone(p)}`;
+  return stepClasses(busyStep(fraction));
+}
+
+export function stepClasses(step: number): string {
+  const level = ditherLevelForStep(step);
+  return level === 0 ? `p${step}` : `p${step} d${level}${dotTone(step)}`;
 }

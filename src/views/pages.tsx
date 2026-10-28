@@ -6,7 +6,7 @@ import { ColourBar } from "./calendar";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
 import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
 import { Document, pageTitle } from "./layout";
-import { SubHeader, TopBar, type TopBarProps } from "./topbar";
+import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
 
 export interface CalendarPageProps {
   title: string;
@@ -39,26 +39,42 @@ export function CalendarPage(p: CalendarPageProps) {
         {p.showColourBar ? <ColourBar /> : null}
       </main>
       <dialog class="dialog" id="dlg-download" aria-labelledby="dlg-download-title">
-        {/* PRINTED OUTPUT: download dialog / title and buttons */}
-        <h2 id="dlg-download-title">Download .ics</h2>
-        <DownloadContent {...p.download} />
-        <div class="actions">
-          <a class="btn btn-primary" href={p.download.downloadHref} download="">
-            Download
-          </a>
-          <button type="button" class="btn" data-close>
-            Cancel
-          </button>
+        <div class="dialog-head">
+          {/* PRINTED OUTPUT: download dialog / title */}
+          <h2 id="dlg-download-title">Download .ics</h2>
+          <CloseControl />
+        </div>
+        <div class="dialog-body">
+          <DownloadContent {...p.download} />
+          <div class="actions">
+            {/* PRINTED OUTPUT: download dialog / buttons */}
+            <a class="pill pill-primary" href={p.download.downloadHref} download="">
+              Download
+            </a>
+            <button type="button" class="pill" data-close>
+              Cancel
+            </button>
+          </div>
         </div>
       </dialog>
       <dialog class="dialog" id="dlg-contact" aria-labelledby="dlg-contact-title">
-        {/* PRINTED OUTPUT: contact dialog / title and close button */}
-        <h2 id="dlg-contact-title">Contact me</h2>
-        <ContactContent />
-        <div class="actions">
-          <button type="button" class="btn" data-close>
-            Close
-          </button>
+        <div class="dialog-head">
+          {/* PRINTED OUTPUT: contact dialog / title */}
+          <h2 id="dlg-contact-title">Contact me</h2>
+          <CloseControl />
+        </div>
+        <div class="dialog-body">
+          <ContactContent />
+        </div>
+      </dialog>
+      <dialog class="dialog dialog-wide" id="dlg-help" aria-labelledby="dlg-help-title">
+        <div class="dialog-head">
+          {/* PRINTED OUTPUT: help dialog / title */}
+          <h2 id="dlg-help-title">Help</h2>
+          <CloseControl />
+        </div>
+        <div class="dialog-body">
+          <HelpContent links={p.topbar.links} here={p.topbar.here} level={3} />
         </div>
       </dialog>
       <LiveRegions />
@@ -101,10 +117,10 @@ export function ExportPage({ links, here, download }: { links: Links; here: View
       <DownloadContent {...download} />
       <div class="actions">
         {/* PRINTED OUTPUT: export page / buttons */}
-        <a class="btn btn-primary" href={download.downloadHref} download="">
+        <a class="pill pill-primary" href={download.downloadHref} download="">
           Download
         </a>
-        <a class="btn" href={links.view(here)}>
+        <a class="pill" href={links.view(here)}>
           Cancel
         </a>
       </div>
@@ -125,6 +141,8 @@ export interface TzPageProps {
   deviceDefault: string;
   /** JS hasn't run, so the device zone is unknown. */
   noDeviceZone: boolean;
+  /** "Europe/London · UTC+0 · device" */
+  summary: string;
   groups: { region: string; options: TzOption[] }[];
 }
 
@@ -132,6 +150,8 @@ export function TzPage(p: TzPageProps) {
   return (
     // PRINTED OUTPUT: time zone page / title
     <SubPage links={p.links} here={p.here} name="Time zone">
+      {/* PRINTED OUTPUT: time zone page / current zone */}
+      <p class="lede">Now showing: {p.summary}</p>
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
@@ -154,7 +174,7 @@ export function TzPage(p: TzPageProps) {
           ))}
         </select>
         {/* PRINTED OUTPUT: time zone page / apply button */}
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="pill pill-primary">
           Apply
         </button>
       </form>
@@ -192,17 +212,26 @@ export function HelpPage({ links, here }: { links: Links; here: ViewParams }) {
   return (
     // PRINTED OUTPUT: help / page title
     <SubPage links={links} here={here} name="Help">
-      <article class="help">
+      <HelpContent links={links} here={here} level={2} />
+    </SubPage>
+  );
+}
+
+/** The help template, used by /help and the Help dialog. `level` is the section heading level. */
+export function HelpContent({ links, here, level }: { links: Links; here: ViewParams; level: 2 | 3 }) {
+  const H = level === 2 ? "h2" : "h3";
+  return (
+    <article class="help">
         {/* Template copy: Maxence will rewrite this page. Keep one marker per section. */}
         <section aria-labelledby="help-what">
           {/* PRINTED OUTPUT: help / what time. is */}
-          <h2 id="help-what">What time. is</h2>
+          <H id="help-what">What time. is</H>
           <p>A read-only view of when Maxence is free or busy. Use it to find a time, then get in touch.</p>
         </section>
 
         <section aria-labelledby="help-shows">
           {/* PRINTED OUTPUT: help / what it shows and what it hides */}
-          <h2 id="help-shows">What it shows and what it hides</h2>
+          <H id="help-shows">What it shows and what it hides</H>
           <p>It shows when time is busy. It never shows what the time is for.</p>
           <ul>
             <li>Shown: busy and free time.</li>
@@ -212,18 +241,19 @@ export function HelpPage({ links, here }: { links: Links; here: ViewParams }) {
 
         <section aria-labelledby="help-colour">
           {/* PRINTED OUTPUT: help / reading the colour and the dither */}
-          <h2 id="help-colour">Reading the colour and the dots</h2>
+          <H id="help-colour">Reading the colour and the dots</H>
           <p>Each cell shows how much of its time is busy.</p>
           <ul>
-            <li>Colour runs from dark blue (free) to yellow (busy), as on the colour bar.</li>
+            <li>Colour runs in nine steps from dark blue (free) to yellow (busy), as on the colour bar.</li>
             <li>Dots get denser as a cell gets busier. A fully busy cell still shows some colour between the dots.</li>
             <li>Each cell's label gives the exact amount, for example "50% busy".</li>
+            <li>Time that has already passed is greyed out.</li>
           </ul>
         </section>
 
         <section aria-labelledby="help-views">
           {/* PRINTED OUTPUT: help / views, arrows, Today and Range */}
-          <h2 id="help-views">Views and navigation</h2>
+          <H id="help-views">Views and navigation</H>
           <dl>
             <dt>Day, Week, Month</dt>
             <dd>One day, one week (Monday to Sunday) or one month. In Month, select a day to open it.</dd>
@@ -239,30 +269,31 @@ export function HelpPage({ links, here }: { links: Links; here: ViewParams }) {
 
         <section aria-labelledby="help-tz">
           {/* PRINTED OUTPUT: help / time zones */}
-          <h2 id="help-tz">Time zones</h2>
+          <H id="help-tz">Time zones</H>
           <p>Times are shown in your device's time zone, unless the link you opened pins one.</p>
           <ul>
-            <li>The label next to the date shows the zone and its offset from UTC.</li>
+            <li>The button next to the months shows the zone. Select it to see the offset from UTC or to choose another zone.</li>
             <li>"device" means your device's zone. "pinned" means a zone chosen in the link. "default" means Europe/London, used when your device's zone isn't known.</li>
-            <li>To choose another zone, select the label.</li>
           </ul>
         </section>
 
         <section aria-labelledby="help-ics">
           {/* PRINTED OUTPUT: help / the .ics export */}
-          <h2 id="help-ics">The .ics export</h2>
+          <H id="help-ics">The .ics export</H>
           <p>Download .ics saves the busy times you are viewing as a calendar file. It contains busy blocks only, in UTC, so your calendar app shows them in your own zone.</p>
         </section>
 
         <section aria-labelledby="help-contact">
           {/* PRINTED OUTPUT: help / why there's no booking */}
-          <h2 id="help-contact">Why there's no booking button</h2>
+          <H id="help-contact">Why there's no booking button</H>
           <p>
             This site only shows time. Nothing here sends a message or books a slot. Check a time here, then use{" "}
-            <a href={links.href("/contact", here)}>Contact me</a>.
+            <a href={links.href("/contact", here)} data-dialog="dlg-contact">
+              Contact me
+            </a>
+            .
           </p>
         </section>
-      </article>
-    </SubPage>
+    </article>
   );
 }

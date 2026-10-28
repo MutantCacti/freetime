@@ -9,7 +9,7 @@ import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
 import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
 import { fetchFromUrl, loadFeed } from "./feed";
-import { exportSpanLabel, spanLabel, monthLabel, dayLong } from "./format";
+import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusy } from "./ical";
 import { Links } from "./links";
 import {
@@ -153,6 +153,7 @@ export function createApp(deps: AppDeps = {}) {
     const here = hereFrom(period);
     const nav = navigation(period, todayDate);
     const label = period.view === "month" ? monthLabel(period.start) : period.view === "day" ? dayLong(period.start) : spanLabel(period.start, period.end);
+    const shortLabel = periodMonthsLabel(period.start, period.end);
 
     const sticky: Notice[] = [];
     const inline: Notice[] = [];
@@ -204,7 +205,8 @@ export function createApp(deps: AppDeps = {}) {
           period,
           nav,
           tabs: tabTargets(period, todayDate),
-          periodLabel: label,
+          periodLabel: shortLabel,
+          periodFull: label,
           zone: zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)),
           here,
           exportParams,
@@ -271,6 +273,10 @@ export function createApp(deps: AppDeps = {}) {
     const zone = zoneFrom(c);
     const links = new Links(zone);
     const here = backTo(c, zone);
+    const period = periodFor(
+      { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },
+      today(nowSec(), zone.zone),
+    );
     if (c.req.query("apply")) {
       const chosen = resolveZone(c.req.query("tz"), undefined).tz;
       return c.redirect(links.withTz(here, chosen), 302);
@@ -291,6 +297,7 @@ export function createApp(deps: AppDeps = {}) {
         current={zone.tz}
         deviceDefault={zone.dtz ?? DEFAULT_TZ}
         noDeviceZone={!zone.dtz}
+        summary={zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)).summary}
         groups={[...groups.entries()].map(([region, options]) => ({ region, options }))}
       />,
     );

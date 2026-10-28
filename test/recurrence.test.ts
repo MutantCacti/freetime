@@ -90,7 +90,7 @@ describe("recurrence and expansion", () => {
     const res = await makeApp({ feed: empty }).get("/?view=week&date=2026-11-02");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).not.toMatch(/[1-9]\d*% busy/);
+    expect(html).not.toMatch(/aria-label="[^"]*, [1-9]\d*% busy"/);
     expect(html).toContain(`class="slot ${cellClasses(0)}`);
   });
 

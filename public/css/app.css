@@ -10,6 +10,8 @@ body {
   color: var(--color-text);
   font: 15px/1.45 var(--font-sans);
 }
+.mono, .timelabel, .colhead, .period-label, .tz-text, .debug code { font-family: var(--font-mono); }
+.timelabel, .colhead, .daynum, .dow, .picker-day, .tz-opt .off, .debug, .period-label { font-variant-numeric: tabular-nums; }
 a { color: var(--color-link); }
 :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 h1, h2 { line-height: 1.2; }
@@ -38,6 +40,20 @@ code { font-family: var(--font-mono); }
 .btn-primary:hover { background: var(--color-link); filter: brightness(1.08); }
 .btn[aria-disabled="true"] { color: var(--color-text-muted); cursor: default; background: var(--color-surface); }
 
+/* Pills: fully rounded, with more inline padding than the view tabs. */
+.pill {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1);
+  min-height: 2.25rem; padding: 0.3rem 1rem;
+  border: 1px solid var(--color-border); border-radius: 9999px;
+  background: var(--color-bg); color: var(--color-text);
+  font: inherit; font-size: 0.9rem; text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+.pill:hover { background: var(--color-surface-2); }
+.pill.round { width: 2.25rem; padding: 0; font-size: 1.15rem; }
+.pill-primary { background: var(--color-link); border-color: var(--color-link); color: var(--color-on-accent); }
+.pill-primary:hover { background: var(--color-link); filter: brightness(1.08); }
+.pill[aria-disabled="true"] { color: var(--color-text-muted); cursor: default; background: var(--color-surface); }
+
 /* ---------------------------------------------------------------- page frame */
 .page-calendar { height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 
@@ -46,8 +62,9 @@ code { font-family: var(--font-mono); }
   position: sticky; top: 0; z-index: 30;
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: var(--color-bg); border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
 }
+/* View tabs: a segmented control. The active tab is marked by fill and an underline only, so no tab changes width. */
 .tb-tabs { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius); overflow: hidden; flex: none; }
 .tab {
   display: inline-flex; align-items: center; min-height: 2.15rem; padding: 0.3rem 0.7rem;
@@ -55,21 +72,13 @@ code { font-family: var(--font-mono); }
 }
 .tab + .tab { border-left: 1px solid var(--color-border); }
 .tab:hover { background: var(--color-surface-2); }
-.tab[aria-current="page"] { background: var(--color-surface-2); font-weight: 600; }
-.tb-today { margin-left: auto; }
-.tb-period { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-2); min-width: 0; margin-right: auto; }
-.period-label { margin: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; }
-.tz-button {
-  display: inline-flex; align-items: center; gap: var(--space-1);
-  color: var(--color-text-muted); font-size: 0.85rem; text-decoration: none; border-radius: var(--radius);
-  padding: 0.1rem 0.25rem; min-height: 1.75rem;
-}
-.tz-button:hover { color: var(--color-text); background: var(--color-surface-2); }
+.tab[aria-current="page"] { background: var(--color-surface-2); box-shadow: inset 0 -2px 0 var(--color-link); }
+.period-label { margin: 0 0 0 var(--space-2); font-size: 1rem; font-weight: 400; white-space: nowrap; }
+.tz-button { gap: var(--space-1); padding: 0.2rem 0.6rem 0.2rem 0.85rem; min-height: 2rem; font-size: 0.85rem; color: var(--color-text-muted); max-width: 100%; }
+.tz-button:hover { color: var(--color-text); }
 .tz-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tz-mode {
-  font-size: 0.75rem; padding: 0 0.35rem; border: 1px solid var(--color-border); border-radius: 999px;
-  color: var(--color-text-muted);
-}
+/* Everything after the zone selector sits on the right. */
+.tz-button { margin-right: auto; }
 .tb-menu { display: none; }
 .tb-menu-items {
   /* Inline on wide screens: overrides the popover's hidden state. */
@@ -105,32 +114,41 @@ code { font-family: var(--font-mono); }
   .cols { --row-h: max(var(--row-min), calc((100cqh - var(--head-h)) / (var(--visible-hours) * 2))); }
 }
 .cols.n1 { grid-template-columns: var(--time-col-w) minmax(0, 40rem); }
-.corner, .colhead { position: sticky; top: 0; background: var(--color-bg); border-bottom: 1px solid var(--color-border); }
-.corner { left: 0; z-index: 4; }
+/* Stacking, bottom to top: cells, greyed past, the now line, time labels, focus, column headers, corner. */
+.corner, .colhead { position: sticky; top: 0; background: var(--color-bg); border-bottom: 1px solid var(--color-grid); }
+.corner { left: 0; z-index: 7; }
 .colhead {
-  z-index: 3; display: flex; align-items: center; justify-content: center;
+  z-index: 6; display: flex; align-items: center; justify-content: center;
   font-size: 0.85rem; font-weight: 600; white-space: nowrap;
 }
 .colhead.is-today { color: var(--color-now); }
+.cols { background: var(--color-bg); }
 .timelabel {
-  position: sticky; left: 0; z-index: 2; background: var(--color-bg);
+  position: sticky; left: 0; z-index: 4; background: var(--color-bg);
   font-size: 0.75rem; color: var(--color-text-muted); text-align: right; padding: 0 var(--space-2) 0 0;
   line-height: 1; padding-top: 2px;
   scroll-margin-top: var(--head-h);
 }
 .slot {
-  position: relative; border-right: 1px solid var(--color-bg); border-bottom: 1px solid var(--color-bg);
+  position: relative; border-right: 1px solid var(--color-grid); border-bottom: 1px solid var(--color-grid);
   background-repeat: repeat;
 }
 .slot:focus-visible, .daycell:focus-visible {
   outline: 3px solid var(--color-focus); outline-offset: -3px; z-index: 5;
   box-shadow: inset 0 0 0 5px var(--color-bg);
 }
-.slot.past::after, .daycell.out::after {
-  content: ""; position: absolute; inset: 0; background: var(--color-veil); pointer-events: none;
+/* Past time is greyed out: colour removed, a light veil on top; the dither still shows. */
+.slot.past::after, .slot.split::after, .daycell.past::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: var(--color-past);
+  -webkit-backdrop-filter: grayscale(1); backdrop-filter: grayscale(1);
+}
+.slot.split::after { bottom: auto; }
+.daycell.out::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; background: var(--color-veil); pointer-events: none;
 }
 .now-line {
-  position: absolute; left: -1px; right: 0; height: 3px; margin-top: -1px; z-index: 4;
+  position: absolute; left: -1px; right: 0; height: 3px; margin-top: -1px; z-index: 2;
   background: var(--color-now); box-shadow: 0 0 0 1px var(--color-bg); pointer-events: none;
 }
 
@@ -139,27 +157,28 @@ code { font-family: var(--font-mono); }
 .month {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
   grid-template-rows: auto; grid-auto-rows: minmax(3.5rem, 1fr);
-  gap: 2px; min-height: 100%; padding: 0 var(--space-2) var(--space-2);
+  gap: 1px; min-height: 100%; background: var(--color-grid);
 }
 .dow {
   position: sticky; top: 0; z-index: 2; background: var(--color-bg);
   text-align: center; font-size: 0.8rem; font-weight: 600; padding: var(--space-1) 0;
 }
-.daycell { position: relative; display: block; border-radius: 3px; text-decoration: none; background-repeat: repeat; }
+.daycell { position: relative; display: block; text-decoration: none; background-repeat: repeat; }
 .daynum {
-  position: absolute; top: 4px; left: 4px; z-index: 1;
+  position: absolute; top: 4px; left: 4px; z-index: 2;
   min-width: 1.6rem; padding: 0 0.3rem; border-radius: 4px; text-align: center;
   background: var(--color-bg); color: var(--color-text); font-size: 0.8rem; font-weight: 600;
 }
 .daycell.out .daynum { color: var(--color-text-muted); }
-.daycell.is-today { outline: 3px solid var(--color-text); outline-offset: -3px; }
+.daycell.is-today { outline: 3px solid var(--color-text); outline-offset: -3px; z-index: 3; }
+.daycell.is-today::before { content: ""; position: absolute; inset: 3px; z-index: 3; box-shadow: 0 0 0 2px var(--color-bg); pointer-events: none; }
 
 /* ---------------------------------------------------------------- colour bar */
 .colourbar {
   grid-area: bar; display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
-  padding: var(--space-2); border-left: 1px solid var(--color-border); font-size: 0.75rem; color: var(--color-text-muted);
+  padding: var(--space-2); border-left: 1px solid var(--color-divider); font-size: 0.75rem; color: var(--color-text-muted);
 }
-.cb-ramp { flex: 1; width: 1.25rem; display: flex; flex-direction: column-reverse; border-radius: 3px; overflow: hidden; }
+.cb-ramp { flex: 1; width: 1.25rem; display: flex; flex-direction: column-reverse; gap: 1px; border: 1px solid var(--color-grid); background: var(--color-grid); border-radius: 3px; overflow: hidden; }
 .cb-band { flex: 1; background-repeat: repeat; }
 
 /* ---------------------------------------------------------------- notices */
@@ -205,10 +224,11 @@ code { font-family: var(--font-mono); }
 /* ---------------------------------------------------------------- range form */
 .range-form {
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2);
-  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); position: relative;
+  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-divider); position: relative;
 }
 .range-form label { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--color-text-muted); }
 .range-form input[type="date"], .tz-form select, .tz-pop input {
+  font-variant-numeric: tabular-nums;
   font: inherit; font-size: 0.9rem; color: var(--color-text); background: var(--color-bg);
   border: 1px solid var(--color-border); border-radius: var(--radius); padding: 0.3rem 0.5rem; min-height: 2.25rem;
 }
@@ -237,6 +257,7 @@ code { font-family: var(--font-mono); }
 
 .tz-pop { position: fixed; width: min(22rem, calc(100vw - 2 * var(--space-4))); padding: var(--space-2); }
 .tz-pop input { width: 100%; }
+.tz-current { margin: 0 0 var(--space-2); padding: 0 var(--space-1); font-family: var(--font-mono); font-size: 0.8rem; color: var(--color-text-muted); }
 .tz-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; max-height: min(50vh, 24rem); overflow: auto; }
 .tz-group { padding: var(--space-2) var(--space-2) var(--space-1); font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); }
 .tz-opt { padding: 0.35rem var(--space-2); border-radius: var(--radius); font-size: 0.9rem; cursor: pointer; display: flex; justify-content: space-between; gap: var(--space-2); }
@@ -246,12 +267,20 @@ code { font-family: var(--font-mono); }
 
 /* ---------------------------------------------------------------- dialogs */
 .dialog {
-  border: 1px solid var(--color-border); border-radius: calc(var(--radius) + 2px);
-  background: var(--color-bg); color: var(--color-text); padding: var(--space-4) var(--space-6);
-  width: min(30rem, calc(100vw - 2 * var(--space-4)));
+  border: 1px solid var(--color-divider); border-radius: calc(var(--radius) + 4px);
+  background: var(--color-bg); color: var(--color-text); padding: 0;
+  width: min(30rem, calc(100vw - 2 * var(--space-4))); max-height: min(85vh, 48rem);
 }
+.dialog[open] { display: flex; flex-direction: column; }
+.dialog-wide { width: min(40rem, calc(100vw - 2 * var(--space-4))); }
 .dialog::backdrop { background: var(--color-shadow); }
-.dialog h2 { margin-top: 0; font-size: 1.15rem; }
+.dialog-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6); border-bottom: 1px solid var(--color-divider);
+}
+.dialog-head h2 { margin: 0; font-size: 1.15rem; }
+.dialog-body { padding: var(--space-4) var(--space-6) var(--space-6); overflow: auto; }
+.dialog-body .help h3 { font-size: 1rem; margin: 0 0 var(--space-2); }
 .actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-4); }
 .page-sub .actions { justify-content: flex-start; }
 
@@ -272,12 +301,12 @@ code { font-family: var(--font-mono); }
 /* ---------------------------------------------------------------- sub-pages */
 .subheader {
   display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-divider);
 }
 .subheader h1 { margin: 0; font-size: 1.1rem; flex: 1; }
 .sub-main { max-width: 44rem; margin: 0 auto; padding: var(--space-4); }
 .help section + section { margin-top: var(--space-6); }
-.help h2 { font-size: 1.1rem; margin: 0 0 var(--space-2); }
+.help h2, .help h3 { font-size: 1.1rem; margin: 0 0 var(--space-2); }
 .help dt { font-weight: 600; margin-top: var(--space-2); }
 .help dd { margin-left: 0; }
 .tz-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
@@ -287,36 +316,31 @@ code { font-family: var(--font-mono); }
 /* ---------------------------------------------------------------- narrow screens */
 @media (max-width: 640px) {
   body { font-size: 14px; }
-  .topbar {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas: "period indicator menu theme" "tabs today prev next";
-    gap: var(--space-2) var(--space-1); padding: var(--space-2);
-  }
-  .tb-tabs { grid-area: tabs; justify-self: start; }
+  /* Two rows by CSS only: row 1 is the period label, zone, indicator, menu and theme; row 2 the tabs, Today and arrows. */
+  .topbar { flex-wrap: wrap; gap: var(--space-2) var(--space-1); padding: var(--space-2); }
+  .topbar::after { content: ""; flex-basis: 100%; order: 1; height: 0; }
+  .tb-tabs, .tb-today, .tb-prev, .tb-next { order: 2; }
   .tab { padding: 0.25rem 0.45rem; font-size: 0.85rem; min-height: 2rem; }
-  .tb-today { grid-area: today; margin: 0; padding: 0.25rem 0.5rem; min-height: 2rem; }
-  .tb-prev { grid-area: prev; width: 2rem; min-height: 2rem; }
-  .tb-next { grid-area: next; width: 2rem; min-height: 2rem; }
-  .tb-period { grid-area: period; margin: 0; flex-direction: column; align-items: flex-start; }
-  .period-label { font-size: 0.95rem; white-space: normal; }
-  .tz-button { max-width: 100%; font-size: 0.75rem; flex-wrap: wrap; padding: 0; }
-  .tz-button .icon-chevron { display: none; }
-  .tb-indicator { grid-area: indicator; }
-  .tb-menu { grid-area: menu; display: inline-flex; }
-  .tb-theme { grid-area: theme; }
+  .tb-today { padding: 0.25rem 0.65rem; min-height: 2rem; margin-left: var(--space-1); }
+  .pill.round.tb-prev, .pill.round.tb-next { width: 2rem; min-height: 2rem; }
+  .period-label { margin: 0; font-size: 0.82rem; flex: none; letter-spacing: -0.02em; }
+  /* Zero basis: the zone selector takes what row 1 has left and truncates, so nothing wraps. */
+  .tz-button { font-size: 0.8rem; flex: 1 1 0; min-width: 0; margin-right: var(--space-1); padding: 0.2rem 0.4rem 0.2rem 0.6rem; justify-content: space-between; }
+  .tb-menu { display: inline-flex; }
   .tb-menu-items {
     position: fixed; inset: auto; top: 3.25rem; right: var(--space-2); margin: 0;
     flex-direction: column; align-items: stretch; padding: var(--space-2);
-    background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius);
+    background: var(--color-bg); border: 1px solid var(--color-divider); border-radius: calc(var(--radius) + 4px);
     box-shadow: 0 8px 28px var(--color-shadow);
   }
   .tb-menu-items:not(:popover-open) { display: none; }
 
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "bar" "cal"; }
-  .colourbar { flex-direction: row-reverse; border-left: 0; border-bottom: 1px solid var(--color-border); padding: 2px var(--space-2); }
+  .colourbar { flex-direction: row-reverse; border-left: 0; border-bottom: 1px solid var(--color-divider); padding: 2px var(--space-2); }
   .cb-ramp { flex-direction: row; width: auto; height: 0.6rem; }
   .notices { left: var(--space-2); right: var(--space-2); width: auto; }
   .range-form { padding: var(--space-2); }
-  .month { padding: 0 var(--space-1) var(--space-1); grid-auto-rows: minmax(3rem, 1fr); }
-  .dialog { padding: var(--space-4); }
+  .month { grid-auto-rows: minmax(3rem, 1fr); }
+  .dialog-head { padding-left: var(--space-4); }
+  .dialog-body { padding: var(--space-3) var(--space-4) var(--space-4); }
 }

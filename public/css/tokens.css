@@ -26,8 +26,12 @@
   --raw-red-300: #ff8f85;
   --raw-amber-300: #f2bd52;
 
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --raw-grid: #2b2f37;
+  --raw-grey-200: #dde1e7;
+  --raw-ink-700: #2c313a;
+
+  --font-sans: Figtree, system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
   --radius: 6px;
   --space-1: 4px;
   --space-2: 8px;
@@ -57,6 +61,9 @@
   --color-warning: var(--raw-amber-700);
   --color-error: var(--raw-red-700);
   --color-on-accent: var(--raw-white);
+  --color-grid: var(--raw-grid);
+  --color-divider: var(--raw-grey-200);
+  --color-past: color-mix(in srgb, var(--raw-white) 30%, transparent);
   --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
   color-scheme: light;
@@ -77,6 +84,9 @@
     --color-warning: var(--raw-amber-300);
     --color-error: var(--raw-red-300);
     --color-on-accent: var(--raw-ink-950);
+    --color-grid: var(--raw-grid);
+    --color-divider: var(--raw-ink-700);
+    --color-past: color-mix(in srgb, var(--raw-ink-950) 35%, transparent);
     --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
     --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
     color-scheme: dark;
@@ -97,6 +107,9 @@
   --color-warning: var(--raw-amber-300);
   --color-error: var(--raw-red-300);
   --color-on-accent: var(--raw-ink-950);
+  --color-grid: var(--raw-grid);
+  --color-divider: var(--raw-ink-700);
+  --color-past: color-mix(in srgb, var(--raw-ink-950) 35%, transparent);
   --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
   color-scheme: dark;
