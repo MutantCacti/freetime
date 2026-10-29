@@ -33,7 +33,7 @@ describe("dialogs", () => {
     const help = tagWith(html, 'data-tb="help"');
     expect(attr(help, "data-dialog")).toBe("dlg-help");
     expect(attr(help, "href")).toBe("/help?view=month&date=2026-11-01&dtz=Europe/Paris");
-    expect(dialog(html, "dlg-help")).toContain("What time. is");
+    expect(dialog(html, "dlg-help")).toContain('id="help-what"');
     for (const name of ["download", "contact"]) expect(attr(tagWith(html, `data-tb="${name}"`), "data-dialog")).toBe(`dlg-${name}`);
   });
 });

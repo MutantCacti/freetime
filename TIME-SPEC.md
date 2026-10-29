@@ -30,6 +30,7 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 - **Styling** uses two layers of tokens in `public/css/tokens.css`:
   - raw values first, then semantic tokens (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-border`, `--color-divider`, `--color-grid`, `--color-link`, `--color-focus`, `--color-now`, `--color-warning`, `--color-error`);
   - `--color-grid` is the calendar's grid lines: the page colour (white) in light mode, a dark neutral in dark mode. `--color-divider` is the subtler line used for the top bar and panels;
+  - `--color-sep` colours the "·" separators wherever a line of page text has them (the debug line, the time-zone summary, error messages): subtle, so the parts read as separate. Browser tab titles and `<select>` options can't be styled and keep a plain "·";
   - component CSS uses only `var(--…)`;
   - a test fails the build if a hex colour appears anywhere except `tokens.css` and `src/parula.ts`;
   - dark mode is the default on every browser and device; light mode is only used when the viewer chooses it with the theme switcher (§5.10). `prefers-color-scheme` is not used;
@@ -77,7 +78,8 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 
 ## 3. Data
 
-- **`ICAL_URL`** is a Worker secret holding the secret iCal address of Maxence's calendar. It is never logged and never sent to the browser.
+- **`ICAL_URL`** is a Worker secret holding the secret iCal addresses of Maxence's calendars: one or more, separated by spaces, commas or new lines (at most 10). The addresses are never logged and never sent to the browser.
+- **Several calendars:** each is fetched and cached on its own, and their busy time is merged (overlaps count once). If any calendar has neither a fresh fetch nor a saved copy, the error panel shows for the whole page; drawing the others alone would show its busy time as free. The log names the failing calendar by its position in `ICAL_URL`, never by its address.
 - **Fetching and caching:**
   - fetch the feed on the server and cache it with the Cache API for about 5 minutes;
   - if a fetch fails, serve the last good copy with a "may be out of date" warning (§5.9);
@@ -153,7 +155,7 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 - A standard month grid: weeks are rows, and Monday to Sunday are columns.
 - Each day cell is coloured and dithered by that day's busy fraction.
 - Days outside the month are dimmed.
-- Clicking a day opens it in the Day view.
+- Clicking a day opens it in the Day view. With a mouse, hovering a day draws a 2 px ring of grid colour inside its edge, over 40 ms, so it looks slightly shrunk (the same ring marks the hovered slot in Day, Week and the Range column layout). Day numbers sit on chips with 2 px corners. The ring is overlaid on the cell: the cell and its dither pattern never change size. This also applies to Range day cells, and it's instant under `prefers-reduced-motion`.
 
 ### 5.4 Range
 - **Picker:** a date picker for start and end that looks like shadcn's calendar, plus an **Apply** button.
@@ -218,7 +220,8 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 - **Motion:** toasts follow §5.12: they grow in at the top right and shrink away; a minimised sticky toast shrinks into the notice indicator and grows back out of it.
 - **Fatal errors** (the calendar can't be drawn at all, for example the feed has failed and there's no saved copy, or it can't be parsed):
   - the error **replaces the calendar** in a larger panel, styled with `--color-error`;
-  - it has a plain, readable **title** ("The calendar couldn't be loaded") and a short **description** of what that means for the visitor and what they can do (try again later, or use Contact me);
+  - it has a plain, readable **title** ("Unable to load calendar") and a short **description**;
+  - its corners are barely rounded (2 px), and its ✕ icon is small (20 px) with space above it;
   - it also shows a **debug line** for Maxence: an error **code** naming the category (`FEED_FETCH`, `FEED_STATUS_403`, `FEED_PARSE`, `RANGE_EXPAND`, `INTERNAL`), a short random **reference** and the UTC time. For example: `FEED_FETCH · ref 7K2Q9M · 2026-11-02 14:03Z`;
   - **no stack traces, file paths, library names, URLs or upstream response bodies** are shown;
   - the full details (message, stack, upstream status) are written to the Worker log with the same reference, so `wrangler tail` or Workers Logs finds them by searching the reference;
@@ -244,7 +247,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
   | `tz` | a zone the viewer **chose** | the time-zone selector only |
 
 - **The rule:** the page uses `tz` if it is present and valid, otherwise `dtz` if it is valid, otherwise `Europe/London`. (When `tz` equals `dtz` this gives the same zone either way.)
-- **Mode:** **pinned** when `tz` is present and differs from `dtz`; **device** otherwise. The label shows which (see below).
+- There is no "mode" (device, pinned or default) anywhere in the interface: whichever rule picked it, the result is just a time zone.
 
 #### Keeping `dtz` correct
 1. The small `<head>` script (the same file as the theme script, §5.10) reads `Intl.DateTimeFormat().resolvedOptions().timeZone`.
@@ -261,17 +264,18 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 #### The time-zone selector (top bar, item 6)
 - The time-zone label is a **button that opens a dropdown** to choose another zone.
 - **Label:** always visible, showing only the zone name, for example **"Europe/London"**, with a chevron at every width so it's obviously a control.
-  - The UTC offset and the mode ("device", "pinned", or "default" without JS) are in its accessible name ("Time zone: Europe/Paris, UTC plus 1, device default. Change") and at the top of the dropdown ("Europe/Paris · UTC+1 · device").
-  - If the visible period crosses a daylight-saving change, the dropdown summary and accessible name show both offsets ("UTC+1 → UTC+0"); the label doesn't.
+  - The UTC offset is in its accessible name ("Time zone: Europe/Paris, UTC plus 1. Change") and at the top of the dropdown ("Europe/Paris · UTC+1").
+  - The offset shown is the one in effect **right now**, whatever period is on screen; a daylight-saving change in the visible period isn't spelled out.
 - **Dropdown:**
   - a search field at the top, filtering the list as you type;
-  - the first option is **"Device default"**, which removes `tz` from the URL;
+  - the first option is **"Device default"**, which removes `tz` from the URL. It looks like every other option, and nothing is highlighted when the dropdown opens;
+  - shadcn-style: the search field sits flush at the top; options get a lighter fill when pointed at or chosen with the arrow keys (one highlight, no outline); typing highlights the first match; corners are slightly rounded (6 px for the dropdown, 4 px for options);
   - then every IANA zone from `Intl.supportedValuesOf('timeZone')`, each with its current offset, grouped by region;
   - choosing a zone navigates to the current URL with `tz` set (all other parameters kept, including `dtz`). Choosing your own device's zone by name still sets `tz`, so a shared link pins it for others;
-  - keyboard-operable: arrow keys move, Enter chooses, Escape closes and returns focus to the button.
-- **Without JS:** the button links to `/tz?…`, a plain page showing the same summary, with a GET form (a `<select>` of zones with "Device default" first, and an **Apply** button) that returns to the same view with `tz` set or removed. Without JS, "Device default" means Europe/London, and the page says so.
+  - keyboard-operable: arrow keys move (Down from nothing highlights the first option), Enter chooses, Escape closes and returns focus to the button.
+- **Without JS:** the button links to `/tz?…`, a plain page showing the same summary, with a GET form (a `<select>` of zones and an **Apply** button) that returns to the same view with `tz` set or removed. "Device default" is listed first only when the device's zone is known (`dtz` is set, so JS has run); without it, the option isn't shown and the zone in use (`tz`, or Europe/London) is selected.
 - **Validation:** only zone names that `Intl` accepts are used.
-  - An invalid `tz` is ignored, so `dtz` is used, and a transient toast says so ("Unknown time zone. Showing device default.").
+  - An invalid `tz` is ignored, so `dtz` is used, and a transient toast says so ("Time zone unknown, using device default.").
   - An invalid `dtz` is ignored; the head script replaces it with the real device zone.
 - **Other places:**
   - `/help` explains that times are shown in the visitor's own time zone unless a link pins one, how to read the label, and how to choose another zone.
@@ -329,7 +333,7 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 | `GET /` | the calendar, using the URL state from §2 |
 | `GET /help` | the help template (§8) |
 | `GET /contact` | the contact panel as a full page. JS opens the same content as an overlay from the top bar |
-| `GET /free-busy.ics?from=&to=` | an iCalendar file of **busy blocks only** (one `VFREEBUSY`, or `VEVENT`s with summary "Busy") for **the range currently being viewed**, under the same privacy rule and the same 62-day cap. Sent with `Content-Disposition: attachment; filename="mutantcacti-busy.ics"` |
+| `GET /free-busy.ics?from=&to=` | an iCalendar file of **busy events** for **the range currently being viewed**, at the feeds' own precision (§7.2), under the same privacy rule and the same 62-day cap. Sent with `Content-Disposition: attachment; filename="mutantcacti-busy.ics"` |
 | `GET /export?from=&to=` | the no-JS fallback for the download dialog (§7.1) |
 | `GET /tz` | the no-JS time-zone picker (§5.11) |
 | static assets | CSS, JS, icons |
@@ -338,10 +342,18 @@ Any method other than GET or HEAD returns **405**. There are no forms that POST 
 
 ### 7.1 Download dialog
 - A **Download .ics** button in the top bar opens a dialog. The dialog:
-  - states the exact range that will be exported (for example, "Busy times from Mon 2 Nov to Sun 8 Nov 2026, Europe/London");
-  - says the file contains busy blocks only;
+  - states the exact range that will be exported, and its time zone (for example, "Download my calendar for the range 'Mon 2 Nov to Sun 8 Nov 2026', in time zone: Europe/London.");
   - has **Download** and **Cancel** buttons, plus the Close (×) at the top right (§8). Cancel and × do the same thing. Download is a plain link to `/free-busy.ics` with the current range.
 - Without JS, the button links to `/export`, a page with the same content.
+
+### 7.2 Export precision
+The calendar rounds busy time into slots and steps for display; the file doesn't. It keeps the precision of the feeds:
+- **one `VEVENT` per event occurrence**, summary "Busy": not merged with overlapping or adjacent events;
+- **timed events in UTC, to the second** (`DTSTART:20261102T100030Z`);
+- **all-day events as all-day dates** (`DTSTART;VALUE=DATE:20261104`), as the feed has them;
+- **events that cross the range's edges are included whole**, not clipped;
+- the same event listed by two feeds appears once;
+- still only start and end times: no titles, descriptions, locations, attendees or UIDs.
 
 ## 8. Help and contact
 
@@ -417,6 +429,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
     - an empty calendar;
     - a transparent event, which is ignored.
   - **Feed failures:** a failure with a cached copy, and a failure without one.
+  - **Several calendars:** busy time from every feed is merged; each keeps its own saved copy; one feed failing with no copy shows the error panel, and no address reaches the page or the log.
   - **Privacy:** no event title in any HTML or `.ics` response.
   - **Views:**
     - Day, Week, Month and Range each render;
@@ -424,7 +437,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
     - Range swaps reversed dates, enforces the cap, and falls back when a date is invalid.
   - **Current time:** the current-time line is rendered only when the period contains now.
   - **Time window:** columns contain all 48 half-hour rows, and the `#h08` anchors exist.
-  - **Export:** the `.ics` range matches the viewed range, respects the cap and the privacy rule, uses the filename `mutantcacti-busy.ics`, and `/export` states the range.
+  - **Export:** the `.ics` range matches the viewed range, respects the cap and the privacy rule, uses the filename `mutantcacti-busy.ics`, and `/export` states the range; it keeps seconds, keeps overlapping events separate, writes all-day events as dates, includes edge-crossing events whole, and lists a shared event once.
   - **Notices and errors:** a stale cache shows the warning notice; a fatal feed failure replaces the calendar with the error panel, returns 503, and shows a code and reference but no stack trace, path, URL or upstream body; the same reference is written to the log.
   - **Scroll clamp:** at 00:15 and 23:45 the starting scroll stays within the column.
   - **Colour and dither:** the busy fraction gives the same step, Bayer level and palette colour in every view; a fully busy cell is at `DITHER_MAX_LEVEL` and never solid; invalid dither constants are rejected.
@@ -443,12 +456,11 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Theme:** dark is the default with no system-preference rules anywhere; a stored light choice applies it; the page still renders when `localStorage` throws.
   - **Time zone:**
     - the zone rule: `tz` beats `dtz`, which beats Europe/London; `tz` equal to `dtz` gives the same result;
-    - the mode marker is "pinned" only when `tz` is present and differs from `dtz`;
     - every rendered link keeps both `dtz` and `tz` (if present), and never adds `tz` on its own;
     - an invalid `tz` falls back to `dtz` with a toast; an invalid `dtz` falls back to Europe/London;
     - the head-script logic (a unit test of the function it uses) replaces a missing or wrong `dtz`, keeps `tz`, and never replaces twice in one page view;
     - in zones like Pacific/Auckland and America/Los_Angeles, day boundaries, "today", the current-time line and Today/‹ › follow that zone;
-    - the label shows only the zone name; its summary and accessible name show both offsets when a period crosses a DST change;
+    - the label shows only the zone name; its summary and accessible name show the offset in effect now, whatever period is on screen;
     - no `Set-Cookie` is ever sent;
     - the `/tz` no-JS page sets and removes `tz` correctly; the `.ics` file is in UTC.
   - **Routes:** 405 for POST, PUT and DELETE.

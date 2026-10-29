@@ -5,6 +5,8 @@ export type ErrorCode = "FEED_FETCH" | `FEED_STATUS_${number}` | "FEED_PARSE" | 
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly upstreamStatus: number | undefined;
+  /** Which feed in ICAL_URL failed (1-based), when there are several. Logged, never shown. */
+  feed: number | undefined;
 
   constructor(code: ErrorCode, message: string, options: { cause?: unknown; upstreamStatus?: number } = {}) {
     super(message, { cause: options.cause });
@@ -63,6 +65,7 @@ export function logError(log: LogFn, err: AppError, ref: string, secrets: (strin
     code: err.code,
     message: scrub(err.message),
     upstreamStatus: err.upstreamStatus,
+    feed: err.feed,
     stack: scrub(err.stack),
     cause: cause ? scrub(`${cause.name}: ${cause.message}\n${cause.stack ?? ""}`) : undefined,
   });

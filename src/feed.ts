@@ -28,14 +28,26 @@ export interface FeedOptions {
 
 const FETCHED_AT = "x-fetched-at";
 
-// Parsing is the slow part; reuse the last parse within an isolate.
-let memo: { key: string; root: Component } | null = null;
+// Parsing is the slow part; reuse the last parse of each feed within an isolate.
+const memo = new Map<string, { key: string; root: Component }>();
 
-function parseCached(text: string, key: string): Component {
-  if (memo?.key === key) return memo.root;
+function parseCached(text: string, key: string, feedKey: string): Component {
+  const hit = memo.get(feedKey);
+  if (hit?.key === key) return hit.root;
   const root = parseFeed(text);
-  memo = { key, root };
+  if (memo.size > 50) memo.clear();
+  memo.set(feedKey, { key, root });
   return root;
+}
+
+/**
+ * The feed addresses in ICAL_URL: one or more, separated by spaces, commas or
+ * new lines. An empty or missing value gives one empty entry, which fails as
+ * FEED_FETCH ("not set").
+ */
+export function feedUrls(value: string | undefined): string[] {
+  const urls = (value ?? "").split(/[\s,]+/).filter(Boolean);
+  return urls.length ? urls : [""];
 }
 
 async function fetchUpstream(fetchFeed: () => Promise<Response>): Promise<string> {
@@ -64,7 +76,7 @@ export async function loadFeed(opts: FeedOptions): Promise<FeedResult> {
 
   if (savedText !== null && opts.nowSec - savedAt < FEED_FRESH_SECONDS) {
     try {
-      return { root: parseCached(savedText, `${savedAt}:${savedText.length}`), stale: false };
+      return { root: parseCached(savedText, `${savedAt}:${savedText.length}`, opts.cacheKey), stale: false };
     } catch {
       // A bad saved copy is ignored; fetch a new one.
     }
@@ -74,7 +86,7 @@ export async function loadFeed(opts: FeedOptions): Promise<FeedResult> {
     const text = await fetchUpstream(opts.fetchFeed);
     let root: Component;
     try {
-      root = parseCached(text, `${opts.nowSec}:${text.length}`);
+      root = parseCached(text, `${opts.nowSec}:${text.length}`, opts.cacheKey);
     } catch (err) {
       const message = err instanceof FeedParseError ? err.message : "feed could not be parsed";
       throw new AppError("FEED_PARSE", message, { cause: err });
@@ -91,7 +103,7 @@ export async function loadFeed(opts: FeedOptions): Promise<FeedResult> {
   } catch (err) {
     if (savedText !== null && err instanceof AppError) {
       try {
-        return { root: parseCached(savedText, `${savedAt}:${savedText.length}`), stale: true, problem: err };
+        return { root: parseCached(savedText, `${savedAt}:${savedText.length}`, opts.cacheKey), stale: true, problem: err };
       } catch {
         // Fall through to the original error.
       }

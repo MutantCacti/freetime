@@ -12,11 +12,11 @@ export interface Notice {
 
 export const NOTICES = {
   // PRINTED OUTPUT: notices / messages
-  stale: "Showing a saved copy. Times may be out of date.",
-  unknownZone: "Unknown time zone. Showing device default.",
-  rangeSwapped: "Start and end were swapped.",
-  rangeCapped: `Range shortened to ${RANGE_CAP_DAYS} days.`,
-  rangeInvalid: "Invalid date. Showing this week.",
+  stale: "Cached calendar may be out of date.",
+  unknownZone: "Time zone unknown, using device default.",
+  rangeSwapped: "Range start and end dates had to be swapped.",
+  rangeCapped: `Range was shortened to ${RANGE_CAP_DAYS} days.`,
+  rangeInvalid: "Invalid date.",
 } as const;
 
 function SeverityIcon({ severity }: { severity: Severity }) {

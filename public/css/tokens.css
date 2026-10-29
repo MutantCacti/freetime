@@ -46,6 +46,7 @@
   --motion-in: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --motion-out: 110ms cubic-bezier(0.4, 0, 1, 1);
   --motion-ui: 100ms ease-out;
+  --motion-hover: 40ms ease-out;
   --motion-glide: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --grow-scale: 0.96;
   --grow-nudge: 6px;
@@ -75,6 +76,8 @@
   --color-on-accent: var(--raw-ink-950);
   --color-grid: var(--raw-grid);
   --color-divider: var(--raw-ink-700);
+  /* Separators ("·") in text: subtle. */
+  --color-sep: var(--raw-ink-600);
   --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
   color-scheme: dark;
@@ -98,6 +101,8 @@
   /* Light: grid lines in the page colour (the inverted map keeps busy cells dark). */
   --color-grid: var(--raw-white);
   --color-divider: var(--raw-grey-200);
+  /* Separators ("·") in text: subtle. */
+  --color-sep: var(--raw-grey-300);
   --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
   color-scheme: light;

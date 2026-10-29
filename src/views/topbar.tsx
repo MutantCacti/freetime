@@ -1,40 +1,23 @@
 import type { Links } from "../links";
-import type { Navigation, Period, View, ViewParams, ZoneMode, ZoneState } from "../state";
+import type { Navigation, Period, View, ViewParams, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
   text: string;
-  /** Offset and mode, shown at the top of the dropdown and on /tz. */
+  /** Name and current offset, shown at the top of the dropdown and on /tz: "Europe/London · UTC+0". */
   summary: string;
   /** The button's accessible name. */
   spoken: string;
 }
 
-const MODE_MARKER: Record<ZoneMode, string> = {
-  // PRINTED OUTPUT: time zone / mode markers
-  device: "device",
-  pinned: "pinned",
-  default: "default",
-};
-
-const MODE_SPOKEN: Record<ZoneMode, string> = {
-  // PRINTED OUTPUT: time zone / mode, spoken
-  device: "device default",
-  pinned: "pinned",
-  default: "site default",
-};
-
-/** The zone selector's text, its summary ("Europe/London · UTC+1 → UTC+0 · device") and accessible name. */
-export function zoneLabel(zone: ZoneState, offsets: [number, number]): ZoneLabel {
-  const [a, b] = offsets;
-  const short = a === b ? formatOffset(a) : `${formatOffset(a)} → ${formatOffset(b)}`; // PRINTED OUTPUT: time zone / offsets, one or two
-  const spoken = a === b ? spokenOffset(a) : `${spokenOffset(a)} changing to ${spokenOffset(b)}`; // PRINTED OUTPUT: time zone / offsets, spoken
+/** The zone selector's text, its summary and its accessible name, with the zone's offset right now. */
+export function zoneLabel(zone: ZoneState, offsetNow: number): ZoneLabel {
   return {
     text: zone.zone,
-    summary: `${zone.zone} · ${short} · ${MODE_MARKER[zone.mode]}`, // PRINTED OUTPUT: time zone / summary in dropdown and on /tz
-    spoken: `Time zone: ${zone.zone}, ${spoken}, ${MODE_SPOKEN[zone.mode]}. Change`, // PRINTED OUTPUT: time zone / button accessible name
+    summary: `${zone.zone} · ${formatOffset(offsetNow)}`, // PRINTED OUTPUT: time zone / summary in dropdown and on /tz
+    spoken: `Time zone: ${zone.zone}, ${spokenOffset(offsetNow)}. Change`, // PRINTED OUTPUT: time zone / button accessible name
   };
 }
 

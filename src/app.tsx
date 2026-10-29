@@ -2,13 +2,13 @@
 // no cookies, no stored state beyond the Cache API copy of the feed.
 
 import { Hono, type Context } from "hono";
-import { clipIntervals, mergeIntervals } from "./busy";
-import { buildColumns, buildDayCells, periodBounds, periodOffsets } from "./calendar";
-import { DEFAULT_TZ } from "./config";
+import { mergeIntervals } from "./busy";
+import { buildColumns, buildDayCells, periodBounds } from "./calendar";
+import { DEFAULT_TZ, MAX_FEEDS } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
-import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
-import { fetchFromUrl, loadFeed } from "./feed";
+import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
+import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusyCached } from "./ical";
 import { Links } from "./links";
@@ -34,13 +34,14 @@ import { ErrorPanel, RangeForm } from "./views/panels";
 import { zoneLabel } from "./views/topbar";
 
 export interface Env {
+  /** One or more secret iCal addresses, separated by spaces, commas or new lines. */
   ICAL_URL?: string;
   ASSETS: Fetcher;
 }
 
 export interface AppDeps {
-  /** Fetch the upstream feed. Defaults to fetching env.ICAL_URL. */
-  fetchFeed?: (env: Env) => Promise<Response>;
+  /** Fetch one upstream feed (an address from ICAL_URL, and its 0-based index). Defaults to fetching it. */
+  fetchFeed?: (env: Env, url: string, index: number) => Promise<Response>;
   /** Current time in milliseconds. */
   now?: () => number;
   log?: LogFn;
@@ -93,28 +94,63 @@ export function createApp(deps: AppDeps = {}) {
 
   const nowSec = () => Math.floor(now() / 1000);
 
-  async function feedFor(c: AppContext) {
-    const fetchFeed = deps.fetchFeed ? () => deps.fetchFeed!(c.env) : fetchFromUrl(c.env.ICAL_URL);
-    // The saved copy belongs to one feed: a changed ICAL_URL never reuses another feed's copy.
-    const feedId = await sha256Prefix(c.env.ICAL_URL ?? "");
-    return loadFeed({
-      fetchFeed,
-      nowSec: nowSec(),
-      cacheKey: new URL(`${cachePath}/${feedId}`, c.req.url).toString(),
-      cache: caches.default,
-      waitUntil: (p) => {
+  /**
+   * Every feed in ICAL_URL, fetched in parallel, each with its own saved copy.
+   * If any feed has neither a fresh fetch nor a saved copy, the whole request
+   * fails: drawing the others alone would show that feed's busy time as free.
+   */
+  async function feedFor(c: AppContext): Promise<{ roots: FeedResult["root"][]; stale: FeedResult[] }> {
+    const urls = feedUrls(c.env.ICAL_URL);
+    if (urls.length > MAX_FEEDS) throw new AppError("FEED_FETCH", `ICAL_URL lists ${urls.length} feeds; the most is ${MAX_FEEDS}`);
+    const results = await Promise.all(
+      urls.map(async (url, i) => {
+        const fetchFeed = deps.fetchFeed ? () => deps.fetchFeed!(c.env, url, i) : fetchFromUrl(url);
+        // Each saved copy belongs to one feed address: a changed address never reuses another's copy.
+        const feedId = await sha256Prefix(url);
         try {
-          c.executionCtx.waitUntil(p);
-        } catch {
-          void p; // no execution context (some tests): let it run
+          const result = await loadFeed({
+            fetchFeed,
+            nowSec: nowSec(),
+            cacheKey: new URL(`${cachePath}/${feedId}`, c.req.url).toString(),
+            cache: caches.default,
+            waitUntil: (p) => {
+              try {
+                c.executionCtx.waitUntil(p);
+              } catch {
+                void p; // no execution context (some tests): let it run
+              }
+            },
+          });
+          if (result.problem && urls.length > 1) result.problem.feed = i + 1;
+          return result;
+        } catch (e) {
+          const err = toAppError(e);
+          if (urls.length > 1) err.feed = i + 1;
+          throw err;
         }
-      },
-    });
+      }),
+    );
+    return { roots: results.map((r) => r.root), stale: results.filter((r) => r.stale) };
+  }
+
+  /** Every busy event from every feed, unmerged. */
+  function eventsFrom(roots: FeedResult["root"][], from: number, to: number) {
+    try {
+      return roots.flatMap((root) => expandBusyCached(root, from, to));
+    } catch (err) {
+      throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
+    }
+  }
+
+  /** Busy intervals from every feed, merged, for drawing. */
+  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+    return mergeIntervals(eventsFrom(roots, from, to));
   }
 
   function reportFatal(err: AppError, c: AppContext): string {
     const ref = newRef();
-    logError(log, err, ref, [c.env.ICAL_URL]);
+    // Scrub the whole secret and each address in it.
+    logError(log, err, ref, [c.env.ICAL_URL, ...feedUrls(c.env.ICAL_URL)]);
     return ref;
   }
 
@@ -125,7 +161,7 @@ export function createApp(deps: AppDeps = {}) {
     if (method !== "GET" && method !== "HEAD") {
       const links = new Links(zoneFrom(c));
       // PRINTED OUTPUT: 405 page / title and message
-      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only. It only accepts GET and HEAD requests.", homeHref: links.view({ view: "week" }) });
+      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only.", homeHref: links.view({ view: "week" }) });
       c.res = new Response(`${await page}`, {
         status: 405,
         headers: { "content-type": "text/html; charset=utf-8", allow: "GET, HEAD", "cache-control": "no-store" },
@@ -169,19 +205,16 @@ export function createApp(deps: AppDeps = {}) {
     let showColourBar = true;
     try {
       const feed = await feedFor(c);
-      if (feed.stale) {
+      if (feed.stale.length) {
         sticky.push({ id: "stale", kind: "sticky", severity: "warning", message: NOTICES.stale });
-        log({ level: "warn", code: feed.problem?.code, message: "serving saved copy of feed", upstreamStatus: feed.problem?.upstreamStatus });
+        for (const s of feed.stale) {
+          log({ level: "warn", code: s.problem?.code, message: "serving saved copy of feed", upstreamStatus: s.problem?.upstreamStatus, feed: s.problem?.feed });
+        }
       }
       const gridStart = addDays(period.start, -7);
       const gridEnd = addDays(period.end, 7);
       const bounds = periodBounds(gridStart, gridEnd, zone.zone);
-      let merged;
-      try {
-        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
-      } catch (err) {
-        throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
-      }
+      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
       body =
         period.layout === "columns" ? (
           <ColumnGrid columns={buildColumns(period, zone.zone, merged, t)} />
@@ -207,7 +240,7 @@ export function createApp(deps: AppDeps = {}) {
           tabs: tabTargets(period, todayDate),
           periodLabel: shortLabel,
           periodFull: label,
-          zone: zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)),
+          zone: zoneLabel(zone, offsetSeconds(t, zone.zone)),
           here,
           exportParams,
         }}
@@ -297,7 +330,7 @@ export function createApp(deps: AppDeps = {}) {
         current={zone.tz}
         deviceDefault={zone.dtz ?? DEFAULT_TZ}
         noDeviceZone={!zone.dtz}
-        summary={zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)).summary}
+        summary={zoneLabel(zone, offsetSeconds(t, zone.zone)).summary}
         groups={[...groups.entries()].map(([region, options]) => ({ region, options }))}
       />,
     );
@@ -311,13 +344,9 @@ export function createApp(deps: AppDeps = {}) {
     const bounds = periodBounds(from, to, zone.zone);
     try {
       const feed = await feedFor(c);
-      let merged;
-      try {
-        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
-      } catch (err) {
-        throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
-      }
-      const ics = buildBusyIcs(clipIntervals(merged, bounds.from, bounds.to), nowSec());
+      // Every event as the feeds have it: not merged, not clipped, not rounded to slots.
+      const events = exportEvents(eventsFrom(feed.roots, bounds.from, bounds.to), bounds.from, bounds.to);
+      const ics = buildBusyIcs(events, nowSec());
       return c.body(ics, 200, {
         "content-type": "text/calendar; charset=utf-8",
         "content-disposition": `attachment; filename="${EXPORT_FILENAME}"`,
@@ -328,7 +357,7 @@ export function createApp(deps: AppDeps = {}) {
       const ref = reportFatal(err, c);
       const links = new Links(zone);
       // PRINTED OUTPUT: export error / title and message
-      const page = StatusPage({ title: "The export couldn't be made", message: `The calendar couldn't be loaded. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
+      const page = StatusPage({ title: "Unable to download", message: `Couldn't load calendar. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
       return c.html(page, err.status, { "cache-control": "no-store" });
     }
   });
@@ -360,7 +389,7 @@ export function createApp(deps: AppDeps = {}) {
   app.notFound((c) => {
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 404 page / title and message
-    const page = StatusPage({ title: "Page not found", message: "There's nothing at this address.", homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Page not found", message: "Incorrect address.", homeHref: links.view({ view: "week" }) });
     return c.html(page, 404, { "cache-control": "no-store" });
   });
 
@@ -369,7 +398,7 @@ export function createApp(deps: AppDeps = {}) {
     const ref = reportFatal(err, c);
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 500 page / title and message
-    const page = StatusPage({ title: "Something went wrong", message: `The page couldn't be shown. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Something went wrong", message: `An unknown error occurred. Try again. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
     return c.html(page, err.status, { "cache-control": "no-store" });
   });
 
