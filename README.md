@@ -62,7 +62,8 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), 
 | `public/css/app.css` | Component styles (tokens only) |
 | `public/js/head.js` | Runs before first paint: applies the theme, corrects `dtz` |
 | `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
-| `test/` | Vitest suites and `.ics` fixtures |
+| `test/` | Vitest suites, `.ics` fixtures and scrubbed when2meet pages (`test/fixtures/w2m/`) |
+| `docs/W2M-GET-SPEC.md` | How to read and fill a when2meet event (for the when2meet add-on) |
 
 ## Dependencies
 
@@ -313,3 +314,6 @@ Anything not checked against current documentation is marked **(unverified)**.
 | Today is always a link. When the period already contains now it's marked `data-noop` and JS cancels the click; without JS it reloads the same period (review 2) | `aria-disabled` | "Always clickable, just a no-op." | — |
 | The source values are the widely circulated 64-entry `parula(64)` table **(unverified)** against MATLAB's current output | — | MATLAB isn't available here. | A visible mismatch. |
 | Time-zone search matches the zone IDs the browser lists, which may use older names (Chrome lists `Asia/Calcutta`) | Alias table | Smallest option. | Visitors not finding their zone. |
+| when2meet phase 0 was done from two event pages Maxence saved in their browser, not from the live site | Wait for `www.when2meet.com` to be allowed | The proxy refuses when2meet, and the saved pages hold all of the page's own logic inline. The `_files` folders were only Google scripts and images. Live-only facts (headers, a missing event) are marked **(unverified)** in `docs/W2M-GET-SPEC.md`. | Phase 1 reaching the live site and finding a difference. |
+| No `research/EVENTS.md`; fixtures use placeholder links (`10000001-Test1`, `10000002-Test2`) | Commit the test events' links | Anyone with an event's link can edit it, so the links stay out of the repo, as phase 3 does with canaries. | — |
+| Fixture privacy is checked structurally (no participants, empty availability, no third-party scripts) plus a deny-list that is empty for now | A deny-list only | No names were given, and nobody had signed in on the test events. The structural check also catches names that aren't on any list. | Maxence signing in on a test event: add the name to `DENY_NAMES`. |
