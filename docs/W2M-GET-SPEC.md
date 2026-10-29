@@ -46,9 +46,9 @@ Trim leading and trailing whitespace (spaces, tabs, newlines: pasted links often
 
 ### 2.1 Missing event
 
-Observed (`missing.html`): the body is when2meet's usual header, then `No such event! Please double-check your web address.`, and it stops there, with no closing `</body>` or `</html>`. The title is ` - When2meet` (an empty event name). The status code wasn't captured, so whether it's 200 or 404 is **(unverified)**; both give the same result below.
+Observed (`missing.html`): the body is when2meet's usual header, then `No such event! Please double-check your web address.`, and it stops there, with no closing `</body>` or `</html>`. The title is ` - When2meet` (an empty event name). The status is **200**, so the page's content, not its status, is what tells a missing event apart.
 
-Rule, on a 2xx or 404 response:
+Rule, on a 2xx response:
 
 | Page has | Result |
 |---|---|
@@ -56,7 +56,7 @@ Rule, on a 2xx or 404 response:
 | No `TimeOfSlot[0]=` and no `id="NewEventNameDiv"` (the missing-event page) | `W2M_NOT_FOUND` |
 | No `TimeOfSlot[0]=` but `id="NewEventNameDiv"` (the "Plan a New Event" page, `home.html`, which has a `NewEventNameDiv` around its name field) | `W2M_PARSE` |
 
-A 404 status by itself is also `W2M_NOT_FOUND`. The parser never requires the document to be complete.
+A 404 isn't what when2meet sends for a missing event, but if it ever does, it's also `W2M_NOT_FOUND`. The parser never requires the document to be complete.
 
 ### 2.2 The grid in your zone
 
@@ -354,7 +354,7 @@ Nothing else is changed: the grid is tested as the server sends it.
 | | Question | Status | Settled by |
 |---|---|---|---|
 | Q1 | Response headers | **Answered** (§6) | |
-| Q2 | What a missing event returns | **Body answered** (§2.1). The status code is still unknown; the rule gives the same result either way. | `curl -s -o /dev/null -w '%{http_code}\n' 'https://www.when2meet.com/?99999999-ZZZZZ'` |
+| Q2 | What a missing event returns | **Answered**: status 200, with the page in `missing.html` (§2.1) | |
 | Q3 | Whether `TimeOfSlot` is a real instant | **Answered: yes** (§3.4, `june.html`) | |
 | Q4 | Whether the fixtures match the server's raw HTML | **Answered**: they are the raw HTML now (§8). The earlier browser saves matched it apart from quoting and the page's own on-load changes. | |
 | Q5 | Whether `SaveTimes.php` cares what order its POSTs arrive in | Open. Maxence has allowed deliberate out-of-order drags on the test events, but the session can't reach when2meet. | Phase 2's Playwright run against the live test event, from a machine that can reach it. |
