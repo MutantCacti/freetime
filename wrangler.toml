@@ -1,9 +1,9 @@
-name = "time"
+name = "freetime"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 workers_dev = false
 routes = [
-  { pattern = "time.mutantcacti.com", custom_domain = true }
+  { pattern = "freetime.mutantcacti.com", custom_domain = true }
 ]
 
 # The Worker runs first for every request, so security headers and the

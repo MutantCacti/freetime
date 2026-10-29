@@ -227,7 +227,7 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
     <article class="help">
         {/* Template copy: Maxence will rewrite this page. Keep one marker per section. */}
         <section aria-labelledby="help-what">
-          {/* PRINTED OUTPUT: help / what time. is */}
+          {/* PRINTED OUTPUT: help / what the site is */}
           <p>This site lets you see when Maxence Morel Dierckx is free.</p>
         </section>
 

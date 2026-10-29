@@ -1,6 +1,6 @@
-# time.mutantcacti.com — when2meet add-on spec
+# freetime.mutantcacti.com — when2meet add-on spec
 
-An add-on to TIME-SPEC.md, built **after the pilot has merged**. It helps Maxence copy their availability into a when2meet event, on desktop and on mobile. Everything in TIME-SPEC.md still applies (stack, PRINTED OUTPUT, plain language, no storage, no cookies), unless this file says otherwise.
+An add-on to SPEC.md, built **after the pilot has merged**. It helps Maxence copy their availability into a when2meet event, on desktop and on mobile. Everything in SPEC.md still applies (stack, PRINTED OUTPUT, plain language, no storage, no cookies), unless this file says otherwise.
 
 It has four phases. Phase 0 is research and produces the **GET spec** that phases 1 and 2 build on. Each phase is its own pull request.
 
@@ -8,7 +8,7 @@ It has four phases. Phase 0 is research and produces the **GET spec** that phase
 |---|---|---|
 | 0 | Experiment: inspect when2meet and write `docs/W2M-GET-SPEC.md` | when2meet reachable from the session (see §0.1) |
 | 1 | Match: paste a when2meet link; the calendar switches to that event's exact grid, in a binary copy-ready look | Phase 0 |
-| 2 | Bookmarklet: fill when2meet from time.'s busy blocks, then hand control back to you | Phase 0 |
+| 2 | Bookmarklet: fill when2meet from freetime.'s busy blocks, then hand control back to you | Phase 0 |
 | 3 | Heartbeat: scheduled self-check that alerts Maxence when something breaks | Phase 1 |
 
 Maxence's own command-line fill tool is **out of scope** and lives only on his device (§5).
@@ -35,7 +35,7 @@ Use the test events only. Inspect each on desktop Chromium and on a mobile viewp
    - whether they work the same with touch and with mouse;
    - when availability is saved (on each change, on mouse-up, or on a button).
 3. **Sign-in:** what the page needs before slots can be painted (name and optional password) and how that state is held.
-4. **Headers:** `Content-Security-Policy` (does it block a bookmarklet's `fetch` to `time.mutantcacti.com`?), `X-Frame-Options` and `frame-ancestors` (can it be framed?), and whether the page sets CORS headers.
+4. **Headers:** `Content-Security-Policy` (does it block a bookmarklet's `fetch` to `freetime.mutantcacti.com`?), `X-Frame-Options` and `frame-ancestors` (can it be framed?), and whether the page sets CORS headers.
 5. **Stability signals:** anything versioned, any obvious recent changes, and how a missing or deleted event looks.
 
 **Do not** send any request that writes to when2meet (no saving availability, no creating events) except on the test events, and only to confirm item 2. Never touch other people's events.
@@ -68,7 +68,7 @@ A precise, testable contract:
 
 ### 1.2 Server behaviour (`GET /w2m?url=`)
 - **Validate before fetching:** the URL must match the phase 0 regex exactly. Anything else is rejected without a request (this prevents the server being used to fetch arbitrary addresses). Rebuild the URL from the parsed id and code; never fetch the raw input.
-- **Fetch:** one GET, with the timeout and size limit from the GET spec, and a plain `User-Agent` naming the site (for example `time.mutantcacti.com (+https://time.mutantcacti.com/help)`).
+- **Fetch:** one GET, with the timeout and size limit from the GET spec, and a plain `User-Agent` naming the site (for example `freetime.mutantcacti.com (+https://freetime.mutantcacti.com/help)`).
 - **Cache** the parsed event structure (not the page) with the Cache API for a few minutes, keyed by event id, so reloads don't refetch.
 - **Nothing is stored or logged** except the event id on errors. The pasted link isn't kept anywhere else.
 
@@ -99,7 +99,7 @@ A new **info** severity for toasts (neutral colour token `--color-info`, with an
 - a close button (×), which clears the match and returns to the normal calendar. Minimising works as for other sticky toasts.
 
 ### 1.5 Errors
-Use the toast and error-panel rules from TIME-SPEC.md §5.9, with new codes:
+Use the toast and error-panel rules from SPEC.md §5.9, with new codes:
 
 | Code | Meaning | Status |
 |---|---|---|
@@ -131,16 +131,16 @@ Use the toast and error-panel rules from TIME-SPEC.md §5.9, with new codes:
 ### 2.1 What it does
 Run on a when2meet event page, after signing in with a name:
 1. Reads the event's grid in the page (per the GET spec).
-2. Fetches `https://time.mutantcacti.com/free-busy.ics?from=…&to=…` for that range.
+2. Fetches `https://freetime.mutantcacti.com/free-busy.ics?from=…&to=…` for that range.
 3. Works out which slots are free (no overlap with any busy block) and which are busy.
 4. Shows a small overlay on the when2meet page: "Mark 23 slots as available and clear 4?" with **Fill** and **Cancel**.
-5. On **Fill**, makes your grid match time. exactly, using the fill contract (the page's own functions if available, otherwise synthetic mouse or touch events): free slots become available, and busy slots you'd marked available are cleared.
+5. On **Fill**, makes your grid match freetime. exactly, using the fill contract (the page's own functions if available, otherwise synthetic mouse or touch events): free slots become available, and busy slots you'd marked available are cleared.
 6. Leaves the page for Maxence to adjust by hand. It never presses any save or submit button the page has, beyond whatever the page saves on its own when slots change (the GET spec says which).
 
 ### 2.2 Rules
 - **CORS:** `/free-busy.ics` adds `Access-Control-Allow-Origin: https://www.when2meet.com` (that origin only) and `Vary: Origin`. No other route changes.
-- It uses the **same free/busy rule** as match mode (`W2M_BUSY_THRESHOLD`), so what it fills is exactly what time. shows.
-- If when2meet's CSP blocks the fetch, the bookmarklet says so in its overlay and links to time. in match mode for this event (phase 1) instead.
+- It uses the **same free/busy rule** as match mode (`W2M_BUSY_THRESHOLD`), so what it fills is exactly what freetime. shows.
+- If when2meet's CSP blocks the fetch, the bookmarklet says so in its overlay and links to freetime. in match mode for this event (phase 1) instead.
 - It refuses to run if nobody is signed in on the page, with a message saying to sign in first.
 - Desktop and mobile: test both with Playwright (mouse, and touch emulation).
 - The bookmarklet source lives in `public/js/w2m-bookmarklet.js`, is minified into a `javascript:` URL at build time, and has PRINTED OUTPUT markers like everything else.
@@ -150,7 +150,7 @@ A short section, "Fill when2meet", with:
 - a draggable link for desktop browsers;
 - a **Copy** button (same in-button confirmation as the email) for phones;
 - one-time setup steps for iPhone (Safari: bookmark any page, edit it, replace the address with the copied code) and Android (Chrome: save it the same way, then type its name in the address bar on the when2meet page and tap it);
-- a note that it only reads busy times from time. and only changes the grid on the page you're looking at.
+- a note that it only reads busy times from freetime. and only changes the grid on the page you're looking at.
 
 ---
 
@@ -197,13 +197,13 @@ Each phase lands as its own pull request, and the README's decisions table and e
 
 ## 5. Out of scope: Maxence's local fill tool
 
-Maxence keeps his own desktop fill tool on his own machine. It is **not** in this repository, and nothing on time. mentions it, links to it or produces commands for it.
+Maxence keeps his own desktop fill tool on his own machine. It is **not** in this repository, and nothing on freetime. mentions it, links to it or produces commands for it.
 
-time. supports it only through what is already public:
+freetime. supports it only through what is already public:
 - `/free-busy.ics?from=&to=` (busy blocks only), and
 - the free/busy rule in `W2M_BUSY_THRESHOLD`, which must be documented in the README so a local tool can reproduce it exactly.
 
 The bookmarklet's fill logic lives in its own file (`public/js/w2m-fill.js`) with no dependencies on the rest of the site, so it can be reused elsewhere without changes.
 
 - No custom URL scheme and no browser-to-program launcher, ever: any website could trigger one.
-- time.'s server never drives a browser or writes to when2meet.
+- freetime.'s server never drives a browser or writes to when2meet.

@@ -1,8 +1,8 @@
-# time.mutantcacti.com
+# freetime.mutantcacti.com
 
 A read-only view of Maxence's free and busy time, in the style of when2meet. Visitors find a slot here, then get in touch through the contact panel. Nothing on the site sends, books or stores anything.
 
-It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`TIME-SPEC.md`](TIME-SPEC.md).
+It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`SPEC.md`](SPEC.md).
 
 - **Views:** Day, Week, Month and Range, plus `/help`, the contact panel (`/contact`) and a busy-only `.ics` export.
 - **Rendering:** HTML is rendered on the server, and every view, link and form works without JavaScript. Two small scripts in `public/js/` add the extras.
@@ -118,9 +118,9 @@ dig MX mutantcacti.com +short
 
 Then load the apex site and each existing subdomain in a browser, and send a test email to an address on the domain.
 
-### 4. Deploy time.
+### 4. Deploy freetime.
 
-`wrangler.toml` already sets `workers_dev = false` and the route `{ pattern = "time.mutantcacti.com", custom_domain = true }`.
+`wrangler.toml` already sets `workers_dev = false` and the route `{ pattern = "freetime.mutantcacti.com", custom_domain = true }`.
 
 ```bash
 npm ci && npm test
@@ -144,23 +144,23 @@ npx wrangler deploy
 
 ### 5. Verify
 
-- [ ] `https://time.mutantcacti.com/` loads over HTTPS with a valid certificate.
+- [ ] `https://freetime.mutantcacti.com/` loads over HTTPS with a valid certificate.
 - [ ] The headers are present (HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy` with `frame-ancestors 'none'`, `Cache-Control`):
 
 ```bash
-curl -sI https://time.mutantcacti.com/
+curl -sI https://freetime.mutantcacti.com/
 ```
 
 - [ ] `/free-busy.ics` downloads as `mutantcacti-busy.ics`. This command saves it under the server's filename:
 
 ```bash
-curl -sOJ https://time.mutantcacti.com/free-busy.ics && ls mutantcacti-busy.ics
+curl -sOJ https://freetime.mutantcacti.com/free-busy.ics && ls mutantcacti-busy.ics
 ```
 
 - [ ] POST returns 405:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://time.mutantcacti.com/
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://freetime.mutantcacti.com/
 ```
 
 - [ ] The error path works. Set the secret to a wrong address, for example the real one with a character changed. The saved copy belongs to one `ICAL_URL`, so a wrong one has none to fall back on. In a second terminal, start the log tail:
@@ -182,7 +182,7 @@ Re-enable DNSSEC through Cloudflare (**DNS → Settings → Enable DNSSEC**), th
 ### 7. Rollback
 
 - **Whole zone:** put the old nameservers back at the registrar. The records at the old provider were never changed.
-- **Just time.:** remove the custom domain under **Workers & Pages → time-mutantcacti → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
+- **Just freetime.:** remove the custom domain under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
 
 ## Error codes
 
@@ -206,6 +206,7 @@ With several calendars, **any one failing with no saved copy shows the error pan
 
 | To change | Edit |
 |---|---|
+| **Site name** (address, page titles, the `.ics` file's `PRODID` and event UIDs) | `SITE_HOST` in `src/config.ts` and the route in `wrangler.toml`. `test/name.test.ts` fails if the name is written anywhere else in code. Meant to stay as it is: a new name changes every exported event's UID. |
 | **Window height** (hours visible at once) | `--visible-hours` in `public/css/tokens.css` (default 12). `--row-min` sets the smallest row height (24 px). |
 | **Starting hour** (where the window opens when the period doesn't contain now) | `START_HOUR` in `src/config.ts`. The anchors (`#h08`), links and client JS follow it. |
 | **Range cap** | `RANGE_CAP_DAYS` in `src/config.ts`. The export, the notice text and `/help` follow it. `RANGE_COLUMN_MAX_DAYS` sets where Range switches from columns to day cells. |
@@ -305,7 +306,7 @@ Anything not checked against current documentation is marked **(unverified)**.
 | Contact and Download overlays are `<dialog>`s rendered into the page, opened by JS. Without JS the links go to `/contact` and `/export`. | Fetching the content | No extra request, and the content is the same component as the full pages. | — |
 | Slots get `tabindex="0"`. With JS there's one tab stop and arrow keys move between cells. | 336 tab stops | Keyboard focus works without JS, and with JS it's usable. | — |
 | `Cache-Control`: pages and `.ics` `private, max-age=60`; static files `public, max-age=3600`; errors `no-store` | `no-store` everywhere | "Short enough that the calendar is never long out of date", and the current-time line is at most a minute stale on load. | — |
-| HSTS `max-age=31536000; includeSubDomains`, no `preload` | `preload` | Preload commits the whole domain, which is out of scope. `includeSubDomains` only covers `*.time.mutantcacti.com`. | — |
+| HSTS `max-age=31536000; includeSubDomains`, no `preload` | `preload` | Preload commits the whole domain, which is out of scope. `includeSubDomains` only covers `*.freetime.mutantcacti.com`. | — |
 | `run_worker_first = true` for static assets **(unverified)** | Assets served before the Worker; `_headers` file | Security headers and the GET/HEAD-only rule then apply to every response, from one place. | Asset request costs. |
 | Dev fixture via `[env.dev]` with its own `main` (`src/dev.ts`) | A flag in production code | The fixture never ships, and `npm run dev` needs no secret. | — |
 | `compatibility_date = "2026-10-01"` | Today's date | A recent date the bundled `workerd` supports. | Upgrading Wrangler. |
@@ -317,7 +318,8 @@ Anything not checked against current documentation is marked **(unverified)**.
 | when2meet phase 0 was done from raw pages Maxence captured with `curl` and DevTools (four test events, one reloaded grid, a missing event, the home page and the headers), not from the live site | Wait for `www.when2meet.com` to be allowed | The proxy refuses when2meet, and the pages hold all of when2meet's own logic inline. What no capture shows is marked **(unverified)** in `docs/W2M-GET-SPEC.md`; only the save-order question (Q5) is still open. A missing event answers 200, so it's recognised by its content. | Phase 1 reaching the live site and finding a difference. |
 | Match mode uses the viewer's zone, not the event's, and rebuilds when2meet's grid itself (GET spec §2.2) | The event's zone (the original `W2M-SPEC.md` §1.3); calling `AvailabilityGrids.php` | when2meet reloads a dates event's grid in each visitor's zone, so only the viewer's zone lines up cell for cell (review of phase 0, agreed by Maxence). The reloaded grid follows a simple rule that reproduces the captured one exactly, so no POST to when2meet is needed. | A reloaded grid that breaks the rule. |
 | Days-of-the-week events: you pick the week (`w2mweek`), defaulting to the coming week | Always the coming week | Maxence's answer: the week the meeting actually happens is what matters. | — |
-| The bookmarklet makes the grid match time. exactly: it also clears slots you'd marked available that are now busy | Only ever add availability | Maxence's answer. The overlay states both counts before anything changes. | — |
+| The bookmarklet makes the grid match freetime. exactly: it also clears slots you'd marked available that are now busy | Only ever add availability | Maxence's answer. The overlay states both counts before anything changes. | — |
 | The bookmarklet waits for each save by watching resource timing (`PerformanceObserver`), not by wrapping `window.fetch` | Wrap `fetch`; poll `AvailableAtSlot` | Wrapping is invasive on someone else's page, and `AvailableAtSlot` changes before the save is even sent, so polling it shows nothing. | Resource timing not showing the page's saves (GET spec Q5). |
 | No `research/EVENTS.md`; fixtures use placeholder links (`10000001-Test1`, `10000002-Test2`) | Commit the test events' links | Anyone with an event's link can edit it, so the links stay out of the repo, as phase 3 does with canaries. | — |
 | Fixture privacy is checked structurally (no participants, empty availability, no third-party scripts) plus a deny-list that is empty for now | A deny-list only | No names were given, and nobody had signed in on the test events. The structural check also catches names that aren't on any list. | Maxence signing in on a test event: add the name to `DENY_NAMES`. |
+| Renamed from time. to freetime. (user review), with the name locked: one constant (`SITE_HOST`), the route in `wrangler.toml`, and a test that fails if the name appears anywhere else in code. Code identifiers carry no name (`SiteApp`, `SiteHead`, `site.theme`), tests use `example.test`, and the spec is `SPEC.md`. No redirect from the old address. | free., busy., avail., when., cal.; keep time. | "time" collided with other subdomains. freetime. says what the site shows and matches the calendar's own name ("Maxence's free time"). The site had no users yet, so the old address and stored theme keys were dropped rather than forwarded or migrated. | — |

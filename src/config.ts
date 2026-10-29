@@ -1,5 +1,13 @@
 // Tunable settings in one place. See "Changing settings" in the README.
 
+/**
+ * The site's address, and its name everywhere it's shown or sent (page titles,
+ * the .ics file's PRODID and event UIDs). The only place it's written in code:
+ * test/name.test.ts checks that. Renaming the site means changing this and the
+ * route in wrangler.toml.
+ */
+export const SITE_HOST = "freetime.mutantcacti.com";
+
 /** Zone used when the viewer's zone is unknown (no JS), and for all-day and floating events. */
 export const DEFAULT_TZ = "Europe/London";
 

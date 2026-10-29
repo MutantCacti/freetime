@@ -24,14 +24,14 @@ interface Queue {
   indicator(): "warning" | "error" | null;
   all(): Toast[];
 }
-const TimeApp = (globalThis as unknown as { TimeApp: { glideStep(v: number, dt: number): number; createToastQueue(o?: object): Queue; initialScrollTop(m: object): number; utcOffsetLabel(z: string, d: Date): string; urlWithTz(h: string, tz: string | null): string } }).TimeApp;
-const TimeHead = (globalThis as unknown as { TimeHead: { readTheme(s: unknown): string | null; writeTheme(s: unknown, v: string): boolean } }).TimeHead;
+const SiteApp = (globalThis as unknown as { SiteApp: { glideStep(v: number, dt: number): number; createToastQueue(o?: object): Queue; initialScrollTop(m: object): number; utcOffsetLabel(z: string, d: Date): string; urlWithTz(h: string, tz: string | null): string } }).SiteApp;
+const SiteHead = (globalThis as unknown as { SiteHead: { readTheme(s: unknown): string | null; writeTheme(s: unknown, v: string): boolean } }).SiteHead;
 
 const ids = (list: Toast[]) => list.map((t) => t.id);
 
 describe("toasts", () => {
   it("a stale cache gives a sticky warning that minimises but can't be dismissed", () => {
-    const q = TimeApp.createToastQueue();
+    const q = SiteApp.createToastQueue();
     q.add({ id: "stale", kind: "sticky", severity: "warning" });
     expect(ids(q.visible(0))).toEqual(["stale"]);
     expect(q.dismiss("stale")).toBe(false);
@@ -43,7 +43,7 @@ describe("toasts", () => {
   });
 
   it("the notice indicator shows only while a sticky toast is minimised", () => {
-    const q = TimeApp.createToastQueue();
+    const q = SiteApp.createToastQueue();
     expect(q.indicator()).toBeNull();
     q.add({ id: "stale", kind: "sticky", severity: "warning" });
     expect(q.indicator()).toBeNull();
@@ -57,7 +57,7 @@ describe("toasts", () => {
   });
 
   it("a transient toast hides itself after about 6 seconds, pausing while hovered", () => {
-    const q = TimeApp.createToastQueue({ duration: 6000 });
+    const q = SiteApp.createToastQueue({ duration: 6000 });
     q.add({ id: "t", kind: "transient", severity: "warning" });
     q.visible(1000);
     expect(q.tick(6000)).toBe(false);
@@ -70,14 +70,14 @@ describe("toasts", () => {
   });
 
   it("a transient toast can be closed", () => {
-    const q = TimeApp.createToastQueue();
+    const q = SiteApp.createToastQueue();
     q.add({ id: "t", kind: "transient", severity: "warning" });
     expect(q.dismiss("t")).toBe(true);
     expect(q.all()).toEqual([]);
   });
 
   it("shows no more than three, sticky above transient, errors above warnings", () => {
-    const q = TimeApp.createToastQueue();
+    const q = SiteApp.createToastQueue();
     q.add({ id: "t1", kind: "transient", severity: "warning" });
     q.add({ id: "t2", kind: "transient", severity: "error" });
     q.add({ id: "t3", kind: "transient", severity: "warning" });
@@ -148,15 +148,15 @@ describe("drag to scroll", () => {
     let distance = 0;
     while (v !== 0 && t < 5000) {
       distance += v * 16;
-      v = TimeApp.glideStep(v, 16);
+      v = SiteApp.glideStep(v, 16);
       t += 16;
     }
     expect(v).toBe(0);
     expect(t).toBeLessThan(1500); // stops within about a second
     expect(distance).toBeGreaterThan(200);
     expect(distance).toBeLessThan(500);
-    expect(TimeApp.glideStep(-1, 16)).toBeLessThan(0); // either direction
-    expect(TimeApp.glideStep(0.019, 16)).toBe(0);
+    expect(SiteApp.glideStep(-1, 16)).toBeLessThan(0); // either direction
+    expect(SiteApp.glideStep(0.019, 16)).toBe(0);
   });
 
   it("shows a grab cursor and stops text selection mid-drag, and only handles the mouse", () => {
@@ -181,7 +181,7 @@ describe("starting scroll position", () => {
     [12, 0],
   ])("keeps the window inside the column with the line visible at %i:%i", (h, m) => {
     const lineY = lineAt(h, m);
-    const top = TimeApp.initialScrollTop({ ...geometry, lineY });
+    const top = SiteApp.initialScrollTop({ ...geometry, lineY });
     expect(top).toBeGreaterThanOrEqual(0);
     expect(top).toBeLessThanOrEqual(maxTop);
     expect(lineY - top).toBeGreaterThanOrEqual(geometry.header);
@@ -189,37 +189,37 @@ describe("starting scroll position", () => {
   });
 
   it("clamps at the top just after midnight and the bottom just before", () => {
-    expect(TimeApp.initialScrollTop({ ...geometry, lineY: lineAt(0, 15) })).toBe(0);
-    expect(TimeApp.initialScrollTop({ ...geometry, lineY: lineAt(23, 45) })).toBe(maxTop);
+    expect(SiteApp.initialScrollTop({ ...geometry, lineY: lineAt(0, 15) })).toBe(0);
+    expect(SiteApp.initialScrollTop({ ...geometry, lineY: lineAt(23, 45) })).toBe(maxTop);
   });
 
   it("puts the line about a third of the way down otherwise", () => {
     const lineY = lineAt(12, 0);
-    const top = TimeApp.initialScrollTop({ ...geometry, lineY });
+    const top = SiteApp.initialScrollTop({ ...geometry, lineY });
     expect((lineY - top - geometry.header) / (geometry.viewport - geometry.header)).toBeCloseTo(1 / 3, 2);
   });
 
   it("opens at 08:00 when the period doesn't contain now", () => {
-    expect(TimeApp.initialScrollTop({ ...geometry, lineY: null })).toBe(16 * 30);
+    expect(SiteApp.initialScrollTop({ ...geometry, lineY: null })).toBe(16 * 30);
   });
 });
 
 describe("time-zone dropdown helpers", () => {
   it("labels offsets as UTC±h", () => {
     const winter = new Date(Date.UTC(2026, 11, 1));
-    expect(TimeApp.utcOffsetLabel("Europe/London", winter)).toBe("UTC+0");
-    expect(TimeApp.utcOffsetLabel("Asia/Kolkata", winter)).toBe("UTC+5:30");
-    expect(TimeApp.utcOffsetLabel("America/New_York", winter)).toBe("UTC-5");
+    expect(SiteApp.utcOffsetLabel("Europe/London", winter)).toBe("UTC+0");
+    expect(SiteApp.utcOffsetLabel("Asia/Kolkata", winter)).toBe("UTC+5:30");
+    expect(SiteApp.utcOffsetLabel("America/New_York", winter)).toBe("UTC-5");
   });
 
   it("choosing a zone sets tz and keeps every other parameter; Device default removes it", () => {
     const href = "https://x.test/?view=week&date=2026-11-02&dtz=Europe/Paris#h08";
-    const set = new URL(TimeApp.urlWithTz(href, "Europe/Paris"));
+    const set = new URL(SiteApp.urlWithTz(href, "Europe/Paris"));
     expect(set.searchParams.get("tz")).toBe("Europe/Paris");
     expect(set.searchParams.get("dtz")).toBe("Europe/Paris");
     expect(set.searchParams.get("view")).toBe("week");
     expect(set.hash).toBe("#h08");
-    expect(new URL(TimeApp.urlWithTz(set.toString(), null)).searchParams.has("tz")).toBe(false);
+    expect(new URL(SiteApp.urlWithTz(set.toString(), null)).searchParams.has("tz")).toBe(false);
   });
 });
 
@@ -239,12 +239,12 @@ describe("theme", () => {
 
   it("reads and writes the stored choice, and survives storage that throws", () => {
     const s = memory();
-    expect(TimeHead.readTheme(s)).toBeNull();
-    expect(TimeHead.writeTheme(s, "dark")).toBe(true);
-    expect(TimeHead.readTheme(s)).toBe("dark");
-    expect(TimeHead.readTheme(throwing)).toBeNull();
-    expect(TimeHead.writeTheme(throwing, "dark")).toBe(false);
-    expect(TimeHead.readTheme(null)).toBeNull();
+    expect(SiteHead.readTheme(s)).toBeNull();
+    expect(SiteHead.writeTheme(s, "dark")).toBe(true);
+    expect(SiteHead.readTheme(s)).toBe("dark");
+    expect(SiteHead.readTheme(throwing)).toBeNull();
+    expect(SiteHead.writeTheme(throwing, "dark")).toBe(false);
+    expect(SiteHead.readTheme(null)).toBeNull();
   });
 
   it("tokens.css defaults to dark everywhere; only a stored light choice changes it", () => {
@@ -259,7 +259,7 @@ describe("theme", () => {
     const saved = { document: g.document, location: g.location, window: g.window };
     afterEach(() => Object.assign(g, saved));
 
-    async function run(local: unknown, href = "https://time.mutantcacti.com/?view=week&dtz=Europe/London") {
+    async function run(local: unknown, href = "https://example.test/?view=week&dtz=Europe/London") {
       const attrs: Record<string, string> = {};
       const replaced: string[] = [];
       g.document = { documentElement: { classList: { add() {} }, setAttribute: (k: string, v: string) => (attrs[k] = v) } };
@@ -277,7 +277,7 @@ describe("theme", () => {
 
     it("applies the stored choice before paint", async () => {
       const s = memory();
-      s.setItem("time.theme", "dark");
+      s.setItem("site.theme", "dark");
       const { attrs, replaced } = await run(s);
       expect(attrs["data-theme"]).toBe("dark");
       expect(replaced.length).toBeLessThanOrEqual(1);

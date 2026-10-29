@@ -3,7 +3,7 @@
  * works; with it you get toasts, the current-time line moving, the starting
  * scroll position, the time-zone dropdown, the date-picker popover, the
  * dialogs, the theme switcher and the Copy button.
- * Pure functions are exposed on globalThis.TimeApp for tests.
+ * Pure functions are exposed on globalThis.SiteApp for tests.
  */
 (function () {
   "use strict";
@@ -221,7 +221,7 @@
       return glideStep(v, dt);
     },
   };
-  globalThis.TimeApp = api;
+  globalThis.SiteApp = api;
 
   if (typeof document === "undefined") return;
 
@@ -471,7 +471,7 @@
       btn.addEventListener("click", function () {
         var next = current() === "dark" ? "light" : "dark";
         document.documentElement.setAttribute("data-theme", next);
-        if (globalThis.TimeHead) globalThis.TimeHead.writeTheme(store, next);
+        if (globalThis.SiteHead) globalThis.SiteHead.writeTheme(store, next);
         label();
       });
     });
