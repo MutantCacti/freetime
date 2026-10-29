@@ -154,7 +154,7 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 - A standard month grid: weeks are rows, and Monday to Sunday are columns.
 - Each day cell is coloured and dithered by that day's busy fraction.
 - Days outside the month are dimmed.
-- Clicking a day opens it in the Day view.
+- Clicking a day opens it in the Day view. With a mouse, hovering a day shrinks it slightly (to 94%, over 100 ms), so a ring of grid colour shows round it. This also applies to Range day cells, and it's instant under `prefers-reduced-motion`.
 
 ### 5.4 Range
 - **Picker:** a date picker for start and end that looks like shadcn's calendar, plus an **Apply** button.

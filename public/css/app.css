@@ -170,6 +170,17 @@ code { font-family: var(--font-mono); }
   text-align: center; font-size: 0.8rem; font-weight: 600; padding: var(--space-1) 0;
 }
 .daycell { position: relative; display: block; text-decoration: none; background-repeat: repeat; }
+/*
+ * Hover on a clickable day (Month, long Range): the cell shrinks slightly, so a
+ * ring of grid colour shows round it. Works over any cell colour, in both
+ * themes, and doesn't clash with today's outline or the focus ring. Pointer
+ * devices only, so taps don't leave a cell shrunk; not while drag-scrolling.
+ */
+.daycell { transition: scale var(--motion-ui); }
+@media (hover: hover) {
+  .daycell:hover { scale: 0.94; }
+  .cal-scroll.is-dragging .daycell:hover { scale: none; }
+}
 .daynum {
   position: absolute; top: 4px; left: 4px; z-index: 2;
   min-width: 1.6rem; padding: 0 0.3rem; border-radius: 4px; text-align: center;

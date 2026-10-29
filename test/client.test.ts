@@ -127,6 +127,14 @@ describe("motion", () => {
   });
 });
 
+describe("month hover", () => {
+  it("a clickable day shrinks slightly on hover, with a pointer only, and not mid-drag", () => {
+    const css = allCss["/public/css/app.css"]!;
+    expect(css).toContain(".daycell { transition: scale var(--motion-ui); }");
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.daycell:hover \{ scale: 0\.94; \}\s*\.cal-scroll\.is-dragging \.daycell:hover \{ scale: none; \}/);
+  });
+});
+
 describe("drag to scroll", () => {
   it("the glide after a mouse drag slows down and stops", () => {
     let v = 2; // px/ms, a fast flick
