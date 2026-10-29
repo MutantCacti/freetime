@@ -171,15 +171,17 @@ code { font-family: var(--font-mono); }
 }
 .daycell { position: relative; display: block; text-decoration: none; background-repeat: repeat; }
 /*
- * Hover on a clickable day (Month, long Range): the cell shrinks slightly, so a
- * ring of grid colour shows round it. Works over any cell colour, in both
- * themes, and doesn't clash with today's outline or the focus ring. Pointer
- * devices only, so taps don't leave a cell shrunk; not while drag-scrolling.
+ * Hover on a clickable day (Month, long Range): a ring of grid colour grows in
+ * from the cell's edge, so the cell looks slightly shrunk. The ring is an inset
+ * shadow painted over the background, so the cell and its dither pattern never
+ * change size. Works over any cell colour, in both themes, and doesn't clash
+ * with today's outline or the focus ring. Pointer devices only, so taps don't
+ * leave a ring behind; not while drag-scrolling.
  */
-.daycell { transition: scale var(--motion-ui); }
+.daycell { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-ui); }
 @media (hover: hover) {
-  .daycell:hover { scale: 0.94; }
-  .cal-scroll.is-dragging .daycell:hover { scale: none; }
+  .daycell:hover { box-shadow: inset 0 0 0 5px var(--color-grid); }
+  .cal-scroll.is-dragging .daycell:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }
 }
 .daynum {
   position: absolute; top: 4px; left: 4px; z-index: 2;
