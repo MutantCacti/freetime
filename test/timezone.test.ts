@@ -36,17 +36,18 @@ describe("the zone rule", () => {
     for (const page of [html, pinned, none]) expect(page).not.toMatch(/\b(pinned|site default|device default)\b/);
   });
 
-  it("the label never shows offsets; the summary and accessible name show both across a DST change", async () => {
-    const autumn = decode(await app.html("/?view=week&date=2026-10-19"));
-    expect(autumn).toContain('<span class="tz-text">Europe/London</span>');
-    expect(attr(tagWith(autumn, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+1 → UTC+0");
-    expect(attr(tagWith(autumn, 'id="tz-button"'), "aria-label")).toContain("UTC plus 1 changing to UTC plus 0");
-    const spring = decode(await app.html("/?view=week&date=2027-03-22"));
-    expect(attr(tagWith(spring, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0 → UTC+1");
-    const flat = decode(await app.html("/?view=week&date=2026-10-26"));
-    expect(attr(tagWith(flat, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0");
-    const ny = decode(await app.html("/?view=month&date=2026-11-01&dtz=America/New_York"));
-    expect(attr(tagWith(ny, 'id="tz-button"'), "data-summary")).toBe("America/New_York · UTC-4 → UTC-5");
+  it("shows the offset in effect right now, whatever period is on screen", async () => {
+    // Now is 3 Nov 2026: London is on GMT, New York on EST.
+    for (const date of ["2026-10-19", "2026-07-06", "2027-03-22", "2026-11-02"]) {
+      const html = decode(await app.html(`/?view=week&date=${date}`));
+      expect(attr(tagWith(html, 'id="tz-button"'), "data-summary"), date).toBe("Europe/London · UTC+0");
+      expect(attr(tagWith(html, 'id="tz-button"'), "aria-label"), date).toBe("Time zone: Europe/London, UTC plus 0. Change");
+      expect(html).not.toContain("→ UTC");
+    }
+    const summer = makeApp({ now: Date.UTC(2026, 6, 1, 12) });
+    expect(attr(tagWith(decode(await summer.html("/?view=week&date=2026-11-02")), 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+1");
+    const ny = decode(await app.html("/?view=month&date=2026-10-01&dtz=America/New_York"));
+    expect(attr(tagWith(ny, 'id="tz-button"'), "data-summary")).toBe("America/New_York · UTC-5");
   });
 });
 

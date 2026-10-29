@@ -3,7 +3,7 @@
 
 import { Hono, type Context } from "hono";
 import { mergeIntervals } from "./busy";
-import { buildColumns, buildDayCells, periodBounds, periodOffsets } from "./calendar";
+import { buildColumns, buildDayCells, periodBounds } from "./calendar";
 import { DEFAULT_TZ, MAX_FEEDS } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
@@ -240,7 +240,7 @@ export function createApp(deps: AppDeps = {}) {
           tabs: tabTargets(period, todayDate),
           periodLabel: shortLabel,
           periodFull: label,
-          zone: zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)),
+          zone: zoneLabel(zone, offsetSeconds(t, zone.zone)),
           here,
           exportParams,
         }}
@@ -330,7 +330,7 @@ export function createApp(deps: AppDeps = {}) {
         current={zone.tz}
         deviceDefault={zone.dtz ?? DEFAULT_TZ}
         noDeviceZone={!zone.dtz}
-        summary={zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)).summary}
+        summary={zoneLabel(zone, offsetSeconds(t, zone.zone)).summary}
         groups={[...groups.entries()].map(([region, options]) => ({ region, options }))}
       />,
     );

@@ -738,7 +738,7 @@
         options.push(li);
       }
       // PRINTED OUTPUT: time zone dropdown / device default option
-      if (!input.value.trim()) option("", "Device default", "", "icon-location");
+      if (!input.value.trim()) option("", "Device default", "");
       var region = null;
       shown.forEach(function (z) {
         var r = z.indexOf("/") > 0 ? z.slice(0, z.indexOf("/")) : "Other"; // PRINTED OUTPUT: time zone dropdown / group for zones with no region

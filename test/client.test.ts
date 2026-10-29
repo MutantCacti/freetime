@@ -128,14 +128,16 @@ describe("motion", () => {
 });
 
 describe("month hover", () => {
-  it("a hovered day gets an overlaid ring, so the cell and its dither never change size", () => {
+  it("a hovered day or slot gets an overlaid ring, so the cell and its dither never change size", () => {
     const css = allCss["/public/css/app.css"]!;
-    expect(css).toContain(".daycell { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-hover); }");
-    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.daycell:hover \{ box-shadow: inset 0 0 0 3px var\(--color-grid\); \}/);
-    expect(tokens).toContain("--motion-hover: 60ms ease-out;");
-    expect(css).toContain(".cal-scroll.is-dragging .daycell:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }");
-    // Nothing scales or resizes a day cell.
-    expect(css).not.toMatch(/\.daycell[^{]*\{[^}]*\b(scale|transform|zoom|background-size)\s*:/);
+    expect(css).toContain(".daycell, .slot { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-hover); }");
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.daycell:hover, \.slot:hover:not\(:focus-visible\) \{ box-shadow: inset 0 0 0 2px var\(--color-grid\); \}/);
+    expect(css).toContain(".cal-scroll.is-dragging .daycell:hover, .cal-scroll.is-dragging .slot:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }");
+    expect(tokens).toContain("--motion-hover: 40ms ease-out;");
+    // Nothing scales or resizes a day cell or a slot.
+    expect(css).not.toMatch(/\.(daycell|slot)[^{]*\{[^}]*\b(scale|transform|zoom|background-size)\s*:/);
+    // Day numbers in Month: barely rounded.
+    expect(css).toMatch(/\.daynum \{[^}]*border-radius: 2px;/);
   });
 });
 

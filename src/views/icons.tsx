@@ -72,13 +72,6 @@ export const ChevronRightIcon = () => (
   </svg>
 );
 
-export const LocationIcon = () => (
-  <svg {...base} class="icon icon-location">
-    <path d="M8 14.5s4.5-4.2 4.5-7.8a4.5 4.5 0 0 0-9 0c0 3.6 4.5 7.8 4.5 7.8z" />
-    <circle cx="8" cy="6.7" r="1.6" />
-  </svg>
-);
-
 export const ChevronDownIcon = () => (
   <svg {...base} class="icon icon-chevron">
     <path d="M4 6l4 4 4-4" />

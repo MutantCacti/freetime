@@ -155,7 +155,7 @@ The order of items in the HTML follows the wide-screen table, so keyboard and sc
 - A standard month grid: weeks are rows, and Monday to Sunday are columns.
 - Each day cell is coloured and dithered by that day's busy fraction.
 - Days outside the month are dimmed.
-- Clicking a day opens it in the Day view. With a mouse, hovering a day draws a 3 px ring of grid colour inside its edge, over 60 ms, so it looks slightly shrunk. The ring is overlaid on the cell: the cell and its dither pattern never change size. This also applies to Range day cells, and it's instant under `prefers-reduced-motion`.
+- Clicking a day opens it in the Day view. With a mouse, hovering a day draws a 2 px ring of grid colour inside its edge, over 40 ms, so it looks slightly shrunk (the same ring marks the hovered slot in Day, Week and the Range column layout). Day numbers sit on chips with 2 px corners. The ring is overlaid on the cell: the cell and its dither pattern never change size. This also applies to Range day cells, and it's instant under `prefers-reduced-motion`.
 
 ### 5.4 Range
 - **Picker:** a date picker for start and end that looks like shadcn's calendar, plus an **Apply** button.
@@ -265,10 +265,10 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 - The time-zone label is a **button that opens a dropdown** to choose another zone.
 - **Label:** always visible, showing only the zone name, for example **"Europe/London"**, with a chevron at every width so it's obviously a control.
   - The UTC offset is in its accessible name ("Time zone: Europe/Paris, UTC plus 1. Change") and at the top of the dropdown ("Europe/Paris · UTC+1").
-  - If the visible period crosses a daylight-saving change, the dropdown summary and accessible name show both offsets ("UTC+1 → UTC+0"); the label doesn't.
+  - The offset shown is the one in effect **right now**, whatever period is on screen; a daylight-saving change in the visible period isn't spelled out.
 - **Dropdown:**
   - a search field at the top, filtering the list as you type;
-  - the first option is **"Device default"**, with a location icon, which removes `tz` from the URL. It's just another option: nothing is highlighted when the dropdown opens;
+  - the first option is **"Device default"**, which removes `tz` from the URL. It looks like every other option, and nothing is highlighted when the dropdown opens;
   - shadcn-style: the search field sits flush at the top; options get a lighter fill when pointed at or chosen with the arrow keys (one highlight, no outline); typing highlights the first match; corners are slightly rounded (6 px for the dropdown, 4 px for options);
   - then every IANA zone from `Intl.supportedValuesOf('timeZone')`, each with its current offset, grouped by region;
   - choosing a zone navigates to the current URL with `tz` set (all other parameters kept, including `dtz`). Choosing your own device's zone by name still sets `tz`, so a shared link pins it for others;
@@ -460,7 +460,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
     - an invalid `tz` falls back to `dtz` with a toast; an invalid `dtz` falls back to Europe/London;
     - the head-script logic (a unit test of the function it uses) replaces a missing or wrong `dtz`, keeps `tz`, and never replaces twice in one page view;
     - in zones like Pacific/Auckland and America/Los_Angeles, day boundaries, "today", the current-time line and Today/‹ › follow that zone;
-    - the label shows only the zone name; its summary and accessible name show both offsets when a period crosses a DST change;
+    - the label shows only the zone name; its summary and accessible name show the offset in effect now, whatever period is on screen;
     - no `Set-Cookie` is ever sent;
     - the `/tz` no-JS page sets and removes `tz` correctly; the `.ics` file is in UTC.
   - **Routes:** 405 for POST, PUT and DELETE.

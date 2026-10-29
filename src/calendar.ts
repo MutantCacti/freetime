@@ -9,7 +9,7 @@ import { cellClasses } from "./dither";
 import { dayCellLabel, dayHeader, hhmm, slotLabel } from "./format";
 import type { Interval } from "./ical";
 import { type Period, today } from "./state";
-import { offsetSeconds, startOfDay, zonedToEpoch } from "./tz";
+import { startOfDay, zonedToEpoch } from "./tz";
 
 export const SLOTS_PER_DAY = (24 * 60) / SLOT_MINUTES;
 
@@ -117,10 +117,4 @@ export function buildDayCells(period: Period, zone: string, merged: Interval[], 
 /** UTC bounds of a period's days in a zone: [start of first day, start of the day after the last). */
 export function periodBounds(start: ISODate, end: ISODate, zone: string): { from: number; to: number } {
   return { from: startOfDay(start, zone), to: startOfDay(addDays(end, 1), zone) };
-}
-
-/** Offsets at the start and end of a period; equal unless the period crosses a DST change. */
-export function periodOffsets(start: ISODate, end: ISODate, zone: string): [number, number] {
-  const { from, to } = periodBounds(start, end, zone);
-  return [offsetSeconds(from, zone), offsetSeconds(to - 1, zone)];
 }

@@ -173,21 +173,21 @@ code { font-family: var(--font-mono); }
 }
 .daycell { position: relative; display: block; text-decoration: none; background-repeat: repeat; }
 /*
- * Hover on a clickable day (Month, long Range): a ring of grid colour grows in
- * from the cell's edge, so the cell looks slightly shrunk. The ring is an inset
+ * Hover on a cell (Month and long Range days, Day/Week/Range slots): a thin
+ * ring of grid colour grows in from the cell's edge, so it looks slightly shrunk. The ring is an inset
  * shadow painted over the background, so the cell and its dither pattern never
  * change size. Works over any cell colour, in both themes, and doesn't clash
  * with today's outline or the focus ring. Pointer devices only, so taps don't
  * leave a ring behind; not while drag-scrolling.
  */
-.daycell { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-hover); }
+.daycell, .slot { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-hover); }
 @media (hover: hover) {
-  .daycell:hover { box-shadow: inset 0 0 0 3px var(--color-grid); }
-  .cal-scroll.is-dragging .daycell:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }
+  .daycell:hover, .slot:hover:not(:focus-visible) { box-shadow: inset 0 0 0 2px var(--color-grid); }
+  .cal-scroll.is-dragging .daycell:hover, .cal-scroll.is-dragging .slot:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }
 }
 .daynum {
   position: absolute; top: 4px; left: 4px; z-index: 2;
-  min-width: 1.6rem; padding: 0 0.3rem; border-radius: 4px; text-align: center;
+  min-width: 1.6rem; padding: 0 0.3rem; border-radius: 2px; text-align: center;
   background: var(--color-bg); color: var(--color-text); font-size: 0.8rem; font-weight: 600;
 }
 .daycell.out .daynum { color: var(--color-text-muted); }

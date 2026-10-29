@@ -6,21 +6,18 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
   text: string;
-  /** Name and offset, shown at the top of the dropdown and on /tz: "Europe/London · UTC+1 → UTC+0". */
+  /** Name and current offset, shown at the top of the dropdown and on /tz: "Europe/London · UTC+0". */
   summary: string;
   /** The button's accessible name. */
   spoken: string;
 }
 
-/** The zone selector's text, its summary and its accessible name. */
-export function zoneLabel(zone: ZoneState, offsets: [number, number]): ZoneLabel {
-  const [a, b] = offsets;
-  const short = a === b ? formatOffset(a) : `${formatOffset(a)} → ${formatOffset(b)}`; // PRINTED OUTPUT: time zone / offsets, one or two
-  const spoken = a === b ? spokenOffset(a) : `${spokenOffset(a)} changing to ${spokenOffset(b)}`; // PRINTED OUTPUT: time zone / offsets, spoken
+/** The zone selector's text, its summary and its accessible name, with the zone's offset right now. */
+export function zoneLabel(zone: ZoneState, offsetNow: number): ZoneLabel {
   return {
     text: zone.zone,
-    summary: `${zone.zone} · ${short}`, // PRINTED OUTPUT: time zone / summary in dropdown and on /tz
-    spoken: `Time zone: ${zone.zone}, ${spoken}. Change`, // PRINTED OUTPUT: time zone / button accessible name
+    summary: `${zone.zone} · ${formatOffset(offsetNow)}`, // PRINTED OUTPUT: time zone / summary in dropdown and on /tz
+    spoken: `Time zone: ${zone.zone}, ${spokenOffset(offsetNow)}. Change`, // PRINTED OUTPUT: time zone / button accessible name
   };
 }
 
