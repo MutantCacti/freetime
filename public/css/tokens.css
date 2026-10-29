@@ -1,0 +1,104 @@
+/*
+ * Design tokens. Two layers: raw values first, then semantic tokens.
+ * Component CSS uses only the semantic var(--…) names.
+ * This file and src/parula.ts are the only places hex colours may appear.
+ */
+
+/* ---------------------------------------------------------------- raw */
+:root {
+  --raw-white: #ffffff;
+  --raw-grey-50: #f5f6f8;
+  --raw-grey-100: #eceef2;
+  --raw-grey-300: #c4cad4;
+  --raw-grey-600: #555d6b;
+  --raw-grey-900: #191c22;
+  --raw-blue-700: #1b5bbf;
+  --raw-red-700: #b42318;
+  --raw-amber-700: #8f5300;
+
+  --raw-ink-950: #101216;
+  --raw-ink-900: #181b21;
+  --raw-ink-800: #22262e;
+  --raw-ink-600: #3b414c;
+  --raw-ink-300: #a6adba;
+  --raw-ink-100: #e8eaee;
+  --raw-blue-300: #8ab4f8;
+  --raw-red-300: #ff8f85;
+  --raw-amber-300: #f2bd52;
+
+  --raw-grid: #2b2f37;
+  --raw-grey-200: #dde1e7;
+  --raw-ink-700: #2c313a;
+
+  --font-sans: Figtree, system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+  --radius: 6px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  /*
+   * Motion. One effect everywhere: things grow out of the control that opened
+   * them and shrink back into it. Only opacity and transform animate.
+   */
+  --motion-in: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-out: 110ms cubic-bezier(0.4, 0, 1, 1);
+  --motion-ui: 100ms ease-out;
+  --motion-glide: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --grow-scale: 0.96;
+  --grow-nudge: 6px;
+
+  /* Calendar sizing. See "Changing settings" in the README. */
+  --visible-hours: 12;
+  --row-min: 24px;
+  --time-col-w: 3.25rem;
+  --day-col-min: 4.25rem;
+  --head-h: 2rem;
+}
+
+/* ---------------------------------------------------------------- semantic: dark (default) */
+/* Dark is the default everywhere; the system setting is not consulted. */
+:root {
+  --color-bg: var(--raw-ink-950);
+  --color-surface: var(--raw-ink-900);
+  --color-surface-2: var(--raw-ink-800);
+  --color-text: var(--raw-ink-100);
+  --color-text-muted: var(--raw-ink-300);
+  --color-border: var(--raw-ink-600);
+  --color-link: var(--raw-blue-300);
+  --color-focus: var(--raw-blue-300);
+  --color-now: var(--raw-red-300);
+  --color-warning: var(--raw-amber-300);
+  --color-error: var(--raw-red-300);
+  --color-on-accent: var(--raw-ink-950);
+  --color-grid: var(--raw-grid);
+  --color-divider: var(--raw-ink-700);
+  --color-veil: color-mix(in srgb, var(--raw-ink-950) 50%, transparent);
+  --color-shadow: color-mix(in srgb, var(--raw-ink-950) 60%, transparent);
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------- semantic: light (chosen) */
+/* Only when the viewer picks light with the theme switcher. */
+:root[data-theme="light"] {
+  --color-bg: var(--raw-white);
+  --color-surface: var(--raw-grey-50);
+  --color-surface-2: var(--raw-grey-100);
+  --color-text: var(--raw-grey-900);
+  --color-text-muted: var(--raw-grey-600);
+  --color-border: var(--raw-grey-300);
+  --color-link: var(--raw-blue-700);
+  --color-focus: var(--raw-blue-700);
+  --color-now: var(--raw-red-700);
+  --color-warning: var(--raw-amber-700);
+  --color-error: var(--raw-red-700);
+  --color-on-accent: var(--raw-white);
+  /* Light: grid lines in the page colour (the inverted map keeps busy cells dark). */
+  --color-grid: var(--raw-white);
+  --color-divider: var(--raw-grey-200);
+  --color-veil: color-mix(in srgb, var(--raw-white) 50%, transparent);
+  --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
+  color-scheme: light;
+}
