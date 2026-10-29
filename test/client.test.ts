@@ -130,8 +130,9 @@ describe("motion", () => {
 describe("month hover", () => {
   it("a hovered day gets an overlaid ring, so the cell and its dither never change size", () => {
     const css = allCss["/public/css/app.css"]!;
-    expect(css).toContain(".daycell { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-ui); }");
-    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.daycell:hover \{ box-shadow: inset 0 0 0 5px var\(--color-grid\); \}/);
+    expect(css).toContain(".daycell { box-shadow: inset 0 0 0 0 var(--color-grid); transition: box-shadow var(--motion-hover); }");
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.daycell:hover \{ box-shadow: inset 0 0 0 3px var\(--color-grid\); \}/);
+    expect(tokens).toContain("--motion-hover: 60ms ease-out;");
     expect(css).toContain(".cal-scroll.is-dragging .daycell:hover { box-shadow: inset 0 0 0 0 var(--color-grid); }");
     // Nothing scales or resizes a day cell.
     expect(css).not.toMatch(/\.daycell[^{]*\{[^}]*\b(scale|transform|zoom|background-size)\s*:/);

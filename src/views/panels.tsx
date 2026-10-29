@@ -1,5 +1,6 @@
 import type { ErrorCode } from "../errors";
 import { debugLine } from "../errors";
+import { WithSeps } from "./sep";
 import { HOUR_ANCHOR, type Links } from "../links";
 import type { Notice } from "./notices";
 import { InlineNotice } from "./notices";
@@ -110,7 +111,9 @@ export function ErrorPanel({ code, ref, nowSec, contactHref }: FatalProps) {
         A fatal error occurred.
       </p>
       <p class="debug">
-        <code>{debugLine(code, ref, nowSec)}</code>
+        <code>
+          <WithSeps text={debugLine(code, ref, nowSec)} />
+        </code>
       </p>
     </section>
   );

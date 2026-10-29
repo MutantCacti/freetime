@@ -63,8 +63,13 @@ export function makeApp(options: { feed?: FeedSource; now?: number; env?: Partia
   return api;
 }
 
+/** Undo the separator markup ("·" in a span) so text can be matched as written. */
+export function plain(s: string): string {
+  return s.replace(/<span class="sep">·<\/span>/g, "·");
+}
+
 export function decode(s: string): string {
-  return s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  return plain(s).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
 
 /** Every <a href> in a page. */

@@ -2,12 +2,12 @@
 // no cookies, no stored state beyond the Cache API copy of the feed.
 
 import { Hono, type Context } from "hono";
-import { clipIntervals, mergeIntervals } from "./busy";
+import { mergeIntervals } from "./busy";
 import { buildColumns, buildDayCells, periodBounds, periodOffsets } from "./calendar";
 import { DEFAULT_TZ, MAX_FEEDS } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
-import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
+import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
 import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusyCached } from "./ical";
@@ -133,13 +133,18 @@ export function createApp(deps: AppDeps = {}) {
     return { roots: results.map((r) => r.root), stale: results.filter((r) => r.stale) };
   }
 
-  /** Busy intervals from every feed, merged. */
-  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+  /** Every busy event from every feed, unmerged. */
+  function eventsFrom(roots: FeedResult["root"][], from: number, to: number) {
     try {
-      return mergeIntervals(roots.flatMap((root) => expandBusyCached(root, from, to)));
+      return roots.flatMap((root) => expandBusyCached(root, from, to));
     } catch (err) {
       throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
     }
+  }
+
+  /** Busy intervals from every feed, merged, for drawing. */
+  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+    return mergeIntervals(eventsFrom(roots, from, to));
   }
 
   function reportFatal(err: AppError, c: AppContext): string {
@@ -339,8 +344,9 @@ export function createApp(deps: AppDeps = {}) {
     const bounds = periodBounds(from, to, zone.zone);
     try {
       const feed = await feedFor(c);
-      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
-      const ics = buildBusyIcs(clipIntervals(merged, bounds.from, bounds.to), nowSec());
+      // Every event as the feeds have it: not merged, not clipped, not rounded to slots.
+      const events = exportEvents(eventsFrom(feed.roots, bounds.from, bounds.to), bounds.from, bounds.to);
+      const ics = buildBusyIcs(events, nowSec());
       return c.body(ics, 200, {
         "content-type": "text/calendar; charset=utf-8",
         "content-disposition": `attachment; filename="${EXPORT_FILENAME}"`,
@@ -392,7 +398,7 @@ export function createApp(deps: AppDeps = {}) {
     const ref = reportFatal(err, c);
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 500 page / title and message
-    const page = StatusPage({ title: "Something went wrong", message: `An unkown error occurred. Try again. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Something went wrong", message: `An unknown error occurred. Try again. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
     return c.html(page, err.status, { "cache-control": "no-store" });
   });
 

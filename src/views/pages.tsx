@@ -6,6 +6,7 @@ import { ColourBar } from "./calendar";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
 import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
 import { Document, pageTitle } from "./layout";
+import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
 
 export interface CalendarPageProps {
@@ -151,21 +152,26 @@ export function TzPage(p: TzPageProps) {
     // PRINTED OUTPUT: time zone page / title
     <SubPage links={p.links} here={p.here} name="Time zone">
       {/* PRINTED OUTPUT: time zone page / current zone */}
-      <p class="lede">Current time zone: {p.summary}</p>
+      <p class="lede">
+        Current time zone: <WithSeps text={p.summary} />
+      </p>
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
         {p.links.zoneParams.dtz ? <input type="hidden" name="dtz" value={p.links.zoneParams.dtz} /> : null}
-        {/* PRINTED OUTPUT: time zone page / field label */}
-        <select name="tz" id="tz-select">
-          {/* PRINTED OUTPUT: time zone page / device default option */}
-          <option value="" selected={!p.current}>
-            Device default ({p.deviceDefault})
-          </option>
+        {/* PRINTED OUTPUT: time zone page / field accessible name */}
+        <select name="tz" id="tz-select" aria-label="Time zone">
+          {/* Device default only when the device's zone is known (JS has run); otherwise it's just London. */}
+          {p.noDeviceZone ? null : (
+            // PRINTED OUTPUT: time zone page / device default option
+            <option value="" selected={!p.current}>
+              Device default ({p.deviceDefault})
+            </option>
+          )}
           {p.groups.map((g) => (
             <optgroup label={g.region}>
               {g.options.map((o) => (
-                <option value={o.value} selected={o.value === p.current}>
+                <option value={o.value} selected={o.value === (p.current ?? (p.noDeviceZone ? p.deviceDefault : null))}>
                   {o.label}
                 </option>
               ))}
@@ -177,10 +183,6 @@ export function TzPage(p: TzPageProps) {
           Apply
         </button>
       </form>
-      {p.noDeviceZone ? (
-        // PRINTED OUTPUT: time zone page / no-JS note
-        <p class="note">Your device's time zone isn't known without JavaScript, so Device default means Europe/London.</p>
-      ) : null}
     </SubPage>
   );
 }
@@ -197,7 +199,9 @@ export function StatusPage({ title, message, homeHref }: StatusPageProps) {
     <Document title={pageTitle(title)} bodyClass="page-sub">
       <main class="sub-main" id="main">
         <h1>{title}</h1>
-        <p>{message}</p>
+        <p>
+          <WithSeps text={message} />
+        </p>
         <p>
           {/* PRINTED OUTPUT: status page / home link */}
           <a href={homeHref}>Go to calendar</a>

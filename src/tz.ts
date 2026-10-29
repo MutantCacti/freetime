@@ -90,8 +90,8 @@ export function offsetSeconds(epochSec: number, tz: string): number {
  * - Skipped times (clocks going forward) resolve to the instant of the change.
  * The result never decreases as the wall-clock time increases.
  */
-export function zonedToEpoch(y: number, m: number, d: number, h: number, min: number, tz: string): number {
-  const wall = Date.UTC(y, m - 1, d, h, min) / 1000;
+export function zonedToEpoch(y: number, m: number, d: number, h: number, min: number, tz: string, sec = 0): number {
+  const wall = Date.UTC(y, m - 1, d, h, min, sec) / 1000;
   const before = offsetSeconds(wall - 86_400 / 2, tz);
   const after = offsetSeconds(wall + 86_400 / 2, tz);
   const candidates: number[] = [];
