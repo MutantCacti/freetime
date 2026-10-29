@@ -16,7 +16,7 @@ export function buildBusyIcs(blocks: Interval[], nowSec: number): string {
     "PRODID:-//time.mutantcacti.com//busy times//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:Maxence busy times", // PRINTED OUTPUT: ics / calendar name
+    "X-WR-CALNAME:Maxence's free time'", // PRINTED OUTPUT: ics / calendar name
   ];
   for (const b of blocks) {
     lines.push(

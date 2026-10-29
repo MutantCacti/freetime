@@ -38,7 +38,7 @@ export function Document({ title, bodyClass, children }: DocumentProps) {
   );
 }
 
-/** "Help · time." */
+/** "Help · time.mutantcacti.com." */
 export function pageTitle(name: string): string {
-  return `${name} · time.`; // PRINTED OUTPUT: page title / template
+  return `${name} · time.mutantcacti.com`; // PRINTED OUTPUT: page title / template
 }

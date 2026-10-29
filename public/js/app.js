@@ -563,7 +563,7 @@
           function () {
             show("fail");
             // PRINTED OUTPUT: contact / copy failed toast
-            if (toasts) toasts.transient("copy-failed", "Couldn't copy. Select the address and copy it instead.", "error");
+            if (toasts) toasts.transient("copy-failed", "Couldn't copy. Select the address to copy it.", "error");
           },
         );
       });
@@ -745,7 +745,7 @@
         var empty = document.createElement("li");
         empty.className = "tz-empty";
         empty.setAttribute("role", "presentation");
-        empty.textContent = "No matching time zones"; // PRINTED OUTPUT: time zone dropdown / no results
+        empty.textContent = "No time zones found"; // PRINTED OUTPUT: time zone dropdown / no results
         list.appendChild(empty);
       }
       setActive(0);

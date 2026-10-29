@@ -86,9 +86,8 @@ export function DownloadContent({ span, zone }: DownloadProps) {
     <>
       {/* PRINTED OUTPUT: download / range and contents */}
       <p class="lede" id="download-range">
-        Busy times from {span}, {zone}.
+        Download my calendar for the range '{span}', in time zone: {zone}.
       </p>
-      <p>The file contains busy blocks only. No titles or other details.</p>
     </>
   );
 }
@@ -106,9 +105,9 @@ export function ErrorPanel({ code, ref, nowSec, contactHref }: FatalProps) {
     <section class="error-panel" role="alert" aria-labelledby="error-title">
       <ErrorIcon />
       {/* PRINTED OUTPUT: error panel / title and description */}
-      <h2 id="error-title">The calendar couldn't be loaded</h2>
+      <h2 id="error-title">Unable to load calendar</h2>
       <p>
-        Free and busy times can't be shown right now. Try again later, or <a href={contactHref}>contact me</a> directly.
+        A fatal error occurred.
       </p>
       <p class="debug">
         <code>{debugLine(code, ref, nowSec)}</code>

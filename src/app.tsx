@@ -156,7 +156,7 @@ export function createApp(deps: AppDeps = {}) {
     if (method !== "GET" && method !== "HEAD") {
       const links = new Links(zoneFrom(c));
       // PRINTED OUTPUT: 405 page / title and message
-      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only. It only accepts GET and HEAD requests.", homeHref: links.view({ view: "week" }) });
+      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only.", homeHref: links.view({ view: "week" }) });
       c.res = new Response(`${await page}`, {
         status: 405,
         headers: { "content-type": "text/html; charset=utf-8", allow: "GET, HEAD", "cache-control": "no-store" },
@@ -351,7 +351,7 @@ export function createApp(deps: AppDeps = {}) {
       const ref = reportFatal(err, c);
       const links = new Links(zone);
       // PRINTED OUTPUT: export error / title and message
-      const page = StatusPage({ title: "The export couldn't be made", message: `The calendar couldn't be loaded. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
+      const page = StatusPage({ title: "Unable to download", message: `Couldn't load calendar. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
       return c.html(page, err.status, { "cache-control": "no-store" });
     }
   });
@@ -383,7 +383,7 @@ export function createApp(deps: AppDeps = {}) {
   app.notFound((c) => {
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 404 page / title and message
-    const page = StatusPage({ title: "Page not found", message: "There's nothing at this address.", homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Page not found", message: "Incorrect address.", homeHref: links.view({ view: "week" }) });
     return c.html(page, 404, { "cache-control": "no-store" });
   });
 
@@ -392,7 +392,7 @@ export function createApp(deps: AppDeps = {}) {
     const ref = reportFatal(err, c);
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 500 page / title and message
-    const page = StatusPage({ title: "Something went wrong", message: `The page couldn't be shown. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Something went wrong", message: `An unkown error occurred. Try again. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
     return c.html(page, err.status, { "cache-control": "no-store" });
   });
 
