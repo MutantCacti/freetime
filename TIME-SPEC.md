@@ -77,7 +77,8 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 
 ## 3. Data
 
-- **`ICAL_URL`** is a Worker secret holding the secret iCal address of Maxence's calendar. It is never logged and never sent to the browser.
+- **`ICAL_URL`** is a Worker secret holding the secret iCal addresses of Maxence's calendars: one or more, separated by spaces, commas or new lines (at most 10). The addresses are never logged and never sent to the browser.
+- **Several calendars:** each is fetched and cached on its own, and their busy time is merged (overlaps count once). If any calendar has neither a fresh fetch nor a saved copy, the error panel shows for the whole page; drawing the others alone would show its busy time as free. The log names the failing calendar by its position in `ICAL_URL`, never by its address.
 - **Fetching and caching:**
   - fetch the feed on the server and cache it with the Cache API for about 5 minutes;
   - if a fetch fails, serve the last good copy with a "may be out of date" warning (§5.9);
@@ -417,6 +418,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
     - an empty calendar;
     - a transparent event, which is ignored.
   - **Feed failures:** a failure with a cached copy, and a failure without one.
+  - **Several calendars:** busy time from every feed is merged; each keeps its own saved copy; one feed failing with no copy shows the error panel, and no address reaches the page or the log.
   - **Privacy:** no event title in any HTML or `.ics` response.
   - **Views:**
     - Day, Week, Month and Range each render;

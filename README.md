@@ -2,7 +2,7 @@
 
 A read-only view of Maxence's free and busy time, in the style of when2meet. Visitors find a slot here, then get in touch through the contact panel. Nothing on the site sends, books or stores anything.
 
-It's one Cloudflare Worker with one secret (`ICAL_URL`) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`TIME-SPEC.md`](TIME-SPEC.md).
+It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`TIME-SPEC.md`](TIME-SPEC.md).
 
 - **Views:** Day, Week, Month and Range, plus `/help`, the contact panel (`/contact`) and a busy-only `.ics` export.
 - **Rendering:** HTML is rendered on the server, and every view, link and form works without JavaScript. Two small scripts in `public/js/` add the extras.
@@ -135,6 +135,8 @@ npx wrangler secret put ICAL_URL
 
 At the prompt, paste the calendar's **secret address in iCal format** (Google Calendar: Settings → the calendar → Integrate calendar). If Wrangler offers to create the Worker because it doesn't exist yet, accept. **(unverified)**
 
+**Several calendars:** paste all their secret addresses on the one line, separated by spaces (commas also work). Busy time from all of them is merged. The most is 10. To add or remove a calendar later, run `npx wrangler secret put ICAL_URL` again with the full new list; the secret is replaced, not appended to.
+
 ```bash
 npx wrangler deploy
 ```
@@ -183,17 +185,21 @@ Re-enable DNSSEC through Cloudflare (**DNS → Settings → Enable DNSSEC**), th
 
 ## Error codes
 
-When the calendar can't be drawn, the panel shows a code, a short random reference and the UTC time, for example `FEED_FETCH · ref 7K2Q9M · 2026-11-02 14:03Z`. The Worker log has the full details (message, stack, upstream status) under the same `ref`. Search for it in `wrangler tail` or Workers Logs. `ICAL_URL` is replaced by `[ICAL_URL]` in logs and never reaches the browser.
+When the calendar can't be drawn, the panel shows a code, a short random reference and the UTC time, for example `FEED_FETCH · ref 7K2Q9M · 2026-11-02 14:03Z`. The Worker log has the full details (message, stack, upstream status) under the same `ref`. Search for it in `wrangler tail` or Workers Logs. `ICAL_URL`, and each address in it, is replaced by `[ICAL_URL]` in logs and never reaches the browser.
+
+With several calendars, the log entry also has `feed`: the failing calendar's position in `ICAL_URL` (1 for the first). It's in the log only, never on the page.
 
 | Code | Meaning | Status |
 |---|---|---|
-| `FEED_FETCH` | The feed couldn't be reached: network error, timeout (10 s), or `ICAL_URL` not set. | 503 |
+| `FEED_FETCH` | A feed couldn't be reached: network error, timeout (10 s), `ICAL_URL` not set, or more than 10 addresses in it. | 503 |
 | `FEED_STATUS_<n>` | The feed answered with HTTP status `<n>`, for example `FEED_STATUS_403` (address revoked or wrong) or `FEED_STATUS_404`. The body is never shown or logged. | 503 |
 | `FEED_PARSE` | The feed arrived but isn't a usable iCalendar file. | 503 |
 | `RANGE_EXPAND` | Expanding recurrences for the requested period failed. | 500 |
 | `INTERNAL` | Anything else. | 500 |
 
-If a fetch fails but a good copy from the last 7 days is saved, the page still renders from it with a sticky warning ("Showing a saved copy. Times may be out of date."). The log gets a `warn` entry with the code.
+If a fetch fails but a good copy from the last 7 days is saved, the page still renders from it with a sticky warning ("Showing a saved copy. Times may be out of date."). The log gets a `warn` entry with the code. Each calendar has its own saved copy.
+
+With several calendars, **any one failing with no saved copy shows the error panel** for the whole page. Drawing the others alone would show that calendar's busy time as free.
 
 ## Changing settings
 
@@ -230,7 +236,7 @@ Anything not checked against current documentation is marked **(unverified)**.
 | `ical.js` for parsing and recurrence | `node-ical`, `rrule` + a hand parser | Handles RRULE, EXDATE, RDATE and RECURRENCE-ID in one place, and has no dependencies. It runs in Workers without Node shims. | Feeds with a recurrence case it gets wrong. |
 | Times resolved with `Intl` (TZID → instant), falling back to the feed's VTIMEZONE, then Europe/London for floating times | ical.js's own zone handling only | Google feeds use IANA TZIDs, which Intl knows exactly. Feeds that use VTIMEZONE-only names (Outlook) still work. | A feed whose VTIMEZONE disagrees with Intl. |
 | All-day and floating events are read in Europe/London (`DEFAULT_TZ`) | The viewer's zone | An all-day event is a day of Maxence's, not of the viewer's. The parser stays independent of the viewer. | Maxence living in another zone: change `DEFAULT_TZ`. |
-| Saved copy: one Cache API entry per feed, keyed by a hash of `ICAL_URL` and stamped with its fetch time. It counts as fresh for 5 minutes and is kept 7 days for failures. | Two entries; KV | The spec rules out storage, and the Cache API is a cache. One entry with a timestamp makes "fresh" testable with a fake clock. Keying by feed makes the wrong-secret check in §9 show the error panel. The Cache API is per data centre and doesn't work on `workers.dev` **(unverified)**, which is why the site runs on a custom domain. | Frequent "saved copy" warnings from cold data centres. |
+| Saved copy: one Cache API entry per feed, keyed by a hash of that feed's address and stamped with its fetch time. It counts as fresh for 5 minutes and is kept 7 days for failures. | Two entries; KV | The spec rules out storage, and the Cache API is a cache. One entry with a timestamp makes "fresh" testable with a fake clock. Keying by feed makes the wrong-secret check in §9 show the error panel. The Cache API is per data centre and doesn't work on `workers.dev` **(unverified)**, which is why the site runs on a custom domain. | Frequent "saved copy" warnings from cold data centres. |
 | The feed is validated before it's saved | Save whatever arrives | A broken upstream response never replaces a good copy. | — |
 | `FEED_*` → 503; `RANGE_EXPAND` and `INTERNAL` → 500. `FEED_STATUS_<n>` for any non-2xx. | `RANGE_EXPAND` as 503 | Matches "503 for feed problems, 500 for anything else". Expansion failing is a bug here, not the feed being down. | — |
 | `.ics` export as one `VEVENT` per merged busy block ("Busy"), clipped to the range, in UTC | One `VFREEBUSY` | Both are allowed. Google Calendar and Apple Calendar import `VEVENT`s, but many apps ignore `VFREEBUSY` on import **(unverified)**. | A request for VFREEBUSY. |
@@ -283,6 +289,7 @@ Anything not checked against current documentation is marked **(unverified)**.
 | No navigation animation | Slide in from the arrow's side | That would need the direction carried in the URL (or the `Referer`), which isn't worth it for a page load. | — |
 | Reduced motion: one rule sets every animation and transition duration to 0 (including `::backdrop`), and JS calls exit callbacks immediately | Per-element opt-outs | Nothing can be missed by a later addition. | — |
 | Drag to scroll with a mouse: Pointer Events on every `.cal-scroll`, mouse only (touch and pens already scroll natively), 5 px threshold before a press becomes a drag, pointer capture during the drag, the click after a drag swallowed, native link dragging blocked. On release it glides with the speed of the last few moves, slowing by 0.5% per ms (stops in about a second); no glide under reduced motion. A wheel or key stops a glide | A library; CSS-only `scroll-snap` | About 100 lines, no dependency. The threshold keeps clicks working: cells focus, Month days open. | Users finding the glide too long or short: change 0.995 in `glideStep`. |
+| Several calendars: `ICAL_URL` lists one or more addresses separated by spaces, commas or new lines; fetched in parallel, each with its own saved copy, busy time merged. Any feed with neither a fresh fetch nor a saved copy fails the whole page; a feed on its saved copy shows the usual warning. At most 10 (`MAX_FEEDS`) | Separate secrets (`ICAL_URL_2`, …); drawing whichever feeds loaded | One secret keeps the deploy step the same, and a single address works as before (same saved-copy key). A partial calendar would show a failed feed's busy time as free, which is the one thing this site must not do. The cap bounds subrequests per refresh. | Needing per-calendar settings (for example, one counted as tentative). |
 | Wall-clock rows on DST days: always 48 rows. Skipped half-hours are labelled "skipped by clock change", and the repeated hour folds into the 01:30 row. | 46 or 50 rows | Keeps columns aligned across a week, and the spec asks for 48 rows. | — |
 | Current-time line and slot positions use classes (`m0`–`m29`) rather than inline `top:` | Inline style | CSP. JS moves it by changing the class. | — |
 | Narrow menu is a native `popover` (works without JS); on wide screens CSS shows the same items inline | A `<details>` menu; JS menu | One element serves both widths, keeps the HTML order of §5.0.1, and needs no JS. | Needing to support browsers without popover (they show the items inline). |

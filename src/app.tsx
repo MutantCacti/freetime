@@ -4,11 +4,11 @@
 import { Hono, type Context } from "hono";
 import { clipIntervals, mergeIntervals } from "./busy";
 import { buildColumns, buildDayCells, periodBounds, periodOffsets } from "./calendar";
-import { DEFAULT_TZ } from "./config";
+import { DEFAULT_TZ, MAX_FEEDS } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
 import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
-import { fetchFromUrl, loadFeed } from "./feed";
+import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusyCached } from "./ical";
 import { Links } from "./links";
@@ -34,13 +34,14 @@ import { ErrorPanel, RangeForm } from "./views/panels";
 import { zoneLabel } from "./views/topbar";
 
 export interface Env {
+  /** One or more secret iCal addresses, separated by spaces, commas or new lines. */
   ICAL_URL?: string;
   ASSETS: Fetcher;
 }
 
 export interface AppDeps {
-  /** Fetch the upstream feed. Defaults to fetching env.ICAL_URL. */
-  fetchFeed?: (env: Env) => Promise<Response>;
+  /** Fetch one upstream feed (an address from ICAL_URL, and its 0-based index). Defaults to fetching it. */
+  fetchFeed?: (env: Env, url: string, index: number) => Promise<Response>;
   /** Current time in milliseconds. */
   now?: () => number;
   log?: LogFn;
@@ -93,28 +94,58 @@ export function createApp(deps: AppDeps = {}) {
 
   const nowSec = () => Math.floor(now() / 1000);
 
-  async function feedFor(c: AppContext) {
-    const fetchFeed = deps.fetchFeed ? () => deps.fetchFeed!(c.env) : fetchFromUrl(c.env.ICAL_URL);
-    // The saved copy belongs to one feed: a changed ICAL_URL never reuses another feed's copy.
-    const feedId = await sha256Prefix(c.env.ICAL_URL ?? "");
-    return loadFeed({
-      fetchFeed,
-      nowSec: nowSec(),
-      cacheKey: new URL(`${cachePath}/${feedId}`, c.req.url).toString(),
-      cache: caches.default,
-      waitUntil: (p) => {
+  /**
+   * Every feed in ICAL_URL, fetched in parallel, each with its own saved copy.
+   * If any feed has neither a fresh fetch nor a saved copy, the whole request
+   * fails: drawing the others alone would show that feed's busy time as free.
+   */
+  async function feedFor(c: AppContext): Promise<{ roots: FeedResult["root"][]; stale: FeedResult[] }> {
+    const urls = feedUrls(c.env.ICAL_URL);
+    if (urls.length > MAX_FEEDS) throw new AppError("FEED_FETCH", `ICAL_URL lists ${urls.length} feeds; the most is ${MAX_FEEDS}`);
+    const results = await Promise.all(
+      urls.map(async (url, i) => {
+        const fetchFeed = deps.fetchFeed ? () => deps.fetchFeed!(c.env, url, i) : fetchFromUrl(url);
+        // Each saved copy belongs to one feed address: a changed address never reuses another's copy.
+        const feedId = await sha256Prefix(url);
         try {
-          c.executionCtx.waitUntil(p);
-        } catch {
-          void p; // no execution context (some tests): let it run
+          const result = await loadFeed({
+            fetchFeed,
+            nowSec: nowSec(),
+            cacheKey: new URL(`${cachePath}/${feedId}`, c.req.url).toString(),
+            cache: caches.default,
+            waitUntil: (p) => {
+              try {
+                c.executionCtx.waitUntil(p);
+              } catch {
+                void p; // no execution context (some tests): let it run
+              }
+            },
+          });
+          if (result.problem && urls.length > 1) result.problem.feed = i + 1;
+          return result;
+        } catch (e) {
+          const err = toAppError(e);
+          if (urls.length > 1) err.feed = i + 1;
+          throw err;
         }
-      },
-    });
+      }),
+    );
+    return { roots: results.map((r) => r.root), stale: results.filter((r) => r.stale) };
+  }
+
+  /** Busy intervals from every feed, merged. */
+  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+    try {
+      return mergeIntervals(roots.flatMap((root) => expandBusyCached(root, from, to)));
+    } catch (err) {
+      throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
+    }
   }
 
   function reportFatal(err: AppError, c: AppContext): string {
     const ref = newRef();
-    logError(log, err, ref, [c.env.ICAL_URL]);
+    // Scrub the whole secret and each address in it.
+    logError(log, err, ref, [c.env.ICAL_URL, ...feedUrls(c.env.ICAL_URL)]);
     return ref;
   }
 
@@ -169,19 +200,16 @@ export function createApp(deps: AppDeps = {}) {
     let showColourBar = true;
     try {
       const feed = await feedFor(c);
-      if (feed.stale) {
+      if (feed.stale.length) {
         sticky.push({ id: "stale", kind: "sticky", severity: "warning", message: NOTICES.stale });
-        log({ level: "warn", code: feed.problem?.code, message: "serving saved copy of feed", upstreamStatus: feed.problem?.upstreamStatus });
+        for (const s of feed.stale) {
+          log({ level: "warn", code: s.problem?.code, message: "serving saved copy of feed", upstreamStatus: s.problem?.upstreamStatus, feed: s.problem?.feed });
+        }
       }
       const gridStart = addDays(period.start, -7);
       const gridEnd = addDays(period.end, 7);
       const bounds = periodBounds(gridStart, gridEnd, zone.zone);
-      let merged;
-      try {
-        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
-      } catch (err) {
-        throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
-      }
+      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
       body =
         period.layout === "columns" ? (
           <ColumnGrid columns={buildColumns(period, zone.zone, merged, t)} />
@@ -311,12 +339,7 @@ export function createApp(deps: AppDeps = {}) {
     const bounds = periodBounds(from, to, zone.zone);
     try {
       const feed = await feedFor(c);
-      let merged;
-      try {
-        merged = mergeIntervals(expandBusyCached(feed.root, bounds.from, bounds.to));
-      } catch (err) {
-        throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
-      }
+      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
       const ics = buildBusyIcs(clipIntervals(merged, bounds.from, bounds.to), nowSec());
       return c.body(ics, 200, {
         "content-type": "text/calendar; charset=utf-8",

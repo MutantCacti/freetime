@@ -21,5 +21,8 @@ export const FEED_FRESH_SECONDS = 300;
 /** How long the last good copy is kept for use when a fetch fails. */
 export const FEED_KEEP_SECONDS = 7 * 24 * 3600;
 
+/** Most calendar feeds ICAL_URL may list (each is one subrequest per refresh). */
+export const MAX_FEEDS = 10;
+
 /** Give up on the upstream feed after this long. */
 export const FEED_TIMEOUT_MS = 10_000;
