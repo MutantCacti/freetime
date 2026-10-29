@@ -78,10 +78,12 @@ There is no separate page. `/w2m` validates and parses the event, then redirects
 The goal is that copying into when2meet is cell-for-cell, with nothing to translate.
 
 - **Same grid as when2meet:**
-  - columns = the event's days, in when2meet's order, and only those: an event can skip days, so it's never a continuous Range from the first day to the last;
+  - the grid is the one when2meet shows **you**, built by the GET spec's grid rule (§2.2 there) from the event's slots and your zone:
+  - columns = the dates in your zone that hold at least one of the event's slots, and only those: an event can skip days, so it's never a continuous Range from the first day to the last. An evening event from another zone can gain a column (a New York 18:00–23:00 event on 3 days is 4 columns in London);
   - for a days-of-the-week event, you pick which week the columns fall in (default: the coming week). The toast has the week and previous/next links, carried by a `w2mweek=<Monday's date>` parameter;
-  - rows = **the event's slots exactly**: its parsed slot length, starting at its first slot and ending at its last. No hours outside the event are drawn, so row 1 here is row 1 there;
-  - time zone = **yours** (`tz` if pinned, else `dtz`), because when2meet reloads a dates event's grid in each visitor's own zone (`docs/W2M-GET-SPEC.md` §2.2). The selector still works. When your zone and the event's differ, the toast says so ("Event made in America/New_York; shown in your time zone, as when2meet shows it").
+  - rows = the distinct times of day of the event's slots in your zone, in clock order, at the parsed slot length. No hours outside the event are drawn, so row 1 here is row 1 there. Where the times jump (03:45 then 23:00), draw a visible break, as when2meet does;
+  - a position with no slot (when2meet's grey cell) is drawn as "not in the event", neither free nor busy;
+  - time zone = **yours** (`tz` if pinned, else `dtz`), because when2meet reloads a dates event's grid in each visitor's own zone (`docs/W2M-GET-SPEC.md` §2.2). The selector still works. When your zone and the event's differ, the toast says so ("Event made in America/New_York; shown in your time zone, as when2meet shows it"). A days-of-the-week event has no zone, so its rows are its own wall-clock times.
 - **Binary look**, so it reads like when2meet rather than like the heatmap:
   - each slot is **free** or **busy**: busy if it overlaps any busy block at all (`W2M_BUSY_THRESHOLD = 0`, a constant, so it can later allow, say, a 5-minute overlap);
   - free slots use one colour token, `--color-w2m-free`; busy slots use `--color-w2m-busy` plus a fixed hatch, so colour isn't the only signal;
@@ -114,6 +116,7 @@ Use the toast and error-panel rules from TIME-SPEC.md §5.9, with new codes:
 - URL validation: valid links (also with surrounding spaces or a trailing newline), lookalike hosts, other paths, `http`, credentials in the URL, redirects, overlong input.
 - Parsing both event fixtures into the expected structure; a mutated fixture gives `W2M_PARSE`, not a wrong grid. `missing.html` gives `W2M_NOT_FOUND`, `home.html` gives `W2M_PARSE`, and a page over the size limit gives `W2M_TOO_LARGE`.
 - Match mode draws only the event's own days (a fixture edited to skip a day has a gap, not an extra column), uses the viewer's zone, and for a days-of-the-week event follows `w2mweek`.
+- The grid rule reproduces `ny-grid.html` from `ny.html` in Europe/London exactly: 4 columns, 20 rows, the break after 03:45, and the same placeholder positions.
 - `/w2m` redirects to match mode with the right days and zone; rows are exactly the event's slots (count, length and start), for both 15- and 30-minute events and across a DST change.
 - Slot length is parsed, and uneven or contradictory slots give `W2M_PARSE`.
 - Binary look: a slot with any overlap is busy; no parula or dither classes appear in match mode; the key shows Free and Busy.
