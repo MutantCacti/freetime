@@ -1,5 +1,6 @@
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
+import { SITE_HOST } from "../config";
 
 export interface DocumentProps {
   title: string;
@@ -38,7 +39,7 @@ export function Document({ title, bodyClass, children }: DocumentProps) {
   );
 }
 
-/** "Help · time.mutantcacti.com." */
+/** "Help · <SITE_HOST>" */
 export function pageTitle(name: string): string {
-  return `${name} · time.mutantcacti.com`; // PRINTED OUTPUT: page title / template
+  return `${name} · ${SITE_HOST}`; // PRINTED OUTPUT: page title / template
 }

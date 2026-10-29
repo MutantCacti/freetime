@@ -3,6 +3,7 @@
 // UTC to the second, all-day events as all-day dates. Only start and end
 // times; titles and other details never leave the parser.
 
+import { SITE_HOST } from "./config";
 import type { Interval } from "./ical";
 
 export const EXPORT_FILENAME = "mutantcacti-busy.ics";
@@ -39,7 +40,7 @@ export function buildBusyIcs(events: Interval[], nowSec: number): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//time.mutantcacti.com//busy times//EN",
+    `PRODID:-//${SITE_HOST}//busy times//EN`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "X-WR-CALNAME:Maxence's free time", // PRINTED OUTPUT: ics / calendar name
@@ -50,7 +51,7 @@ export function buildBusyIcs(events: Interval[], nowSec: number): string {
       : [`DTSTART:${icsTime(ev.start)}`, `DTEND:${icsTime(ev.end)}`];
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${ev.start}-${ev.end}-${i}@time.mutantcacti.com`,
+      `UID:${ev.start}-${ev.end}-${i}@${SITE_HOST}`,
       `DTSTAMP:${icsTime(nowSec)}`,
       ...when,
       "SUMMARY:Busy", // PRINTED OUTPUT: ics / event summary

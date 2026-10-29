@@ -38,7 +38,7 @@ Trim leading and trailing whitespace (spaces, tabs, newlines: pasted links often
 | | |
 |---|---|
 | Method | `GET` of the rebuilt URL. No body, no cookies. |
-| Headers | `User-Agent: time.mutantcacti.com (+https://time.mutantcacti.com/help)`, `Accept: text/html` |
+| Headers | `User-Agent: freetime.mutantcacti.com (+https://freetime.mutantcacti.com/help)`, `Accept: text/html` |
 | Redirects | `redirect: "manual"`. Any 3xx is `W2M_STATUS_<n>`, so the server never follows when2meet to another address. |
 | Timeout | 10 s, the same as the feeds (`FEED_FETCH`). Over it is `W2M_FETCH`. |
 | Size limit | 8 MiB, read as a stream and abandoned past the limit: `W2M_TOO_LARGE`, not `W2M_PARSE`, so logs and the heartbeat can tell a huge event from a changed page. Each slot costs about 1 KB of HTML (two grid cells and two script lines), so a 62-day event at 15-minute slots for 24 hours a day (5,952 slots) is about 6 MB. The 160-slot test events are about 215 KB. |
@@ -239,7 +239,7 @@ Behaviour:
 
 Call the page's functions directly: `SelectFromHere({ target: a })`, `SelectToHere({ target: b })`, `SelectStop()`. This works the same on desktop and mobile and doesn't need the cells on screen. Synthetic `mousedown` on `a`, `mouseover` on `b` and `mouseup` on `document` are the fallback.
 
-Fill makes the grid match time. exactly: free slots marked available, busy slots cleared (Maxence's answer, 2026-10-29). For each column, split the slot cells, in row order, into runs of neighbouring rows that share **both** their current state and their target state, and drag only the runs where the two differ:
+Fill makes the grid match freetime. exactly: free slots marked available, busy slots cleared (Maxence's answer, 2026-10-29). For each column, split the slot cells, in row order, into runs of neighbouring rows that share **both** their current state and their target state, and drag only the runs where the two differ:
 
 - currently unavailable, should be free → drag; the start cell is unavailable, so `ChangeToAvailable` is true;
 - currently available, should be busy → drag; the start cell is available, so `ChangeToAvailable` is false.
@@ -291,10 +291,10 @@ via: 1.1 ….cloudfront.net (CloudFront)
 
 | Header | Seen | So |
 |---|---|---|
-| `Content-Security-Policy` | none | Nothing stops a bookmarklet from fetching `https://time.mutantcacti.com`. |
+| `Content-Security-Policy` | none | Nothing stops a bookmarklet from fetching `https://freetime.mutantcacti.com`. |
 | `X-Frame-Options`, `frame-ancestors` | none | The page can be framed (not needed by any phase). |
-| `Access-Control-Allow-Origin` | none | Irrelevant: the server-side fetch doesn't use CORS, and the bookmarklet's fetch needs CORS from time., not from when2meet. |
-| `Cache-Control` | `no-store, no-cache, must-revalidate`, plus an `Expires` in 1997 | Every request reaches when2meet's server (CloudFront `Miss`). time.'s own few-minute cache of the parsed structure (`W2M-SPEC.md` §1.2) is what saves refetches; it caches the result, never the page, so `no-store` is respected. |
+| `Access-Control-Allow-Origin` | none | Irrelevant: the server-side fetch doesn't use CORS, and the bookmarklet's fetch needs CORS from freetime., not from when2meet. |
+| `Cache-Control` | `no-store, no-cache, must-revalidate`, plus an `Expires` in 1997 | Every request reaches when2meet's server (CloudFront `Miss`). freetime.'s own few-minute cache of the parsed structure (`W2M-SPEC.md` §1.2) is what saves refetches; it caches the result, never the page, so `no-store` is respected. |
 | `set-cookie` | none | The GET needs no session. |
 
 Phase 2 still handles a blocked fetch as `W2M-SPEC.md` §2.2 says, in case a CSP is added later.

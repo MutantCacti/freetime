@@ -7,7 +7,7 @@ const app = makeApp();
 
 declare global {
   // eslint-disable-next-line no-var
-  var TimeHead: {
+  var SiteHead: {
     headRedirect(href: string, zone: string | null, o?: { narrow?: boolean; lastTarget?: string | null; state?: { replaced?: boolean } }): string | null;
     readTheme(storage: unknown): "light" | "dark" | null;
     writeTheme(storage: unknown, v: string): boolean;
@@ -136,10 +136,10 @@ describe("other zones follow the zone", () => {
 });
 
 describe("the head script", () => {
-  const head = globalThis.TimeHead;
+  const head = globalThis.SiteHead;
 
   it("adds a missing dtz and keeps everything else", () => {
-    const out = head.headRedirect("https://time.mutantcacti.com/?view=week&date=2026-11-02&tz=Asia/Tokyo#h08", "Europe/Paris", { state: {} });
+    const out = head.headRedirect("https://example.test/?view=week&date=2026-11-02&tz=Asia/Tokyo#h08", "Europe/Paris", { state: {} });
     const url = new URL(out!);
     expect(url.searchParams.get("dtz")).toBe("Europe/Paris");
     expect(url.searchParams.get("tz")).toBe("Asia/Tokyo");
@@ -148,13 +148,13 @@ describe("the head script", () => {
   });
 
   it("replaces a wrong dtz (a link from someone else's device)", () => {
-    const out = head.headRedirect("https://time.mutantcacti.com/?dtz=Pacific/Auckland&tz=Asia/Tokyo", "Europe/Paris", { state: {} });
+    const out = head.headRedirect("https://example.test/?dtz=Pacific/Auckland&tz=Asia/Tokyo", "Europe/Paris", { state: {} });
     expect(new URL(out!).searchParams.get("dtz")).toBe("Europe/Paris");
     expect(new URL(out!).searchParams.get("tz")).toBe("Asia/Tokyo");
   });
 
   it("does nothing when dtz is already right", () => {
-    expect(head.headRedirect("https://time.mutantcacti.com/?dtz=Europe/Paris", "Europe/Paris", { state: {} })).toBeNull();
+    expect(head.headRedirect("https://example.test/?dtz=Europe/Paris", "Europe/Paris", { state: {} })).toBeNull();
   });
 
   it("never replaces twice in one page view, or again on the page it just replaced to", () => {

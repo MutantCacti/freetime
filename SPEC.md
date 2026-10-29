@@ -1,4 +1,4 @@
-# time.mutantcacti.com — spec
+# freetime.mutantcacti.com — spec
 
 A read-only view of Maxence's free/busy time, in the style of when2meet. People use it to find a slot and then contact them.
 
@@ -10,7 +10,7 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 ## 1. Scope
 
 **In scope:**
-- one Worker serving `time.mutantcacti.com`;
+- one Worker serving `freetime.mutantcacti.com`;
 - the Day, Week, Month and Range views;
 - `/help`, the contact panel and the `.ics` export;
 - tests and the README.
@@ -365,7 +365,7 @@ The calendar rounds busy time into slots and steps for display; the file doesn't
 - Contact me has no other close control. Download keeps its Cancel button next to Download.
 
 **`/help`** is a template with these sections:
-- what time. is;
+- what freetime. is;
 - what it shows and what it hides (busy blocks only, never details);
 - how to read the colour and the dither;
 - how to use the views, the arrows, Today and Range;
@@ -403,7 +403,7 @@ External links get `rel="noopener noreferrer"`. Use no third-party scripts, and 
     1. **Before moving:** export or record every current DNS record at the existing provider (the apex site, existing subdomains, any MX, TXT and verification records); lower TTLs ahead of time; turn off DNSSEC at the registrar if it's on.
     2. **Add the zone** in Cloudflare and compare the imported records with the export, line by line. Keep existing records **DNS-only (grey cloud)** at first, so nothing else changes behaviour during the move.
     3. **Switch nameservers** at the registrar and wait for the zone to show as active. Check that the existing sites still resolve and serve as before.
-    4. **Deploy time.:** `npx wrangler login`, `npx wrangler secret put ICAL_URL`, then `npx wrangler deploy`, with a route `{ pattern = "time.mutantcacti.com", custom_domain = true }` and `workers_dev = false`.
+    4. **Deploy time.:** `npx wrangler login`, `npx wrangler secret put ICAL_URL`, then `npx wrangler deploy`, with a route `{ pattern = "freetime.mutantcacti.com", custom_domain = true }` and `workers_dev = false`.
     5. **Verify:** a short checklist (the page loads over HTTPS; headers are present; `/free-busy.ics` downloads as `mutantcacti-busy.ics`; POST returns 405; with the secret temporarily wrong, the error panel shows a code and reference, and the same reference appears in `wrangler tail`).
     6. **Optional afterwards:** re-enable DNSSEC through Cloudflare.
     7. **Rollback:** restore the old nameservers (the existing records are unchanged at the old provider), or delete the Worker's custom domain.

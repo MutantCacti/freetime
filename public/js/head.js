@@ -4,13 +4,13 @@
  *   2. sets `dtz` in the URL to the device's time zone (location.replace,
  *      at most once per page view), and on narrow screens with no `view`,
  *      asks for the Day view.
- * The pure functions are exposed on globalThis.TimeHead for tests.
+ * The pure functions are exposed on globalThis.SiteHead for tests.
  */
 (function () {
   "use strict";
 
-  var THEME_KEY = "time.theme";
-  var GUARD_KEY = "time.head-replaced-to";
+  var THEME_KEY = "site.theme";
+  var GUARD_KEY = "site.head-replaced-to";
   var NARROW_QUERY = "(max-width: 640px)";
 
   /** The stored theme, or null. Never throws, even if storage does. */
@@ -78,7 +78,7 @@
     headRedirect: headRedirect,
     deviceZone: deviceZone,
   };
-  globalThis.TimeHead = api;
+  globalThis.SiteHead = api;
 
   if (typeof document === "undefined" || typeof location === "undefined") return;
 
