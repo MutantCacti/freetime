@@ -78,9 +78,10 @@ There is no separate page. `/w2m` validates and parses the event, then redirects
 The goal is that copying into when2meet is cell-for-cell, with nothing to translate.
 
 - **Same grid as when2meet:**
-  - columns = the event's days, in when2meet's order (for a days-of-the-week event, the coming week, labelled as such in the toast);
+  - columns = the event's days, in when2meet's order, and only those: an event can skip days, so it's never a continuous Range from the first day to the last;
+  - for a days-of-the-week event, you pick which week the columns fall in (default: the coming week). The toast has the week and previous/next links, carried by a `w2mweek=<Monday's date>` parameter;
   - rows = **the event's slots exactly**: its parsed slot length, starting at its first slot and ending at its last. No hours outside the event are drawn, so row 1 here is row 1 there;
-  - time zone = the event's own zone, via `tz`, so the columns and rows line up with when2meet's. The selector still works, and changing it is noted in the toast ("Not the event's time zone").
+  - time zone = **yours** (`tz` if pinned, else `dtz`), because when2meet reloads a dates event's grid in each visitor's own zone (`docs/W2M-GET-SPEC.md` §2.2). The selector still works. When your zone and the event's differ, the toast says so ("Event made in America/New_York; shown in your time zone, as when2meet shows it").
 - **Binary look**, so it reads like when2meet rather than like the heatmap:
   - each slot is **free** or **busy**: busy if it overlaps any busy block at all (`W2M_BUSY_THRESHOLD = 0`, a constant, so it can later allow, say, a 5-minute overlap);
   - free slots use one colour token, `--color-w2m-free`; busy slots use `--color-w2m-busy` plus a fixed hatch, so colour isn't the only signal;
@@ -104,13 +105,15 @@ Use the toast and error-panel rules from TIME-SPEC.md §5.9, with new codes:
 | `W2M_FETCH` | when2meet couldn't be reached or timed out | 503 |
 | `W2M_STATUS_<n>` | when2meet answered with status `<n>` | 503 |
 | `W2M_NOT_FOUND` | The event doesn't exist | 404 |
+| `W2M_TOO_LARGE` | The event page is over the GET spec's size limit | 502 |
 | `W2M_PARSE` | The page loaded but didn't match the GET spec | 502 |
 
 `W2M_PARSE` is the one that means when2meet has changed. It must never show a partly parsed grid.
 
 ### 1.6 Tests
-- URL validation: valid links, lookalike hosts, other paths, `http`, credentials in the URL, redirects, overlong input.
-- Parsing both fixtures into the expected structure; a mutated fixture gives `W2M_PARSE`, not a wrong grid.
+- URL validation: valid links (also with surrounding spaces or a trailing newline), lookalike hosts, other paths, `http`, credentials in the URL, redirects, overlong input.
+- Parsing both event fixtures into the expected structure; a mutated fixture gives `W2M_PARSE`, not a wrong grid. `missing.html` gives `W2M_NOT_FOUND`, `home.html` gives `W2M_PARSE`, and a page over the size limit gives `W2M_TOO_LARGE`.
+- Match mode draws only the event's own days (a fixture edited to skip a day has a gap, not an extra column), uses the viewer's zone, and for a days-of-the-week event follows `w2mweek`.
 - `/w2m` redirects to match mode with the right days and zone; rows are exactly the event's slots (count, length and start), for both 15- and 30-minute events and across a DST change.
 - Slot length is parsed, and uneven or contradictory slots give `W2M_PARSE`.
 - Binary look: a slot with any overlap is busy; no parula or dither classes appear in match mode; the key shows Free and Busy.
@@ -126,9 +129,9 @@ Use the toast and error-panel rules from TIME-SPEC.md §5.9, with new codes:
 Run on a when2meet event page, after signing in with a name:
 1. Reads the event's grid in the page (per the GET spec).
 2. Fetches `https://time.mutantcacti.com/free-busy.ics?from=…&to=…` for that range.
-3. Works out which slots are free (no overlap with any busy block).
-4. Shows a small overlay on the when2meet page: "Mark 23 slots as available?" with **Fill** and **Cancel**.
-5. On **Fill**, selects those slots using the fill contract (the page's own functions if available, otherwise synthetic mouse or touch events).
+3. Works out which slots are free (no overlap with any busy block) and which are busy.
+4. Shows a small overlay on the when2meet page: "Mark 23 slots as available and clear 4?" with **Fill** and **Cancel**.
+5. On **Fill**, makes your grid match time. exactly, using the fill contract (the page's own functions if available, otherwise synthetic mouse or touch events): free slots become available, and busy slots you'd marked available are cleared.
 6. Leaves the page for Maxence to adjust by hand. It never presses any save or submit button the page has, beyond whatever the page saves on its own when slots change (the GET spec says which).
 
 ### 2.2 Rules
@@ -155,7 +158,7 @@ A short section, "Fill when2meet", with:
 ### 3.1 Scheduled self-check
 - A Cron Trigger every **6 hours** (a constant) runs:
   1. **Feed:** fetch and parse `ICAL_URL`, expand the next 2 weeks.
-  2. **when2meet:** fetch and parse both canary events (Maxence's phase 0 test events, stored as secrets `W2M_CANARY_DATES` and `W2M_CANARY_WEEKDAYS`), and check the result matches what's expected (for example, the number of days and slots).
+  2. **when2meet:** fetch and parse both canary events (Maxence's phase 0 test events, stored as secrets `W2M_CANARY_DATES` and `W2M_CANARY_WEEKDAYS`), and check the result matches what's expected (for example, the number of days and slots). If the parse reports `fill: "drift"` (the page lost a function or endpoint the bookmarklet uses, GET spec §3.9), that's a failure with code `W2M_FILL_DRIFT`.
   3. **Self:** request `/` and `/free-busy.ics` on the production hostname and check the status and content type.
 - **Success:** ping `HEARTBEAT_URL` (a secret; a healthchecks.io check URL).
 - **Failure:** ping `HEARTBEAT_URL + "/fail"` with a short body: the error code and reference only (for example `W2M_PARSE · ref 7K2Q9M`). No feed address, no page content.
