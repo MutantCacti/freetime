@@ -235,7 +235,7 @@ Paste a when2meet event link (top bar → **when2meet**, or `/w2m`) and the cale
 
 **The free/busy rule**, for anything that needs to reproduce it: a slot `[start, start + slot length)` is **busy** if the busy times from `/free-busy.ics` overlap it by more than `W2M_BUSY_THRESHOLD` seconds (0: any overlap at all), and **free** otherwise. Busy times from all feeds are merged first, so overlapping events never count twice.
 
-How the event is read, and what is never read (other people's names and availability), is in `docs/W2M-GET-SPEC.md`. Only the event's structure is cached, for `W2M_CACHE_SECONDS`. `npm run dev` serves the four test events from `test/fixtures/w2m/` instead of the network: try `/?w2m=10000002-Test2` or `/?w2m=10000004-Test4`.
+How the event is read, and what is never read (other people's names and availability), is in `docs/W2M-GET-SPEC.md`. Only the event's structure is cached, for `W2M_CACHE_SECONDS`. `npm run dev` serves the four test events from `test/fixtures/w2m/` under their placeholder links (try `/?w2m=10000002-Test2` or `/?w2m=10000004-Test4`), and fetches any other link from when2meet as production does.
 
 ## User-facing text
 
@@ -345,4 +345,4 @@ Anything not checked against current documentation is marked **(unverified)**.
 | A bad `w2m` parameter on `/` shows the error panel (`W2M_URL`, 400) with the normal controls, instead of silently showing the normal calendar | Ignore it | Fails visibly, like every other when2meet error. | — |
 | The match grid is a CSS grid with generated column classes (`.mgrid.c1`–`.c62`), one row per slot and a full-height gap row at a break | Inline styles; a table | The CSP has no `unsafe-inline`, and rows in DOM order keep the Week view's arrow-key navigation and the client's minute tick working unchanged. | — |
 | The top bar's two-row breakpoint moved from 1160 px to 1300 px | Shrink the pills | The extra **when2meet** item would otherwise squeeze the zone name between 1160 and 1300 px. | — |
-| `npm run dev` serves the when2meet fixtures instead of the network | Fetch the live site in dev | Dev stays offline and repeatable, and the session can't reach when2meet anyway. | — |
+| `npm run dev` serves the when2meet fixtures for their placeholder links, and fetches every other link live | Fixtures only; live only | The fixtures keep dev repeatable without a network, and real links behave as in production. (Fixtures only made every real link look missing.) | — |
