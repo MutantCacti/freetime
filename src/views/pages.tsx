@@ -228,8 +228,7 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
         {/* Template copy: Maxence will rewrite this page. Keep one marker per section. */}
         <section aria-labelledby="help-what">
           {/* PRINTED OUTPUT: help / what time. is */}
-          <H id="help-what">Maxence Morel Dierckx</H>
-          <p>See when I am free.</p>
+          <p>This site lets you see when Maxence Morel Dierckx is free.</p>
         </section>
 
         <section aria-labelledby="help-shows">
@@ -239,9 +238,9 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           <ul>
             <li>Change your view with the view buttons in the top left.</li>
             <li>Navigate with the 'Today' button and the arrows.</li>
-            <li>You can download an .ics file of the same data.</li>
-            <li>My public contact details are shown under 'Contact me'.</li>
-            <li>And you can, of course, change the theme.</li>
+            <li>Download a precise .ics file of my busy times.</li>
+            <li>See my public contact details are shown under 'Contact me'.</li>
+            <li>Change the theme in the top right.</li>
           </ul>
         </section>
 
@@ -250,7 +249,7 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           <H id="help-tz">Time zones</H>
           <p>All times are shown in your device's time zone unless:</p>
           <ul>
-            <li>The URL has parameter ?tz set, e.g. if someone shared it with you.</li>
+            <li>The URL has parameter `tz` set e.g. someone shared it with you.</li>
             <li>Your device's time zone can't be found, so we default to mine.</li>
           </ul>
         </section>
@@ -259,7 +258,7 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           {/* PRINTED OUTPUT: help / the .ics export */}
           <H id="help-ics">Download</H>
           <p>The exported .ics file contains all my events in UTC.</p>
-          <p>Events in the exported file may have more precise start/end times than what's shown here.</p>
+          <p>Events in the exported file may have more precise start/end times than those shown here.</p>
         </section>
 
         <section aria-labelledby="help-contact">
