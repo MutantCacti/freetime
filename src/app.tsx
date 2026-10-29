@@ -2,12 +2,12 @@
 // no cookies, no stored state beyond the Cache API copy of the feed.
 
 import { Hono, type Context } from "hono";
-import { clipIntervals, mergeIntervals } from "./busy";
-import { buildColumns, buildDayCells, periodBounds, periodOffsets } from "./calendar";
+import { mergeIntervals } from "./busy";
+import { buildColumns, buildDayCells, periodBounds } from "./calendar";
 import { DEFAULT_TZ, MAX_FEEDS } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
-import { buildBusyIcs, EXPORT_FILENAME } from "./export-ics";
+import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
 import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusyCached } from "./ical";
@@ -133,13 +133,18 @@ export function createApp(deps: AppDeps = {}) {
     return { roots: results.map((r) => r.root), stale: results.filter((r) => r.stale) };
   }
 
-  /** Busy intervals from every feed, merged. */
-  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+  /** Every busy event from every feed, unmerged. */
+  function eventsFrom(roots: FeedResult["root"][], from: number, to: number) {
     try {
-      return mergeIntervals(roots.flatMap((root) => expandBusyCached(root, from, to)));
+      return roots.flatMap((root) => expandBusyCached(root, from, to));
     } catch (err) {
       throw new AppError("RANGE_EXPAND", err instanceof Error ? err.message : "expansion failed", { cause: err });
     }
+  }
+
+  /** Busy intervals from every feed, merged, for drawing. */
+  function busyFrom(roots: FeedResult["root"][], from: number, to: number) {
+    return mergeIntervals(eventsFrom(roots, from, to));
   }
 
   function reportFatal(err: AppError, c: AppContext): string {
@@ -156,7 +161,7 @@ export function createApp(deps: AppDeps = {}) {
     if (method !== "GET" && method !== "HEAD") {
       const links = new Links(zoneFrom(c));
       // PRINTED OUTPUT: 405 page / title and message
-      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only. It only accepts GET and HEAD requests.", homeHref: links.view({ view: "week" }) });
+      const page = StatusPage({ title: "Method not allowed", message: "This site is read-only.", homeHref: links.view({ view: "week" }) });
       c.res = new Response(`${await page}`, {
         status: 405,
         headers: { "content-type": "text/html; charset=utf-8", allow: "GET, HEAD", "cache-control": "no-store" },
@@ -235,7 +240,7 @@ export function createApp(deps: AppDeps = {}) {
           tabs: tabTargets(period, todayDate),
           periodLabel: shortLabel,
           periodFull: label,
-          zone: zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)),
+          zone: zoneLabel(zone, offsetSeconds(t, zone.zone)),
           here,
           exportParams,
         }}
@@ -325,7 +330,7 @@ export function createApp(deps: AppDeps = {}) {
         current={zone.tz}
         deviceDefault={zone.dtz ?? DEFAULT_TZ}
         noDeviceZone={!zone.dtz}
-        summary={zoneLabel(zone, periodOffsets(period.start, period.end, zone.zone)).summary}
+        summary={zoneLabel(zone, offsetSeconds(t, zone.zone)).summary}
         groups={[...groups.entries()].map(([region, options]) => ({ region, options }))}
       />,
     );
@@ -339,8 +344,9 @@ export function createApp(deps: AppDeps = {}) {
     const bounds = periodBounds(from, to, zone.zone);
     try {
       const feed = await feedFor(c);
-      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
-      const ics = buildBusyIcs(clipIntervals(merged, bounds.from, bounds.to), nowSec());
+      // Every event as the feeds have it: not merged, not clipped, not rounded to slots.
+      const events = exportEvents(eventsFrom(feed.roots, bounds.from, bounds.to), bounds.from, bounds.to);
+      const ics = buildBusyIcs(events, nowSec());
       return c.body(ics, 200, {
         "content-type": "text/calendar; charset=utf-8",
         "content-disposition": `attachment; filename="${EXPORT_FILENAME}"`,
@@ -351,7 +357,7 @@ export function createApp(deps: AppDeps = {}) {
       const ref = reportFatal(err, c);
       const links = new Links(zone);
       // PRINTED OUTPUT: export error / title and message
-      const page = StatusPage({ title: "The export couldn't be made", message: `The calendar couldn't be loaded. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
+      const page = StatusPage({ title: "Unable to download", message: `Couldn't load calendar. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "range", from, to }) });
       return c.html(page, err.status, { "cache-control": "no-store" });
     }
   });
@@ -383,7 +389,7 @@ export function createApp(deps: AppDeps = {}) {
   app.notFound((c) => {
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 404 page / title and message
-    const page = StatusPage({ title: "Page not found", message: "There's nothing at this address.", homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Page not found", message: "Incorrect address.", homeHref: links.view({ view: "week" }) });
     return c.html(page, 404, { "cache-control": "no-store" });
   });
 
@@ -392,7 +398,7 @@ export function createApp(deps: AppDeps = {}) {
     const ref = reportFatal(err, c);
     const links = new Links(zoneFrom(c));
     // PRINTED OUTPUT: 500 page / title and message
-    const page = StatusPage({ title: "Something went wrong", message: `The page couldn't be shown. Try again later. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
+    const page = StatusPage({ title: "Something went wrong", message: `An unknown error occurred. Try again. (${err.code} · ref ${ref})`, homeHref: links.view({ view: "week" }) });
     return c.html(page, err.status, { "cache-control": "no-store" });
   });
 

@@ -6,6 +6,7 @@ import { ColourBar } from "./calendar";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
 import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
 import { Document, pageTitle } from "./layout";
+import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
 
 export interface CalendarPageProps {
@@ -151,22 +152,26 @@ export function TzPage(p: TzPageProps) {
     // PRINTED OUTPUT: time zone page / title
     <SubPage links={p.links} here={p.here} name="Time zone">
       {/* PRINTED OUTPUT: time zone page / current zone */}
-      <p class="lede">Now showing: {p.summary}</p>
+      <p class="lede">
+        Current time zone: <WithSeps text={p.summary} />
+      </p>
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
         {p.links.zoneParams.dtz ? <input type="hidden" name="dtz" value={p.links.zoneParams.dtz} /> : null}
-        {/* PRINTED OUTPUT: time zone page / field label */}
-        <label for="tz-select">Show times in</label>
-        <select name="tz" id="tz-select">
-          {/* PRINTED OUTPUT: time zone page / device default option */}
-          <option value="" selected={!p.current}>
-            Device default ({p.deviceDefault})
-          </option>
+        {/* PRINTED OUTPUT: time zone page / field accessible name */}
+        <select name="tz" id="tz-select" aria-label="Time zone">
+          {/* Device default only when the device's zone is known (JS has run); otherwise it's just London. */}
+          {p.noDeviceZone ? null : (
+            // PRINTED OUTPUT: time zone page / device default option
+            <option value="" selected={!p.current}>
+              Device default ({p.deviceDefault})
+            </option>
+          )}
           {p.groups.map((g) => (
             <optgroup label={g.region}>
               {g.options.map((o) => (
-                <option value={o.value} selected={o.value === p.current}>
+                <option value={o.value} selected={o.value === (p.current ?? (p.noDeviceZone ? p.deviceDefault : null))}>
                   {o.label}
                 </option>
               ))}
@@ -178,10 +183,6 @@ export function TzPage(p: TzPageProps) {
           Apply
         </button>
       </form>
-      {p.noDeviceZone ? (
-        // PRINTED OUTPUT: time zone page / no-JS note
-        <p class="note">Your device's time zone isn't known without JavaScript, so Device default means Europe/London.</p>
-      ) : null}
     </SubPage>
   );
 }
@@ -198,10 +199,12 @@ export function StatusPage({ title, message, homeHref }: StatusPageProps) {
     <Document title={pageTitle(title)} bodyClass="page-sub">
       <main class="sub-main" id="main">
         <h1>{title}</h1>
-        <p>{message}</p>
+        <p>
+          <WithSeps text={message} />
+        </p>
         <p>
           {/* PRINTED OUTPUT: status page / home link */}
-          <a href={homeHref}>Go to the calendar</a>
+          <a href={homeHref}>Go to calendar</a>
         </p>
       </main>
     </Document>
@@ -225,69 +228,44 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
         {/* Template copy: Maxence will rewrite this page. Keep one marker per section. */}
         <section aria-labelledby="help-what">
           {/* PRINTED OUTPUT: help / what time. is */}
-          <H id="help-what">What time. is</H>
-          <p>A read-only view of when Maxence is free or busy. Use it to find a time, then get in touch.</p>
+          <p>This site lets you see when Maxence Morel Dierckx is free.</p>
         </section>
 
         <section aria-labelledby="help-shows">
           {/* PRINTED OUTPUT: help / what it shows and what it hides */}
-          <H id="help-shows">What it shows and what it hides</H>
-          <p>It shows when time is busy. It never shows what the time is for.</p>
+          <H id="help-shows">How to use</H>
+          <p>You can view my calendar as a graph of how busy I am.</p>
           <ul>
-            <li>Shown: busy and free time.</li>
-            <li>Hidden: titles, descriptions, places and people.</li>
+            <li>Change your view with the view buttons in the top left.</li>
+            <li>Navigate with the 'Today' button and the arrows.</li>
+            <li>Download a precise .ics file of my busy times.</li>
+            <li>See my public contact details are shown under 'Contact me'.</li>
+            <li>Change the theme in the top right.</li>
           </ul>
-        </section>
-
-        <section aria-labelledby="help-colour">
-          {/* PRINTED OUTPUT: help / reading the colour and the dither */}
-          <H id="help-colour">Reading the colour and the dots</H>
-          <p>Each cell shows how much of its time is busy.</p>
-          <ul>
-            <li>Colour runs in nine steps, as on the colour bar: in light mode from yellow (free) to dark blue (busy), in dark mode the other way round.</li>
-            <li>Dots get denser as a cell gets busier. A fully busy cell still shows some colour between the dots.</li>
-            <li>Each cell's label gives the exact amount, for example "50% busy".</li>
-            <li>Time that has already passed is greyed out.</li>
-          </ul>
-        </section>
-
-        <section aria-labelledby="help-views">
-          {/* PRINTED OUTPUT: help / views, arrows, Today and Range */}
-          <H id="help-views">Views and navigation</H>
-          <dl>
-            <dt>Day, Week, Month</dt>
-            <dd>One day, one week (Monday to Sunday) or one month. In Month, select a day to open it.</dd>
-            <dt>Range</dt>
-            <dd>Choose a start and end date, then select Apply. Ranges can be up to {RANGE_CAP_DAYS} days.</dd>
-            <dt>‹ and ›</dt>
-            <dd>Move back or forward by one day, week, month or range.</dd>
-            <dt>Today</dt>
-            <dd>Go to the period that contains today.</dd>
-          </dl>
-          <p>Day and Week show the whole day. Scroll to see other hours.</p>
         </section>
 
         <section aria-labelledby="help-tz">
           {/* PRINTED OUTPUT: help / time zones */}
           <H id="help-tz">Time zones</H>
-          <p>Times are shown in your device's time zone, unless the link you opened pins one.</p>
+          <p>All times are shown in your device's time zone unless:</p>
           <ul>
-            <li>The button next to the months shows the zone. Select it to see the offset from UTC or to choose another zone.</li>
-            <li>"device" means your device's zone. "pinned" means a zone chosen in the link. "default" means Europe/London, used when your device's zone isn't known.</li>
+            <li>The URL has parameter `tz` set e.g. someone shared it with you.</li>
+            <li>Your device's time zone can't be found, so we default to mine.</li>
           </ul>
         </section>
 
         <section aria-labelledby="help-ics">
           {/* PRINTED OUTPUT: help / the .ics export */}
-          <H id="help-ics">The .ics export</H>
-          <p>Download .ics saves the busy times you are viewing as a calendar file. It contains busy blocks only, in UTC, so your calendar app shows them in your own zone.</p>
+          <H id="help-ics">Download</H>
+          <p>The exported .ics file contains all my events in UTC.</p>
+          <p>Events in the exported file may have more precise start/end times than those shown here.</p>
         </section>
 
         <section aria-labelledby="help-contact">
           {/* PRINTED OUTPUT: help / why there's no booking */}
-          <H id="help-contact">Why there's no booking button</H>
+          <H id="help-contact">Contact me</H>
           <p>
-            This site only shows time. Nothing here sends a message or books a slot. Check a time here, then use{" "}
+            I am always happy to be contacted by anyone for any reason. You can also just shoot me a text.{" "}
             <a href={links.href("/contact", here)} data-dialog="dlg-contact">
               Contact me
             </a>

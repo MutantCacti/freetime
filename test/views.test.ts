@@ -120,20 +120,20 @@ describe("Range validation", () => {
   it("swaps reversed dates", async () => {
     const html = await app.html("/?view=range&from=2026-11-10&to=2026-11-02");
     expect(html).toContain("Mon 2 – Tue 10 Nov 2026");
-    expect(html).toContain("Start and end were swapped.");
+    expect(html).toContain("Range start and end dates had to be swapped.");
   });
 
   it("caps ranges at 62 days", async () => {
     const html = await app.html("/?view=range&from=2026-11-01&to=2027-03-01");
     expect(html).toContain("Sun 1 Nov 2026 – Fri 1 Jan 2027");
-    expect(html).toContain("Range shortened to 62 days.");
+    expect(html).toContain("Range was shortened to 62 days.");
     expect(attr(tagWith(html, 'id="range-to"'), "value")).toBe("2027-01-01");
   });
 
   it.each(["from=2026-02-30&to=2026-03-02", "from=nope&to=2026-11-10", "from=2026-11-01"])("falls back to this week: %s", async (q) => {
     const html = await app.html(`/?view=range&${q}`);
     expect(html).toContain("Mon 2 – Sun 8 Nov 2026");
-    expect(html).toContain("Invalid date. Showing this week.");
+    expect(html).toContain("Invalid date.");
   });
 
   it("is a GET form with two date inputs and Apply, which keeps the zone", async () => {

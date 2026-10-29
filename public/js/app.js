@@ -563,7 +563,7 @@
           function () {
             show("fail");
             // PRINTED OUTPUT: contact / copy failed toast
-            if (toasts) toasts.transient("copy-failed", "Couldn't copy. Select the address and copy it instead.", "error");
+            if (toasts) toasts.transient("copy-failed", "Couldn't copy. Select the address to copy it.", "error");
           },
         );
       });
@@ -690,29 +690,40 @@
     function choose(tz) {
       location.href = urlWithTz(location.href, tz);
     }
-    function setActive(i) {
-      if (!options.length) return;
-      active = Math.max(0, Math.min(options.length - 1, i));
+    // Nothing is highlighted until the visitor types, uses the arrow keys or
+    // points at an option: "Device default" is just another option.
+    function setActive(i, fromPointer) {
+      active = options.length ? Math.max(-1, Math.min(options.length - 1, i)) : -1;
       options.forEach(function (o, k) {
         o.setAttribute("aria-selected", k === active ? "true" : "false");
       });
+      if (active < 0) {
+        input.removeAttribute("aria-activedescendant");
+        return;
+      }
       input.setAttribute("aria-activedescendant", options[active].id);
-      options[active].scrollIntoView({ block: "nearest" });
+      if (!fromPointer) options[active].scrollIntoView({ block: "nearest" });
     }
     function fill() {
       list.textContent = "";
       options = [];
       var now = new Date();
       var shown = filterZones(zones, input.value);
-      function option(value, text, off) {
+      function option(value, text, off, iconId) {
         var li = document.createElement("li");
+        var index = options.length;
         li.className = "tz-opt";
-        li.id = "tz-opt-" + options.length;
+        li.id = "tz-opt-" + index;
         li.setAttribute("role", "option");
         li.setAttribute("data-value", value);
         var name = document.createElement("span");
-        name.textContent = text;
+        name.className = "name";
+        if (iconId) name.appendChild(icon(iconId));
+        name.appendChild(document.createTextNode(text));
         li.appendChild(name);
+        li.addEventListener("mouseenter", function () {
+          setActive(index, true);
+        });
         if (off) {
           var o = document.createElement("span");
           o.className = "off";
@@ -745,10 +756,11 @@
         var empty = document.createElement("li");
         empty.className = "tz-empty";
         empty.setAttribute("role", "presentation");
-        empty.textContent = "No matching time zones"; // PRINTED OUTPUT: time zone dropdown / no results
+        empty.textContent = "No time zones found"; // PRINTED OUTPUT: time zone dropdown / no results
         list.appendChild(empty);
       }
-      setActive(0);
+      // Typing highlights the first match; an empty search highlights nothing.
+      setActive(input.value.trim() ? 0 : -1);
     }
     function open() {
       if (!zones) {
@@ -761,7 +773,18 @@
       if (summary) {
         var cur = document.createElement("p");
         cur.className = "tz-current";
-        cur.textContent = summary; // built and marked on the server (topbar / zoneLabel)
+        // Built and marked on the server (topbar / zoneLabel); each "·" gets the separator colour.
+        summary.split(" · ").forEach(function (part, i) {
+          if (i) {
+            var sep = document.createElement("span");
+            sep.className = "sep";
+            sep.textContent = "·";
+            cur.appendChild(document.createTextNode(" "));
+            cur.appendChild(sep);
+            cur.appendChild(document.createTextNode(" "));
+          }
+          cur.appendChild(document.createTextNode(part));
+        });
         pop.appendChild(cur);
       }
       input = document.createElement("input");
@@ -796,7 +819,7 @@
           setActive(active + 1);
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
-          setActive(active - 1);
+          setActive(Math.max(0, active - 1));
         } else if (e.key === "Enter") {
           e.preventDefault();
           if (options[active]) choose(options[active].getAttribute("data-value") || null);
@@ -923,11 +946,6 @@
         moveFocus(addDaysIso(focusDate, step));
       });
       pop.appendChild(grid);
-      var hint = document.createElement("p");
-      hint.className = "picker-hint";
-      // PRINTED OUTPUT: date picker / hint
-      hint.textContent = picking ? "Select the end date, then Apply." : "Select the start date.";
-      pop.appendChild(hint);
       var target = $("[data-date='" + focusDate + "']", grid);
       if (target) target.focus();
     }

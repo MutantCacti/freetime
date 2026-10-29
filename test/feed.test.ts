@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import broken from "./fixtures/broken.ics?raw";
-import { NOW, attr, decode, makeApp, tagWith } from "./helpers";
+import { NOW, attr, decode, makeApp, plain, tagWith } from "./helpers";
 import { AppError } from "../src/errors";
 
-const STALE = "Showing a saved copy. Times may be out of date.";
+const STALE = "Cached calendar may be out of date.";
 const DEBUG_LINE = /<code>(FEED_[A-Z0-9_]+|RANGE_EXPAND|INTERNAL) · ref ([2-9A-HJKMNP-TV-Z]{6}) · 2026-11-03 14:20Z<\/code>/;
 
 function failing(message = "connect ECONNREFUSED https://secret.example/private/feed.ics at /home/me/src/feed.ts:42 (ical.js)") {
@@ -57,9 +57,9 @@ describe("feed failures", () => {
     expect(res.status).toBe(503);
     const html = await res.text();
     expect(html).toContain("error-panel");
-    expect(decode(html)).toContain("The calendar couldn't be loaded");
+    expect(decode(html)).toContain("Unable to load calendar");
     expect(html).not.toContain('class="slot ');
-    const m = DEBUG_LINE.exec(html);
+    const m = DEBUG_LINE.exec(plain(html));
     expect(m?.[1]).toBe("FEED_FETCH");
     expectNoLeaks(html);
     // The same reference is in the log, with the full details.
@@ -76,7 +76,7 @@ describe("feed failures", () => {
     const res = await app.get("/");
     expect(res.status).toBe(503);
     const html = await res.text();
-    expect(DEBUG_LINE.exec(html)?.[1]).toBe("FEED_STATUS_403");
+    expect(DEBUG_LINE.exec(plain(html))?.[1]).toBe("FEED_STATUS_403");
     expectNoLeaks(html);
     expect(app.logs[0]?.upstreamStatus).toBe(403);
     expect(JSON.stringify(app.logs)).not.toContain("UPSTREAM-BODY");
@@ -85,7 +85,7 @@ describe("feed failures", () => {
   it("reports a feed that can't be parsed", async () => {
     const res = await makeApp({ feed: broken }).get("/");
     expect(res.status).toBe(503);
-    expect(DEBUG_LINE.exec(await res.text())?.[1]).toBe("FEED_PARSE");
+    expect(DEBUG_LINE.exec(plain(await res.text()))?.[1]).toBe("FEED_PARSE");
   });
 
   it("never logs or shows ICAL_URL", async () => {
@@ -123,6 +123,6 @@ describe("saved copy per feed", () => {
     });
     const res = await wrong.get("/");
     expect(res.status).toBe(503);
-    expect(await res.text()).toMatch(/<code>FEED_STATUS_404 · ref [A-Z0-9]{6} · 2026-11-03 15:20Z<\/code>/);
+    expect(plain(await res.text())).toMatch(/<code>FEED_STATUS_404 · ref [A-Z0-9]{6} · 2026-11-03 15:20Z<\/code>/);
   });
 });

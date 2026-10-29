@@ -71,7 +71,7 @@ describe("several calendar feeds", () => {
     const res = await app.get("/?view=week&date=2026-11-02&dtz=Europe/London");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Showing a saved copy. Times may be out of date.");
+    expect(html).toContain("Cached calendar may be out of date.");
     expect(cellClass(html, "Thu 5 Nov, 14:00–14:30, 100% busy")).not.toBeNull();
     const warn = app.logs.find((l) => l.level === "warn");
     expect(warn?.feed).toBe(2);
@@ -86,7 +86,7 @@ describe("several calendar feeds", () => {
     const res = await app.get("/?view=week&date=2026-11-02");
     expect(res.status).toBe(503);
     const html = decode(await res.text());
-    expect(html).toContain("The calendar couldn't be loaded");
+    expect(html).toContain("Unable to load calendar");
     expect(html).toMatch(/<code>FEED_STATUS_404 · ref [A-Z0-9]{6} · /);
     expect(html).not.toContain('class="slot ');
     const entry = app.logs.find((l) => l.level === "error");

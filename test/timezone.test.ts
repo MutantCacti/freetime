@@ -22,39 +22,32 @@ describe("the zone rule", () => {
     expect(resolveZone("Europe/Paris", "Europe/Paris").zone).toBe(resolveZone(undefined, "Europe/Paris").zone);
   });
 
-  it("is pinned only when tz is present and differs from dtz", () => {
-    expect(resolveZone("Asia/Tokyo", "Europe/Paris").mode).toBe("pinned");
-    expect(resolveZone("Asia/Tokyo", undefined).mode).toBe("pinned");
-    expect(resolveZone("Europe/Paris", "Europe/Paris").mode).toBe("device");
-    expect(resolveZone(undefined, "Europe/Paris").mode).toBe("device");
-    expect(resolveZone(undefined, undefined).mode).toBe("default");
-  });
-
-  it("shows only the zone name, with the offset and mode in the accessible name and summary", async () => {
+  it("shows only the zone name; the accessible name and summary add the offset, never a mode", async () => {
     const html = decode(await app.html("/?view=week&date=2026-11-02&dtz=Europe/Paris"));
     const button = tagWith(html, 'id="tz-button"');
     expect(html).toMatch(/<span class="tz-text">Europe\/Paris<\/span><svg[^>]*class="icon icon-chevron"/);
-    expect(attr(button, "aria-label")).toBe("Time zone: Europe/Paris, UTC plus 1, device default. Change");
-    expect(attr(button, "data-summary")).toBe("Europe/Paris · UTC+1 · device");
+    expect(attr(button, "aria-label")).toBe("Time zone: Europe/Paris, UTC plus 1. Change");
+    expect(attr(button, "data-summary")).toBe("Europe/Paris · UTC+1");
     const pinned = decode(await app.html("/?view=week&date=2026-11-02&dtz=Europe/Paris&tz=Asia/Kolkata"));
     expect(pinned).toContain('<span class="tz-text">Asia/Kolkata</span>');
-    expect(attr(tagWith(pinned, 'id="tz-button"'), "data-summary")).toBe("Asia/Kolkata · UTC+5:30 · pinned");
+    expect(attr(tagWith(pinned, 'id="tz-button"'), "data-summary")).toBe("Asia/Kolkata · UTC+5:30");
     const none = decode(await app.html("/?view=week&date=2026-11-02"));
-    expect(attr(tagWith(none, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0 · default");
-    expect(attr(tagWith(none, 'id="tz-button"'), "aria-label")).toContain("site default");
+    expect(attr(tagWith(none, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0");
+    for (const page of [html, pinned, none]) expect(page).not.toMatch(/\b(pinned|site default|device default)\b/);
   });
 
-  it("the label never shows offsets; the summary and accessible name show both across a DST change", async () => {
-    const autumn = decode(await app.html("/?view=week&date=2026-10-19"));
-    expect(autumn).toContain('<span class="tz-text">Europe/London</span>');
-    expect(attr(tagWith(autumn, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+1 → UTC+0 · default");
-    expect(attr(tagWith(autumn, 'id="tz-button"'), "aria-label")).toContain("UTC plus 1 changing to UTC plus 0");
-    const spring = decode(await app.html("/?view=week&date=2027-03-22"));
-    expect(attr(tagWith(spring, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0 → UTC+1 · default");
-    const plain = decode(await app.html("/?view=week&date=2026-10-26"));
-    expect(attr(tagWith(plain, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0 · default");
-    const ny = decode(await app.html("/?view=month&date=2026-11-01&dtz=America/New_York"));
-    expect(attr(tagWith(ny, 'id="tz-button"'), "data-summary")).toBe("America/New_York · UTC-4 → UTC-5 · device");
+  it("shows the offset in effect right now, whatever period is on screen", async () => {
+    // Now is 3 Nov 2026: London is on GMT, New York on EST.
+    for (const date of ["2026-10-19", "2026-07-06", "2027-03-22", "2026-11-02"]) {
+      const html = decode(await app.html(`/?view=week&date=${date}`));
+      expect(attr(tagWith(html, 'id="tz-button"'), "data-summary"), date).toBe("Europe/London · UTC+0");
+      expect(attr(tagWith(html, 'id="tz-button"'), "aria-label"), date).toBe("Time zone: Europe/London, UTC plus 0. Change");
+      expect(html).not.toContain("→ UTC");
+    }
+    const summer = makeApp({ now: Date.UTC(2026, 6, 1, 12) });
+    expect(attr(tagWith(decode(await summer.html("/?view=week&date=2026-11-02")), 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+1");
+    const ny = decode(await app.html("/?view=month&date=2026-10-01&dtz=America/New_York"));
+    expect(attr(tagWith(ny, 'id="tz-button"'), "data-summary")).toBe("America/New_York · UTC-5");
   });
 });
 
@@ -97,7 +90,7 @@ describe("links keep the zone", () => {
   it("an invalid tz falls back to dtz, with a notice, and is dropped from links", async () => {
     const html = decode(await app.html("/?view=week&date=2026-11-02&dtz=Europe/Paris&tz=Mars/Olympus_Mons"));
     expect(html).toContain('<span class="tz-text">Europe/Paris</span>');
-    expect(html).toContain("Unknown time zone. Showing device default.");
+    expect(html).toContain("Time zone unknown, using device default.");
     expect(tagWith(html, 'data-id="tz-unknown"')).toContain('data-kind="transient"');
     for (const href of internal(html)) expect(params(href).has("tz")).toBe(false);
   });
@@ -105,7 +98,7 @@ describe("links keep the zone", () => {
   it("an invalid dtz falls back to Europe/London", async () => {
     const html = decode(await app.html("/?view=week&date=2026-11-02&dtz=Not/AZone"));
     expect(html).toContain('<span class="tz-text">Europe/London</span>');
-    expect(attr(tagWith(html, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0 · default");
+    expect(attr(tagWith(html, 'id="tz-button"'), "data-summary")).toBe("Europe/London · UTC+0");
     for (const href of internal(html)) expect(params(href).has("dtz")).toBe(false);
   });
 });
@@ -184,19 +177,22 @@ describe("the head script", () => {
 });
 
 describe("/tz without JS", () => {
-  it("lists Device default first, then zones grouped by region", async () => {
+  it("lists Device default first when the device zone is known, then zones grouped by region", async () => {
     const html = decode(await app.html("/tz?view=week&date=2026-11-02&dtz=Europe/Paris"));
     const select = html.slice(html.indexOf("<select"), html.indexOf("</select>"));
-    expect(select).toMatch(/^<select name="tz" id="tz-select"><option value="" selected="">Device default \(Europe\/Paris\)<\/option><optgroup label="Africa">/);
+    expect(select).toMatch(/^<select name="tz" id="tz-select" aria-label="Time zone"><option value="" selected="">Device default \(Europe\/Paris\)<\/option><optgroup label="Africa">/);
     expect(select).toContain('<option value="Asia/Tokyo">Asia/Tokyo · UTC+9</option>');
-    expect(html).not.toContain("Without JavaScript");
-    expect(html).toContain("Now showing: Europe/Paris · UTC+1 · device");
+    expect(html).toContain("Current time zone: Europe/Paris · UTC+1");
   });
 
-  it("says Device default means Europe/London when the device zone isn't known", async () => {
+  it("without JS (no device zone), doesn't offer Device default and selects the zone in use", async () => {
     const html = decode(await app.html("/tz?view=week&date=2026-11-02"));
-    expect(html).toContain("Device default (Europe/London)");
-    expect(html).toContain("Device default means Europe/London");
+    expect(html).not.toContain("Device default");
+    expect(html).toContain('<option value="Europe/London" selected="">');
+    const pinned = decode(await app.html("/tz?view=week&date=2026-11-02&tz=Asia/Tokyo"));
+    expect(pinned).not.toContain("Device default");
+    expect(pinned).toContain('<option value="Asia/Tokyo" selected="">');
+    expect(pinned).not.toContain('<option value="Europe/London" selected="">');
   });
 
   it("sets tz and returns to the same view", async () => {

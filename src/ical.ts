@@ -3,12 +3,15 @@
 
 import ICAL from "ical.js";
 import { DEFAULT_TZ } from "./config";
+import { addDays, fromParts } from "./dates";
 import { canonicalZone, zonedToEpoch } from "./tz";
 
 /** A busy interval in UTC epoch seconds, end exclusive. */
 export interface Interval {
   start: number;
   end: number;
+  /** For an all-day event: its first day and the day after its last, as in the feed. Used by the export. */
+  allDay?: { from: string; to: string };
 }
 
 type Time = InstanceType<typeof ICAL.Time>;
@@ -35,10 +38,10 @@ function toEpoch(t: Time, tzid: string | null): number {
   if (t.isDate) return zonedToEpoch(t.year, t.month, t.day, 0, 0, DEFAULT_TZ);
   if (t.zone === ICAL.Timezone.utcTimezone) return Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second) / 1000;
   const intlZone = canonicalZone(tzid);
-  // Seconds are dropped for zoned times; calendars don't schedule to the second.
-  if (intlZone) return zonedToEpoch(t.year, t.month, t.day, t.hour, t.minute, intlZone);
+  // Keep the feed's own precision, to the second.
+  if (intlZone) return zonedToEpoch(t.year, t.month, t.day, t.hour, t.minute, intlZone, t.second);
   if (t.zone && t.zone !== ICAL.Timezone.localTimezone && t.zone.tzid !== "floating") return t.toUnixTime();
-  return zonedToEpoch(t.year, t.month, t.day, t.hour, t.minute, DEFAULT_TZ);
+  return zonedToEpoch(t.year, t.month, t.day, t.hour, t.minute, DEFAULT_TZ, t.second);
 }
 
 /** A time's wall-clock reading as if it were UTC: cheap, and within 14 hours of the real instant. */
@@ -66,6 +69,12 @@ function occurrenceInterval(item: Event, start: Time, end: Time, recurring: bool
   let e = toEpoch(end, endTz);
   if (start.isDate && e <= s) e = s + 86_400; // all-day with no DTEND
   if (e <= s) return null;
+  if (start.isDate) {
+    // The feed's own dates; with no usable DTEND, an all-day event is one day long.
+    const first = fromParts(start.year, start.month, start.day);
+    const after = end.isDate ? fromParts(end.year, end.month, end.day) : "";
+    return { start: s, end: e, allDay: { from: first, to: after > first ? after : addDays(first, 1) } };
+  }
   return { start: s, end: e };
 }
 

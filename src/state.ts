@@ -15,12 +15,9 @@ import { canonicalZone, dateAt } from "./tz";
 
 // ---------------------------------------------------------------- time zone
 
-export type ZoneMode = "pinned" | "device" | "default";
-
 export interface ZoneState {
   /** The zone everything is shown in. */
   zone: string;
-  mode: ZoneMode;
   /** Valid, canonical `tz`, or null. */
   tz: string | null;
   /** Valid, canonical `dtz`, or null. */
@@ -34,8 +31,7 @@ export function resolveZone(rawTz: string | undefined, rawDtz: string | undefine
   const tz = canonicalZone(rawTz);
   const dtz = canonicalZone(rawDtz);
   const zone = tz ?? dtz ?? DEFAULT_TZ;
-  const mode: ZoneMode = tz && tz !== dtz ? "pinned" : dtz ? "device" : "default";
-  return { zone, mode, tz, dtz, tzInvalid: Boolean(rawTz) && !tz };
+  return { zone, tz, dtz, tzInvalid: Boolean(rawTz) && !tz };
 }
 
 // ---------------------------------------------------------------- views
