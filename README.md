@@ -64,6 +64,8 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), 
 | `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
 | `test/` | Vitest suites, `.ics` fixtures and scrubbed when2meet pages (`test/fixtures/w2m/`) |
 | `docs/W2M-GET-SPEC.md` | How to read and fill a when2meet event (for the when2meet add-on) |
+| `src/w2m.ts` | when2meet links, fetching, parsing and the grid rule, per the GET spec |
+| `src/match.ts`, `src/views/match.tsx` | Match mode: the event's grid in your zone, free or busy, and its toast |
 
 ## Dependencies
 
@@ -196,7 +198,15 @@ With several calendars, the log entry also has `feed`: the failing calendar's po
 | `FEED_STATUS_<n>` | The feed answered with HTTP status `<n>`, for example `FEED_STATUS_403` (address revoked or wrong) or `FEED_STATUS_404`. The body is never shown or logged. | 503 |
 | `FEED_PARSE` | The feed arrived but isn't a usable iCalendar file. | 503 |
 | `RANGE_EXPAND` | Expanding recurrences for the requested period failed. | 500 |
+| `W2M_URL` | The when2meet link (or the `w2m` parameter) isn't an event link. From the form it's shown next to the field, and nothing is fetched. | 400 |
+| `W2M_FETCH` | when2meet couldn't be reached or timed out (10 s). | 503 |
+| `W2M_STATUS_<n>` | when2meet answered with status `<n>`, including any redirect. | 503 |
+| `W2M_NOT_FOUND` | The event doesn't exist. | 404 |
+| `W2M_TOO_LARGE` | The event page is over 8 MiB. | 502 |
+| `W2M_PARSE` | The page loaded but doesn't match `docs/W2M-GET-SPEC.md`: **when2meet has changed**. No grid is drawn. | 502 |
 | `INTERNAL` | Anything else. | 500 |
+
+when2meet errors are logged with the event id only, never the link or its code.
 
 If a fetch fails but a good copy from the last 7 days is saved, the page still renders from it with a sticky warning ("Showing a saved copy. Times may be out of date."). The log gets a `warn` entry with the code. Each calendar has its own saved copy.
 
@@ -217,6 +227,15 @@ With several calendars, **any one failing with no saved copy shows the error pan
 | **Dither range** | `DITHER_MIN_LEVEL` and `DITHER_MAX_LEVEL` in `src/dither.ts`. They're checked at start-up (`0 ≤ MIN < MAX ≤ 15`). |
 | **Default zone** (no JS, all-day and floating events) | `DEFAULT_TZ` in `src/config.ts`. |
 | **Feed freshness** | `FEED_FRESH_SECONDS` and `FEED_KEEP_SECONDS` in `src/config.ts`. |
+| **when2meet** | `W2M_TIMEOUT_MS`, `W2M_MAX_BYTES`, `W2M_CACHE_SECONDS` and `W2M_BUSY_THRESHOLD` in `src/config.ts`. Match-mode colours are `--color-w2m-free`, `--color-w2m-busy` and `--color-w2m-hatch` in `tokens.css`; the row height is `--match-row-h`. |
+
+## when2meet match mode
+
+Paste a when2meet event link (top bar → **when2meet**, or `/w2m`) and the calendar becomes that event's grid, as when2meet shows it to you: the same columns and rows in your time zone, each slot **free** or **busy**. The match is carried by `w2m=<id>-<code>` on every link; for a days-of-the-week event, `w2mweek=<Monday>` picks the week. Closing the toast ends it.
+
+**The free/busy rule**, for anything that needs to reproduce it: a slot `[start, start + slot length)` is **busy** if the busy times from `/free-busy.ics` overlap it by more than `W2M_BUSY_THRESHOLD` seconds (0: any overlap at all), and **free** otherwise. Busy times from all feeds are merged first, so overlapping events never count twice.
+
+How the event is read, and what is never read (other people's names and availability), is in `docs/W2M-GET-SPEC.md`. Only the event's structure is cached, for `W2M_CACHE_SECONDS`. `npm run dev` serves the four test events from `test/fixtures/w2m/` instead of the network: try `/?w2m=10000002-Test2` or `/?w2m=10000004-Test4`.
 
 ## User-facing text
 
@@ -321,3 +340,9 @@ Anything not checked against current documentation is marked **(unverified)**.
 | The bookmarklet waits for each save by watching resource timing (`PerformanceObserver`), not by wrapping `window.fetch` | Wrap `fetch`; poll `AvailableAtSlot` | Wrapping is invasive on someone else's page, and `AvailableAtSlot` changes before the save is even sent, so polling it shows nothing. | Resource timing not showing the page's saves (GET spec Q5). |
 | No `research/EVENTS.md`; fixtures use placeholder links (`10000001-Test1`, `10000002-Test2`) | Commit the test events' links | Anyone with an event's link can edit it, so the links stay out of the repo, as phase 3 does with canaries. | — |
 | Fixture privacy is checked structurally (no participants, empty availability, no third-party scripts) plus a deny-list that is empty for now | A deny-list only | No names were given, and nobody had signed in on the test events. The structural check also catches names that aren't on any list. | Maxence signing in on a test event: add the name to `DENY_NAMES`. |
+| Match mode replaces the view: no view tabs, Today or arrows while it's on, and the period label shows the event's dates | Keep the controls and let them change nothing; let them leave the match | The grid is the event's, so there's no period to move through. Closing the toast is the one way out, and it's always on screen (or in the indicator when minimised). | Visitors looking for the views mid-match. |
+| Days-of-the-week events default to the next Monday from today (today if it's a Monday) | This week | "The coming week" (W2M-SPEC §1.3) read as the next full week ahead; `w2mweek` and the toast's week links change it. | — |
+| A bad `w2m` parameter on `/` shows the error panel (`W2M_URL`, 400) with the normal controls, instead of silently showing the normal calendar | Ignore it | Fails visibly, like every other when2meet error. | — |
+| The match grid is a CSS grid with generated column classes (`.mgrid.c1`–`.c62`), one row per slot and a full-height gap row at a break | Inline styles; a table | The CSP has no `unsafe-inline`, and rows in DOM order keep the Week view's arrow-key navigation and the client's minute tick working unchanged. | — |
+| The top bar's two-row breakpoint moved from 1160 px to 1300 px | Shrink the pills | The extra **when2meet** item would otherwise squeeze the zone name between 1160 and 1300 px. | — |
+| `npm run dev` serves the when2meet fixtures instead of the network | Fetch the live site in dev | Dev stays offline and repeatable, and the session can't reach when2meet anyway. | — |

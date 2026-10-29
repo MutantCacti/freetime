@@ -10,7 +10,7 @@
 
   // ============================================================== toasts (pure)
 
-  var SEVERITY_RANK = { error: 0, warning: 1 };
+  var SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
 
   /**
    * The toast queue. Sticky toasts stay until their condition ends and can
@@ -46,7 +46,7 @@
         items.push({
           id: toast.id,
           kind: toast.kind === "sticky" ? "sticky" : "transient",
-          severity: toast.severity === "error" ? "error" : "warning",
+          severity: toast.severity === "error" || toast.severity === "info" ? toast.severity : "warning",
           message: toast.message || "",
           minimised: false,
           shownAt: null,
@@ -121,11 +121,12 @@
           return t.minimised;
         });
         if (!min.length) return null;
-        return min.some(function (t) {
-          return t.severity === "error";
-        })
-          ? "error"
-          : "warning";
+        var has = function (sev) {
+          return min.some(function (t) {
+            return t.severity === sev;
+          });
+        };
+        return has("error") ? "error" : has("warning") ? "warning" : "info";
       },
       all: function () {
         return items.slice();
@@ -353,6 +354,7 @@
       var wasHidden = indicator.hidden;
       indicator.hidden = !sev;
       indicator.classList.toggle("sev-error", sev === "error");
+      indicator.classList.toggle("sev-info", sev === "info");
       if (sev && wasHidden) play(indicator, "anim-in");
     }
 
@@ -603,6 +605,7 @@
       var now = Date.now() / 1000;
       var current = null;
       $$(".slot", scroller).forEach(function (s) {
+        if (!s.hasAttribute("data-s")) return; // when2meet match mode: a position with no slot
         var start = Number(s.getAttribute("data-s"));
         var end = Number(s.getAttribute("data-e"));
         var isNow = start <= now && now < end;

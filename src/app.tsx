@@ -5,13 +5,14 @@ import { Hono, type Context } from "hono";
 import { mergeIntervals } from "./busy";
 import { buildColumns, buildDayCells, periodBounds } from "./calendar";
 import { DEFAULT_TZ, MAX_FEEDS } from "./config";
-import { addDays } from "./dates";
+import { addDays, parseISODate } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
 import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
 import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import { expandBusyCached } from "./ical";
-import { Links } from "./links";
+import { Links, type MatchParams } from "./links";
+import { buildMatchGrid, matchShape, matchSummary, matchWeek, w2mProblem } from "./match";
 import {
   type Period,
   type ViewParams,
@@ -31,6 +32,9 @@ import { pageTitle } from "./views/layout";
 import { NOTICES, type Notice } from "./views/notices";
 import { CalendarPage, ContactPage, ExportPage, HelpPage, StatusPage, TzPage, type TzOption } from "./views/pages";
 import { ErrorPanel, RangeForm } from "./views/panels";
+import { MatchGrid } from "./views/match";
+import { W2mPage } from "./views/pages";
+import { type W2mEvent, type W2mFetch, type W2mRef, eventUrl, fetchW2mPage, loadEvent, parseW2mLink, parseW2mParam, refParam } from "./w2m";
 import { zoneLabel } from "./views/topbar";
 
 export interface Env {
@@ -47,6 +51,10 @@ export interface AppDeps {
   log?: LogFn;
   /** Cache API key path for the saved feed copy. */
   cachePath?: string;
+  /** Fetch one when2meet event page (the rebuilt address). Defaults to fetching it. */
+  fetchW2m?: W2mFetch;
+  /** Cache API key path for parsed when2meet events. */
+  w2mCachePath?: string;
 }
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -90,6 +98,7 @@ export function createApp(deps: AppDeps = {}) {
   const now = deps.now ?? (() => Date.now());
   const log = deps.log ?? consoleLog;
   const cachePath = deps.cachePath ?? "/__feed-cache/v1";
+  const w2mCachePath = deps.w2mCachePath ?? "/__w2m-cache/v1";
   const app = new Hono<{ Bindings: Env }>();
 
   const nowSec = () => Math.floor(now() / 1000);
@@ -147,6 +156,26 @@ export function createApp(deps: AppDeps = {}) {
     return mergeIntervals(eventsFrom(roots, from, to));
   }
 
+  function waitUntilFor(c: AppContext) {
+    return (p: Promise<unknown>) => {
+      try {
+        c.executionCtx.waitUntil(p);
+      } catch {
+        void p; // no execution context (some tests): let it run
+      }
+    };
+  }
+
+  /** A when2meet event's structure, cached for a few minutes. */
+  function eventFor(c: AppContext, ref: W2mRef): Promise<W2mEvent> {
+    return loadEvent(ref, {
+      fetchPage: deps.fetchW2m ?? fetchW2mPage,
+      cache: caches.default,
+      cacheBase: new URL(w2mCachePath, c.req.url).toString(),
+      waitUntil: waitUntilFor(c),
+    });
+  }
+
   function reportFatal(err: AppError, c: AppContext): string {
     const ref = newRef();
     // Scrub the whole secret and each address in it.
@@ -179,7 +208,7 @@ export function createApp(deps: AppDeps = {}) {
 
   app.get("/", async (c) => {
     const zone = zoneFrom(c);
-    const links = new Links(zone);
+    let links = new Links(zone);
     const t = nowSec();
     const todayDate = today(t, zone.zone);
     const period = periodFor(
@@ -188,8 +217,14 @@ export function createApp(deps: AppDeps = {}) {
     );
     const here = hereFrom(period);
     const nav = navigation(period, todayDate);
-    const label = period.view === "month" ? monthLabel(period.start) : period.view === "day" ? dayLong(period.start) : spanLabel(period.start, period.end);
-    const shortLabel = periodMonthsLabel(period.start, period.end);
+    let label = period.view === "month" ? monthLabel(period.start) : period.view === "day" ? dayLong(period.start) : spanLabel(period.start, period.end);
+    let shortLabel = periodMonthsLabel(period.start, period.end);
+    let exportSpan = { from: period.start, to: period.end };
+
+    // when2meet match mode (W2M-SPEC.md §1.3): `w2m` replaces the view with the event's grid.
+    const w2mRaw = c.req.query("w2m");
+    const matchRef = w2mRaw === undefined ? null : parseW2mParam(w2mRaw);
+    let inMatch = w2mRaw !== undefined;
 
     const sticky: Notice[] = [];
     const inline: Notice[] = [];
@@ -204,6 +239,43 @@ export function createApp(deps: AppDeps = {}) {
     let status = 200;
     let showColourBar = true;
     try {
+      if (inMatch) {
+        if (!matchRef) throw new AppError("W2M_URL", "w2m parameter isn't an event");
+        const event = await eventFor(c, matchRef);
+        const rawWeek = parseISODate(c.req.query("w2mweek"));
+        const week = matchWeek(rawWeek, todayDate);
+        const match: MatchParams = { w2m: refParam(matchRef) };
+        if (event.kind === "weekdays" && rawWeek) match.w2mweek = week;
+        links = links.withMatch(match);
+        const shape = matchShape(event, zone.zone, week);
+        const feed = await feedFor(c);
+        if (feed.stale.length) sticky.push({ id: "stale", kind: "sticky", severity: "warning", message: NOTICES.stale });
+        const grid = buildMatchGrid(shape, event.slotSeconds, zone.zone, busyFrom(feed.roots, shape.from, shape.to), t);
+        const first = grid.columns[0]!.date;
+        const last = grid.columns[grid.columns.length - 1]!.date;
+        label = spanLabel(first, last);
+        shortLabel = periodMonthsLabel(first, last);
+        exportSpan = { from: first, to: last };
+        const actions = [
+          // PRINTED OUTPUT: match mode / toast, open when2meet
+          { label: "Open when2meet", href: eventUrl(matchRef), external: true },
+        ];
+        if (event.kind === "weekdays") {
+          // PRINTED OUTPUT: match mode / toast, week links and their accessible names
+          actions.push({ label: "Previous week", href: links.withMatch({ ...match, w2mweek: addDays(week, -7) }).href("/"), external: false });
+          actions.push({ label: "Next week", href: links.withMatch({ ...match, w2mweek: addDays(week, 7) }).href("/"), external: false });
+        }
+        sticky.unshift({
+          id: "w2m",
+          kind: "sticky",
+          severity: "info",
+          message: matchSummary(event, grid, zone.zone, week),
+          actions,
+          // PRINTED OUTPUT: match mode / toast, close accessible name
+          close: { href: links.withMatch(null).view(here), label: "Close when2meet match" },
+        });
+        body = <MatchGrid grid={grid} />;
+      } else {
       const feed = await feedFor(c);
       if (feed.stale.length) {
         sticky.push({ id: "stale", kind: "sticky", severity: "warning", message: NOTICES.stale });
@@ -221,15 +293,27 @@ export function createApp(deps: AppDeps = {}) {
         ) : (
           <DayCellGrid weeks={buildDayCells(period, zone.zone, merged, t)} links={links} />
         );
+      }
     } catch (e) {
       const err = toAppError(e);
       const ref = reportFatal(err, c);
       status = err.status;
       showColourBar = false;
-      body = <ErrorPanel code={err.code} ref={ref} nowSec={t} contactHref={links.href("/contact", here)} />;
+      const w2mError = err.code.startsWith("W2M_");
+      if (w2mError) {
+        // The match failed: back to the normal calendar controls, without the match.
+        inMatch = false;
+        links = links.withMatch(null);
+      }
+      body = w2mError ? (
+        // PRINTED OUTPUT: match mode / error panel title
+        <ErrorPanel code={err.code} ref={ref} nowSec={t} contactHref={links.href("/contact", here)} title="Unable to match when2meet event" message={w2mProblem(err.code)} />
+      ) : (
+        <ErrorPanel code={err.code} ref={ref} nowSec={t} contactHref={links.href("/contact", here)} />
+      );
     }
 
-    const exportParams = { ...here, from: period.start, to: period.end } as Record<string, string>;
+    const exportParams = { ...here, from: exportSpan.from, to: exportSpan.to } as Record<string, string>;
     const page = (
       <CalendarPage
         title={pageTitle(label)}
@@ -243,16 +327,18 @@ export function createApp(deps: AppDeps = {}) {
           zone: zoneLabel(zone, offsetSeconds(t, zone.zone)),
           here,
           exportParams,
+          match: inMatch,
         }}
         sticky={sticky}
         inline={inline}
         rangeForm={period.view === "range" ? <RangeForm links={links} from={period.start} to={period.end} notices={rangeNotices} /> : null}
         body={body}
         showColourBar={showColourBar}
+        match={inMatch}
         download={{
-          span: exportSpanLabel(period.start, period.end),
+          span: exportSpanLabel(exportSpan.from, exportSpan.to),
           zone: zone.zone,
-          downloadHref: links.href("/free-busy.ics", { from: period.start, to: period.end }),
+          downloadHref: links.href("/free-busy.ics", { from: exportSpan.from, to: exportSpan.to }),
         }}
       />
     );
@@ -334,6 +420,38 @@ export function createApp(deps: AppDeps = {}) {
         groups={[...groups.entries()].map(([region, options]) => ({ region, options }))}
       />,
     );
+  });
+
+  // ------------------------------------------------------------ when2meet
+
+  app.get("/w2m", async (c) => {
+    const zone = zoneFrom(c);
+    const links = new Links(zone);
+    const here = backTo(c, zone);
+    const input = c.req.query("url");
+    if (input === undefined) {
+      c.header("cache-control", PAGE_CACHE);
+      return c.html(<W2mPage links={links} here={here} />);
+    }
+    // Validate before fetching: anything that isn't exactly an event link is refused without a request.
+    const ref = parseW2mLink(input);
+    if (!ref) {
+      // PRINTED OUTPUT: when2meet form / inline error
+      const page = <W2mPage links={links} here={here} value={input.slice(0, 200)} error="That isn't a when2meet event link." />;
+      return c.html(page, 400, { "cache-control": "no-store" });
+    }
+    try {
+      await eventFor(c, ref);
+    } catch (e) {
+      const err = toAppError(e);
+      const errRef = reportFatal(err, c);
+      const panel = (
+        // PRINTED OUTPUT: match mode / error panel title
+        <ErrorPanel code={err.code} ref={errRef} nowSec={nowSec()} contactHref={links.href("/contact", here)} title="Unable to match when2meet event" message={w2mProblem(err.code)} />
+      );
+      return c.html(<W2mPage links={links} here={here} value={input.trim()} panel={panel} />, err.status as 404, { "cache-control": "no-store" });
+    }
+    return c.redirect(links.withMatch({ w2m: refParam(ref) }).href("/"), 302);
   });
 
   // ------------------------------------------------------------ export

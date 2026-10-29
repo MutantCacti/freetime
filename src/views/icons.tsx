@@ -96,3 +96,10 @@ export const CalendarIcon = () => (
     <path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" />
   </svg>
 );
+
+export const InfoIcon = () => (
+  <svg {...base} class="icon icon-info">
+    <circle cx="8" cy="8" r="6.5" />
+    <path d="M8 7.2v4M8 4.6v.1" />
+  </svg>
+);

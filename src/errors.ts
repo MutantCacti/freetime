@@ -1,6 +1,17 @@
 // Error codes, references and the debug line shown on the fatal error panel.
 
-export type ErrorCode = "FEED_FETCH" | `FEED_STATUS_${number}` | "FEED_PARSE" | "RANGE_EXPAND" | "INTERNAL";
+export type ErrorCode =
+  | "FEED_FETCH"
+  | `FEED_STATUS_${number}`
+  | "FEED_PARSE"
+  | "RANGE_EXPAND"
+  | "W2M_URL"
+  | "W2M_FETCH"
+  | `W2M_STATUS_${number}`
+  | "W2M_NOT_FOUND"
+  | "W2M_TOO_LARGE"
+  | "W2M_PARSE"
+  | "INTERNAL";
 
 export class AppError extends Error {
   readonly code: ErrorCode;
@@ -14,9 +25,14 @@ export class AppError extends Error {
     this.upstreamStatus = options.upstreamStatus;
   }
 
-  /** 503 for feed problems, 500 for anything else. */
-  get status(): 500 | 503 {
-    return this.code.startsWith("FEED_") ? 503 : 500;
+  /** 503 for feed problems; the when2meet codes as in W2M-SPEC.md §1.5; 500 for anything else. */
+  get status(): 400 | 404 | 500 | 502 | 503 {
+    const c = this.code;
+    if (c.startsWith("FEED_") || c === "W2M_FETCH" || c.startsWith("W2M_STATUS_")) return 503;
+    if (c === "W2M_URL") return 400;
+    if (c === "W2M_NOT_FOUND") return 404;
+    if (c === "W2M_TOO_LARGE" || c === "W2M_PARSE") return 502;
+    return 500;
   }
 }
 

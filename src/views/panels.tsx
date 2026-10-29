@@ -98,24 +98,39 @@ export interface FatalProps {
   ref: string;
   nowSec: number;
   contactHref: string;
+  /** The heading; the calendar's by default. */
+  title?: string;
+  /** What went wrong, in plain words; "A fatal error occurred." by default. */
+  message?: string;
 }
 
 /** Replaces the calendar when it can't be drawn at all. */
-export function ErrorPanel({ code, ref, nowSec, contactHref }: FatalProps) {
+export function ErrorPanel({ code, ref, nowSec, title, message }: FatalProps) {
   return (
     <section class="error-panel" role="alert" aria-labelledby="error-title">
       <ErrorIcon />
       {/* PRINTED OUTPUT: error panel / title and description */}
-      <h2 id="error-title">Unable to load calendar</h2>
-      <p>
-        A fatal error occurred.
-      </p>
+      <h2 id="error-title">{title ?? "Unable to load calendar"}</h2>
+      <p>{message ?? "A fatal error occurred."}</p>
       <p class="debug">
         <code>
           <WithSeps text={debugLine(code, ref, nowSec)} />
         </code>
       </p>
     </section>
+  );
+}
+
+/** Hidden fields for what every link keeps (zone, match), so GET forms keep them too. */
+export function KeptFields({ links, except = [] }: { links: Links; except?: string[] }) {
+  return (
+    <>
+      {Object.entries(links.keptParams)
+        .filter(([k]) => !except.includes(k))
+        .map(([k, v]) => (
+          <input type="hidden" name={k} value={v} />
+        ))}
+    </>
   );
 }
 
@@ -128,7 +143,6 @@ export interface RangeFormProps {
 
 /** The Range picker: a GET form; JS adds the calendar popover. */
 export function RangeForm({ links, from, to, notices }: RangeFormProps) {
-  const zone = links.zoneParams;
   return (
     <form class="range-form" id="range-form" method="get" action={`/#${HOUR_ANCHOR}`}>
       <input type="hidden" name="view" value="range" />
@@ -143,8 +157,7 @@ export function RangeForm({ links, from, to, notices }: RangeFormProps) {
         <CalendarIcon />
       </button>
       <button type="submit" class="btn btn-primary">Apply</button>
-      {zone.tz ? <input type="hidden" name="tz" value={zone.tz} /> : null}
-      {zone.dtz ? <input type="hidden" name="dtz" value={zone.dtz} /> : null}
+      <KeptFields links={links} />
       {notices.map((n) => (
         <InlineNotice notice={n} />
       ))}

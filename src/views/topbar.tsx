@@ -1,7 +1,7 @@
 import type { Links } from "../links";
 import type { Navigation, Period, View, ViewParams, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, InfoIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
@@ -50,14 +50,16 @@ export interface TopBarProps {
   /** Current view parameters, carried to Help, Contact, Download and /tz. */
   here: ViewParams;
   exportParams: Record<string, string>;
+  /** when2meet match mode: the event's grid replaces the views, so the view controls are hidden. */
+  match?: boolean;
 }
 
 export function TopBar(p: TopBarProps) {
   const steps = STEP_NAMES[p.period.view];
   return (
-    <header class="topbar" id="topbar">
+    <header class={p.match ? "topbar is-match" : "topbar"} id="topbar">
       {/* Three groups: controls on the left, context in the centre, pages on the right. */}
-      <div class="tb-left">
+      <div class="tb-left" hidden={p.match}>
       {/* PRINTED OUTPUT: topbar / view tabs group name */}
       <nav class="tb-tabs" data-tb="tabs" aria-label="View">
         {(Object.keys(TAB_LABELS) as View[]).map((view) => (
@@ -101,6 +103,7 @@ export function TopBar(p: TopBarProps) {
       {/* PRINTED OUTPUT: topbar / notice indicator accessible name */}
       <button type="button" class="pill round tb-indicator" id="notice-indicator" data-tb="indicator" hidden aria-label="Show notice">
         <WarningIcon />
+        <InfoIcon />
       </button>
       {/* PRINTED OUTPUT: topbar / menu button accessible name */}
       <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
@@ -109,6 +112,8 @@ export function TopBar(p: TopBarProps) {
       <div class="tb-menu-items" id="tb-menu-items" popover="auto">
         {/* PRINTED OUTPUT: topbar / download, contact, help */}
         <a class="pill" data-tb="download" data-dialog="dlg-download" href={p.links.href("/export", p.exportParams)}>Download .ics</a>
+        {/* PRINTED OUTPUT: topbar / when2meet */}
+        <a class="pill" data-tb="w2m" data-dialog="dlg-w2m" href={p.links.href("/w2m", p.here)}>when2meet</a>
         <a class="pill" data-tb="contact" data-dialog="dlg-contact" href={p.links.href("/contact", p.here)}>Contact me</a>
         <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
       </div>

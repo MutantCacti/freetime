@@ -1,13 +1,26 @@
 import { RANGE_CAP_DAYS } from "../config";
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, ErrorIcon, MinimiseIcon, WarningIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, ErrorIcon, InfoIcon, MinimiseIcon, WarningIcon } from "./icons";
 
-export type Severity = "warning" | "error";
+export type Severity = "warning" | "error" | "info";
+
+/** A link shown under a toast's message, as a small pill. */
+export interface NoticeAction {
+  label: string;
+  href: string;
+  /** Opens in a new tab. */
+  external?: boolean;
+  /** Accessible name, when the label alone isn't enough. */
+  ariaLabel?: string;
+}
 
 export interface Notice {
   id: string;
   kind: "sticky" | "transient";
   severity: Severity;
   message: string;
+  actions?: NoticeAction[];
+  /** A sticky toast that can be closed: × is a link here, which ends its condition. */
+  close?: { href: string; label: string };
 }
 
 export const NOTICES = {
@@ -20,7 +33,7 @@ export const NOTICES = {
 } as const;
 
 function SeverityIcon({ severity }: { severity: Severity }) {
-  return severity === "error" ? <ErrorIcon /> : <WarningIcon />;
+  return severity === "error" ? <ErrorIcon /> : severity === "info" ? <InfoIcon /> : <WarningIcon />;
 }
 
 /**
@@ -39,11 +52,27 @@ export function NoticeLayer({ sticky }: { sticky: Notice[] }) {
           data-severity={n.severity}
         >
           <SeverityIcon severity={n.severity} />
-          <p class="toast-msg">{n.message}</p>
+          <div class="toast-body">
+            <p class="toast-msg">{n.message}</p>
+            {n.actions?.length ? (
+              <p class="toast-actions">
+                {n.actions.map((a) => (
+                  <a class="pill toast-action" href={a.href} aria-label={a.ariaLabel} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                    {a.label}
+                  </a>
+                ))}
+              </p>
+            ) : null}
+          </div>
           {/* PRINTED OUTPUT: notices / minimise button accessible name */}
           <button type="button" class="btn btn-icon toast-btn" data-action="minimise" hidden aria-label="Minimise notice">
             <MinimiseIcon />
           </button>
+          {n.close ? (
+            <a class="btn btn-icon toast-btn" href={n.close.href} aria-label={n.close.label}>
+              <CloseIcon />
+            </a>
+          ) : null}
         </div>
       ))}
     </div>

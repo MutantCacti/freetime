@@ -98,6 +98,9 @@ code { font-family: var(--font-mono); }
 }
 .tb-indicator { color: var(--color-warning); border-color: var(--color-warning); }
 .tb-indicator.sev-error { color: var(--color-error); border-color: var(--color-error); }
+.tb-indicator.sev-info { color: var(--color-info); border-color: var(--color-info); }
+.tb-indicator .icon-info, .tb-indicator.sev-info .icon-warning { display: none; }
+.tb-indicator.sev-info .icon-info { display: inline; }
 
 /* Dark by default: the toggle shows the sun (switch to light), the moon in light mode. See "motion". */
 
@@ -195,6 +198,34 @@ code { font-family: var(--font-mono); }
 .daycell.is-today { outline: 3px solid var(--color-now); outline-offset: -3px; z-index: 3; }
 .daycell.is-today::before { content: ""; position: absolute; inset: 3px; z-index: 3; box-shadow: 0 0 0 1px var(--color-bg); pointer-events: none; }
 
+/* ---------------------------------------------------------------- when2meet match mode */
+/* The event's grid: one row per slot, a rule on each hour, a gap row where the times jump. */
+.cols.mgrid { grid-template-rows: var(--head-h); grid-auto-rows: var(--match-row-h); }
+.mgrid .timelabel { display: flex; align-items: center; justify-content: flex-end; padding-top: 0; }
+.mgrid .slot.hour, .mgrid .timelabel.hour { border-top: 1px solid var(--color-border); }
+.mbreak { grid-column: 1 / -1; background: var(--color-bg); border-bottom: 1px solid var(--color-border); }
+.w2m-free { background-color: var(--color-w2m-free); }
+/* Busy is hatched too, so colour isn't the only signal. */
+.w2m-busy {
+  background-color: var(--color-w2m-busy);
+  background-image: repeating-linear-gradient(135deg, var(--color-w2m-hatch) 0 2px, transparent 2px 7px);
+}
+.w2m-none { background-color: var(--color-surface); }
+.w2m-key { justify-content: flex-start; gap: var(--space-3); }
+.w2m-key-item { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+.w2m-swatch { width: 1.25rem; height: 1.25rem; border: 1px solid var(--color-grid); border-radius: 3px; }
+.w2m-form { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+.w2m-form label { font-weight: 600; font-size: 0.9rem; }
+.w2m-row { display: flex; gap: var(--space-2); }
+.w2m-row input {
+  flex: 1; min-width: 0; min-height: 2.25rem; padding: 0.3rem 0.6rem;
+  font: inherit; font-size: 0.9rem; color: var(--color-text); background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: var(--radius);
+}
+.w2m-row input[aria-invalid="true"] { border-color: var(--color-error); }
+.field-error { margin: 0; color: var(--color-error); font-size: 0.9rem; }
+.page-sub .error-panel { margin-inline: 0; width: auto; }
+
 /* ---------------------------------------------------------------- colour bar */
 .colourbar {
   grid-area: bar; display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
@@ -219,6 +250,11 @@ code { font-family: var(--font-mono); }
 .toast > .icon, .toast-icon .icon { margin-top: 0.15rem; color: var(--color-warning); }
 .toast-error { border-left-color: var(--color-error); }
 .toast-error > .icon, .toast-error .toast-icon .icon { color: var(--color-error); }
+.toast-info { border-left-color: var(--color-info); }
+.toast-info > .icon, .toast-info .toast-icon .icon { color: var(--color-info); }
+.toast-body { flex: 1; min-width: 0; }
+.toast-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.toast-action { min-height: 1.85rem; padding: 0.15rem 0.75rem; font-size: 0.85rem; }
 .toast-msg { margin: 0; flex: 1; font-size: 0.9rem; padding-top: 0.05rem; }
 .toast-btn { width: 1.75rem; min-height: 1.75rem; font-size: 1rem; }
 
@@ -349,7 +385,7 @@ code { font-family: var(--font-mono); }
  * the pages (right); row 2 the controls. Achieved with CSS only; the HTML order
  * is the same at every width.
  */
-@media (max-width: 1160px) {
+@media (max-width: 1300px) {
   .topbar {
     grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "centre right" "left left";
     gap: var(--space-2) var(--space-2); padding: var(--space-2);
@@ -358,6 +394,8 @@ code { font-family: var(--font-mono); }
   /* The zone selector takes what row 1 has left and truncates, so nothing wraps. */
   .tz-button { flex: 0 1 auto; min-width: 0; justify-content: space-between; }
   .tb-right { gap: var(--space-1); }
+  /* Match mode has no view controls, so no second row. */
+  .topbar.is-match { grid-template-areas: "centre right"; }
 }
 
 /* ---------------------------------------------------------------- narrow screens */
@@ -385,6 +423,8 @@ code { font-family: var(--font-mono); }
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "bar" "cal"; }
   .colourbar { flex-direction: row-reverse; border-left: 0; border-bottom: 1px solid var(--color-divider); padding: 2px var(--space-2); }
   .cb-ramp { flex-direction: row; width: auto; height: 0.6rem; }
+  .w2m-key-item { flex-direction: row; }
+  .w2m-swatch { width: 0.9rem; height: 0.9rem; }
   .notices { left: var(--space-2); right: var(--space-2); width: auto; }
   .range-form { padding: var(--space-2); }
   .month { grid-auto-rows: minmax(3rem, 1fr); }

@@ -26,3 +26,18 @@ export const MAX_FEEDS = 10;
 
 /** Give up on the upstream feed after this long. */
 export const FEED_TIMEOUT_MS = 10_000;
+
+/** when2meet: give up on an event page after this long. */
+export const W2M_TIMEOUT_MS = 10_000;
+
+/** when2meet: largest event page read, in bytes (docs/W2M-GET-SPEC.md §2). */
+export const W2M_MAX_BYTES = 8 * 1024 * 1024;
+
+/** when2meet: how long a parsed event is reused before it's fetched again. */
+export const W2M_CACHE_SECONDS = 300;
+
+/**
+ * when2meet match mode: a slot is busy if busy time overlaps it by more than
+ * this many seconds. 0 means any overlap at all makes it busy.
+ */
+export const W2M_BUSY_THRESHOLD = 0;

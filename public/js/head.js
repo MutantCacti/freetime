@@ -37,7 +37,7 @@
    * The URL to replace the current one with, or null to stay.
    * - sets `dtz` to the device zone when it is missing or different;
    * - keeps every other parameter, including `tz`, and the hash;
-   * - on "/" with no `view` on a narrow screen, adds view=day;
+   * - on "/" with no `view` on a narrow screen, adds view=day (not in when2meet match mode, which has no views);
    * - never replaces twice: not again in this page view (state.replaced),
    *   and not when this page is the one the last replace went to (lastTarget):
    *   if that page still needs a change, replacing again would loop.
@@ -53,7 +53,7 @@
       url.searchParams.set("dtz", deviceZone);
       changed = true;
     }
-    if (o.narrow && url.pathname === "/" && !url.searchParams.has("view")) {
+    if (o.narrow && url.pathname === "/" && !url.searchParams.has("view") && !url.searchParams.has("w2m")) {
       url.searchParams.set("view", "day");
       changed = true;
     }

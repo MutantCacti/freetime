@@ -1,7 +1,7 @@
 // CSS generated from parula.ts and dither.ts, served at /css/calendar.css.
 // Generating it keeps the colour table and the dither levels in one place.
 
-import { RANGE_COLUMN_MAX_DAYS } from "./config";
+import { RANGE_CAP_DAYS, RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
@@ -53,6 +53,10 @@ export function calendarCss(): string {
   }
   for (let n = 1; n <= RANGE_COLUMN_MAX_DAYS; n++) {
     out.push(`.cols.n${n}{grid-template-columns:var(--time-col-w) repeat(${n},minmax(var(--day-col-min),1fr))}`);
+  }
+  // when2meet match mode: up to a Range's worth of columns.
+  for (let n = 1; n <= RANGE_CAP_DAYS; n++) {
+    out.push(`.mgrid.c${n}{grid-template-columns:var(--time-col-w) repeat(${n},minmax(var(--day-col-min),1fr))}`);
   }
   css = out.join("\n") + "\n";
   return css;

@@ -30,6 +30,12 @@
   --raw-grey-200: #dde1e7;
   --raw-ink-700: #2c313a;
 
+  /* when2meet match mode: free like when2meet's green, busy a dark or pale red. */
+  --raw-green-500: #3f9d5a;
+  --raw-green-600: #3d8c3d;
+  --raw-wine-800: #4a2a32;
+  --raw-rose-200: #f2cdd0;
+
   --font-sans: Figtree, system-ui, sans-serif;
   --font-mono: "Fragment Mono", ui-monospace, monospace;
   --radius: 6px;
@@ -57,6 +63,8 @@
   --time-col-w: 3.25rem;
   --day-col-min: 4.25rem;
   --head-h: 2rem;
+  /* when2meet match mode: one row per slot. */
+  --match-row-h: 1.5rem;
 }
 
 /* ---------------------------------------------------------------- semantic: dark (default) */
@@ -73,6 +81,10 @@
   --color-now: var(--raw-red-300);
   --color-warning: var(--raw-amber-300);
   --color-error: var(--raw-red-300);
+  --color-info: var(--raw-blue-300);
+  --color-w2m-free: var(--raw-green-500);
+  --color-w2m-busy: var(--raw-wine-800);
+  --color-w2m-hatch: color-mix(in srgb, var(--raw-ink-100) 30%, transparent);
   --color-on-accent: var(--raw-ink-950);
   --color-grid: var(--raw-grid);
   --color-divider: var(--raw-ink-700);
@@ -97,6 +109,10 @@
   --color-now: var(--raw-red-700);
   --color-warning: var(--raw-amber-700);
   --color-error: var(--raw-red-700);
+  --color-info: var(--raw-blue-700);
+  --color-w2m-free: var(--raw-green-600);
+  --color-w2m-busy: var(--raw-rose-200);
+  --color-w2m-hatch: color-mix(in srgb, var(--raw-red-700) 35%, transparent);
   --color-on-accent: var(--raw-white);
   /* Light: grid lines in the page colour (the inverted map keeps busy cells dark). */
   --color-grid: var(--raw-white);

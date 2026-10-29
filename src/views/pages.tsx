@@ -3,8 +3,9 @@ import { RANGE_CAP_DAYS } from "../config";
 import type { Links } from "../links";
 import type { ViewParams } from "../state";
 import { ColourBar } from "./calendar";
+import { W2mForm, W2mKey } from "./match";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
-import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
+import { ContactContent, DownloadContent, type DownloadProps, KeptFields } from "./panels";
 import { Document, pageTitle } from "./layout";
 import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
@@ -18,6 +19,8 @@ export interface CalendarPageProps {
   rangeForm: Child;
   body: Child;
   showColourBar: boolean;
+  /** Match mode: the Free/Busy key replaces the colour bar. */
+  match?: boolean;
   download: DownloadProps;
 }
 
@@ -37,7 +40,7 @@ export function CalendarPage(p: CalendarPageProps) {
           {p.rangeForm}
           {p.body}
         </section>
-        {p.showColourBar ? <ColourBar /> : null}
+        {p.showColourBar ? p.match ? <W2mKey /> : <ColourBar /> : null}
       </main>
       <dialog class="dialog" id="dlg-download" aria-labelledby="dlg-download-title">
         <div class="dialog-head">
@@ -56,6 +59,17 @@ export function CalendarPage(p: CalendarPageProps) {
               Cancel
             </button>
           </div>
+        </div>
+      </dialog>
+      <dialog class="dialog" id="dlg-w2m" aria-labelledby="dlg-w2m-title">
+        <div class="dialog-head">
+          {/* PRINTED OUTPUT: when2meet dialog / title */}
+          <h2 id="dlg-w2m-title">when2meet</h2>
+          <CloseControl />
+        </div>
+        <div class="dialog-body">
+          <W2mIntro />
+          <W2mForm links={p.topbar.links} idPrefix="dlg-w2m" autofocus />
         </div>
       </dialog>
       <dialog class="dialog" id="dlg-contact" aria-labelledby="dlg-contact-title">
@@ -129,6 +143,34 @@ export function ExportPage({ links, here, download }: { links: Links; here: View
   );
 }
 
+/** What the when2meet form does, used by /w2m and the dialog. */
+function W2mIntro() {
+  return (
+    // PRINTED OUTPUT: when2meet / introduction
+    <p class="lede">Paste a when2meet event link to see my calendar as that event's grid, so you can copy my free times across.</p>
+  );
+}
+
+export interface W2mPageProps {
+  links: Links;
+  here: ViewParams;
+  value?: string;
+  error?: string;
+  /** A fetch or parse failure, shown above the form. */
+  panel?: Child;
+}
+
+export function W2mPage(p: W2mPageProps) {
+  return (
+    // PRINTED OUTPUT: when2meet page / title
+    <SubPage links={p.links} here={p.here} name="when2meet">
+      {p.panel}
+      <W2mIntro />
+      <W2mForm links={p.links} value={p.value} error={p.error} idPrefix="w2m" />
+    </SubPage>
+  );
+}
+
 export interface TzOption {
   value: string;
   label: string;
@@ -158,7 +200,7 @@ export function TzPage(p: TzPageProps) {
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
-        {p.links.zoneParams.dtz ? <input type="hidden" name="dtz" value={p.links.zoneParams.dtz} /> : null}
+        <KeptFields links={p.links} except={["tz"]} />
         {/* PRINTED OUTPUT: time zone page / field accessible name */}
         <select name="tz" id="tz-select" aria-label="Time zone">
           {/* Device default only when the device's zone is known (JS has run); otherwise it's just London. */}
