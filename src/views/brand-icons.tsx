@@ -2,7 +2,7 @@
 // release: https://github.com/tabler/tabler-icons/tree/v3.2.0/icons/outline
 // Tabler Icons is MIT licensed, Copyright (c) 2020-2024 Paweł Kuna; the full
 // licence is in src/views/tabler-icons-LICENSE.txt. Only the path data is
-// used; the 24×24 viewBox and stroke settings match the originals.
+// used; the 24×24 viewBox matches the originals, and the stroke is thinner (1.5, not 2).
 
 const svgProps = {
   width: 18,
@@ -10,7 +10,7 @@ const svgProps = {
   viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",
-  "stroke-width": 2,
+  "stroke-width": 1.5,
   "stroke-linecap": "round",
   "stroke-linejoin": "round",
   "aria-hidden": "true",

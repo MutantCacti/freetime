@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { attr, decode, makeApp } from "./helpers";
 
 const app = makeApp();
-// Email first, LinkedIn last, the rest in their original order.
-const LINKS: [string, string, string][] = [
-  ["Email", "mutantcacti@gmail.com", "Copy email address"],
-  ["Discord", "https://discord.com/users/1129364853157535797", "Copy Discord link"],
-  ["GitHub", "https://github.com/MutantCacti", "Copy GitHub link"],
-  ["Instagram", "https://instagram.com/maxencetmd", "Copy Instagram link"],
-  ["LinkedIn", "https://www.linkedin.com/in/moreldierckxm/", "Copy LinkedIn link"],
+// In Maxence's order: [name for screen readers, link text, href, copied value, Copy's accessible name].
+const LINKS: [string, string, string, string, string][] = [
+  ["Email", "mutantcacti@gmail.com", "mailto:mutantcacti@gmail.com", "mutantcacti@gmail.com", "Copy email address"],
+  ["GitHub", "github.com/MutantCacti", "https://github.com/MutantCacti", "https://github.com/MutantCacti", "Copy GitHub link"],
+  ["Instagram", "instagram.com/maxencetmd", "https://instagram.com/maxencetmd", "https://instagram.com/maxencetmd", "Copy Instagram link"],
+  ["LinkedIn", "linkedin.com/in/moreldierckxm", "https://www.linkedin.com/in/moreldierckxm/", "https://www.linkedin.com/in/moreldierckxm/", "Copy LinkedIn link"],
+  ["Discord", "mutantcacti", "https://discord.com/users/1129364853157535797", "mutantcacti", "Copy Discord username"],
 ];
 
 describe("contact", () => {
@@ -18,9 +18,11 @@ describe("contact", () => {
     const rows = [...list.matchAll(/<div class="contact-row">(.*?)<\/div>/g)].map((m) => m[1]!);
     expect(rows.length).toBe(LINKS.length);
     rows.forEach((row, i) => {
-      const [name, value, label] = LINKS[i]!;
-      // Each medium has its Tabler icon, decorative, before its name.
-      expect(row).toMatch(new RegExp(`^<dt><svg [^>]*aria-hidden="true"[^>]*class="icon icon-brand">.*?</svg>${name}</dt>`));
+      const [name, text, href, value, label] = LINKS[i]!;
+      // Icon only: the Tabler icon is decorative, and the name is there for screen readers only.
+      expect(row).toMatch(new RegExp(`^<dt><svg [^>]*aria-hidden="true"[^>]*class="icon icon-brand">.*?</svg><span class="sr-only">${name}</span></dt>`));
+      expect(row).toContain(`<a href="${href}"`);
+      expect(row).toMatch(new RegExp(`>${text.replace(/[.]/g, "\\.")}</a>`));
       const button = /<button [^>]*class="btn copy-btn"[^>]*>/.exec(row)?.[0] ?? null;
       expect(attr(button, "data-copy")).toBe(value);
       expect(attr(button, "aria-label")).toBe(label);

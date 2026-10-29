@@ -3,7 +3,7 @@
 // layout (Month, long Range).
 
 import { busyFraction } from "./busy";
-import { SLOT_MINUTES } from "./config";
+import { DAY_END, DAY_START, SLOT_MINUTES } from "./config";
 import { type ISODate, addDays, eachDay, endOfMonth, parts, startOfMonth, startOfWeek } from "./dates";
 import { cellClasses } from "./dither";
 import { dayCellLabel, dayHeader, hhmm, slotLabel } from "./format";
@@ -11,7 +11,32 @@ import type { Interval } from "./ical";
 import { type Period, today } from "./state";
 import { startOfDay, zonedToEpoch } from "./tz";
 
-export const SLOTS_PER_DAY = (24 * 60) / SLOT_MINUTES;
+/** Checked at start-up: a bad day window fails loudly instead of drawing a wrong calendar. */
+export function checkDayWindow(start: number, end: number, slot: number): void {
+  const ok = Number.isInteger(start) && Number.isInteger(end) && 0 <= start && start < end && end <= 24 * 60 && start % slot === 0 && end % slot === 0;
+  if (!ok) throw new Error(`DAY_START (${start}) and DAY_END (${end}) must be multiples of ${slot} with 0 ≤ DAY_START < DAY_END ≤ 1440`);
+}
+checkDayWindow(DAY_START, DAY_END, SLOT_MINUTES);
+
+/** The day window: minutes after midnight, [start, end). */
+export interface DayWindow {
+  start: number;
+  end: number;
+}
+
+export const DAY_WINDOW: DayWindow = { start: DAY_START, end: DAY_END };
+
+/** The instant `minutes` after midnight on a date, in a zone; 1440 is the next day's midnight. */
+function minutesInto(date: ISODate, minutes: number, zone: string): number {
+  if (minutes === 24 * 60) return startOfDay(addDays(date, 1), zone);
+  const { y, m, d } = parts(date);
+  return zonedToEpoch(y, m, d, Math.floor(minutes / 60), minutes % 60, zone);
+}
+
+/** The day window of a date as instants: [start, end). */
+export function dayWindow(date: ISODate, zone: string, window: DayWindow = DAY_WINDOW): { start: number; end: number } {
+  return { start: minutesInto(date, window.start, zone), end: minutesInto(date, window.end, zone) };
+}
 
 export interface Slot {
   start: number;
@@ -49,21 +74,18 @@ export interface DayCell {
 /** Steps the current-time line can sit at within a slot. */
 export const NOW_STEPS = SLOT_MINUTES;
 
-export function buildColumns(period: Period, zone: string, merged: Interval[], nowSec: number): Column[] {
+export function buildColumns(period: Period, zone: string, merged: Interval[], nowSec: number, window: DayWindow = DAY_WINDOW): Column[] {
+  const rows = (window.end - window.start) / SLOT_MINUTES;
   const todayDate = today(nowSec, zone);
   return eachDay(period.start, period.end).map((date) => {
-    const { y, m, d } = parts(date);
     const isToday = date === todayDate;
     const slots: Slot[] = [];
-    for (let i = 0; i < SLOTS_PER_DAY; i++) {
-      const minutes = i * SLOT_MINUTES;
+    for (let i = 0; i < rows; i++) {
+      const minutes = window.start + i * SLOT_MINUTES;
       const hour = Math.floor(minutes / 60);
       const minute = minutes % 60;
-      const start = zonedToEpoch(y, m, d, hour, minute, zone);
-      const end =
-        i === SLOTS_PER_DAY - 1
-          ? startOfDay(addDays(date, 1), zone)
-          : zonedToEpoch(y, m, d, Math.floor((minutes + SLOT_MINUTES) / 60), (minutes + SLOT_MINUTES) % 60, zone);
+      const start = minutesInto(date, minutes, zone);
+      const end = minutesInto(date, minutes + SLOT_MINUTES, zone);
       const skipped = end <= start;
       const fraction = skipped ? 0 : busyFraction(merged, start, end);
       const endMinutes = minutes + SLOT_MINUTES;
@@ -87,7 +109,7 @@ export function buildColumns(period: Period, zone: string, merged: Interval[], n
 }
 
 /** Weeks of day cells, Monday first. Month view pads to whole weeks; so does Range. */
-export function buildDayCells(period: Period, zone: string, merged: Interval[], nowSec: number): DayCell[][] {
+export function buildDayCells(period: Period, zone: string, merged: Interval[], nowSec: number, window: DayWindow = DAY_WINDOW): DayCell[][] {
   const todayDate = today(nowSec, zone);
   const first = startOfWeek(period.view === "month" ? startOfMonth(period.start) : period.start);
   const lastDay = period.view === "month" ? endOfMonth(period.start) : period.end;
@@ -95,7 +117,9 @@ export function buildDayCells(period: Period, zone: string, merged: Interval[], 
   const weeks: DayCell[][] = [];
   let week: DayCell[] = [];
   for (const date of eachDay(first, last)) {
-    const fraction = busyFraction(merged, startOfDay(date, zone), startOfDay(addDays(date, 1), zone));
+    // Only the day window counts: a free night shouldn't make a busy day look free.
+    const { start, end } = dayWindow(date, zone, window);
+    const fraction = busyFraction(merged, start, end);
     week.push({
       date,
       dayOfMonth: parts(date).d,

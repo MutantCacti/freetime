@@ -17,17 +17,20 @@ interface Channel {
   /** What the link shows. */
   text: string;
   href: string;
-  /** What Copy puts on the clipboard: the address for email, the link otherwise. */
+  /** What Copy puts on the clipboard: the address for email, the username for Discord, the link otherwise. */
   copy: string;
+  /** What Copy's accessible name says it copies. */
+  copyWhat: string;
 }
 
 const CHANNELS: Channel[] = [
   // PRINTED OUTPUT: contact / channel names and handles
-  { name: "Email", Icon: MailIcon, text: EMAIL, href: `mailto:${EMAIL}`, copy: EMAIL },
-  { name: "Discord", Icon: DiscordIcon, text: "mutantcacti", href: "https://discord.com/users/1129364853157535797", copy: "https://discord.com/users/1129364853157535797" },
-  { name: "GitHub", Icon: GitHubIcon, text: "MutantCacti", href: "https://github.com/MutantCacti", copy: "https://github.com/MutantCacti" },
-  { name: "Instagram", Icon: InstagramIcon, text: "maxencetmd", href: "https://instagram.com/maxencetmd", copy: "https://instagram.com/maxencetmd" },
-  { name: "LinkedIn", Icon: LinkedInIcon, text: "moreldierckxm", href: "https://www.linkedin.com/in/moreldierckxm/", copy: "https://www.linkedin.com/in/moreldierckxm/" },
+  // Names are for screen readers only; the icons show them. Discord shows the username, which is also what Copy copies.
+  { name: "Email", Icon: MailIcon, text: EMAIL, href: `mailto:${EMAIL}`, copy: EMAIL, copyWhat: "email address" },
+  { name: "GitHub", Icon: GitHubIcon, text: "github.com/MutantCacti", href: "https://github.com/MutantCacti", copy: "https://github.com/MutantCacti", copyWhat: "GitHub link" },
+  { name: "Instagram", Icon: InstagramIcon, text: "instagram.com/maxencetmd", href: "https://instagram.com/maxencetmd", copy: "https://instagram.com/maxencetmd", copyWhat: "Instagram link" },
+  { name: "LinkedIn", Icon: LinkedInIcon, text: "linkedin.com/in/moreldierckxm", href: "https://www.linkedin.com/in/moreldierckxm/", copy: "https://www.linkedin.com/in/moreldierckxm/", copyWhat: "LinkedIn link" },
+  { name: "Discord", Icon: DiscordIcon, text: "mutantcacti", href: "https://discord.com/users/1129364853157535797", copy: "mutantcacti", copyWhat: "Discord username" },
 ];
 
 /** A Copy button that keeps its width as it shows "Copied" or "Copy failed". Hidden without JS. */
@@ -57,7 +60,7 @@ export function ContactContent() {
         <div class="contact-row">
           <dt>
             <c.Icon />
-            {c.name}
+            <span class="sr-only">{c.name}</span>
           </dt>
           <dd>
             <a href={c.href} {...(c.href.startsWith("http") ? EXTERNAL : {})}>
@@ -65,8 +68,8 @@ export function ContactContent() {
             </a>
           </dd>
           <dd class="copy-cell">
-            {/* PRINTED OUTPUT: contact / copy target names, for example "Copy Discord link" */}
-            <CopyButton value={c.copy} what={c.name === "Email" ? "email address" : `${c.name} link`} />
+            {/* PRINTED OUTPUT: contact / copy target names, for example "Copy GitHub link" */}
+            <CopyButton value={c.copy} what={c.copyWhat} />
           </dd>
         </div>
       ))}

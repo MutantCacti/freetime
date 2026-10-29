@@ -578,7 +578,7 @@
     var head = $(".colhead", scroller);
     var header = head ? head.offsetHeight : 0;
     var line = document.getElementById("now-line");
-    var anchor = document.getElementById(scroller.getAttribute("data-start-anchor") || "h08");
+    var anchor = document.getElementById(scroller.getAttribute("data-start-anchor") || "");
     var lineY = null;
     if (line) {
       var slot = line.parentElement;

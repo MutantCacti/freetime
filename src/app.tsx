@@ -3,8 +3,8 @@
 
 import { Hono, type Context } from "hono";
 import { mergeIntervals } from "./busy";
-import { buildColumns, buildDayCells, periodBounds } from "./calendar";
-import { DEFAULT_TZ, MAX_FEEDS } from "./config";
+import { type DayWindow, DAY_WINDOW, buildColumns, buildDayCells, checkDayWindow, periodBounds } from "./calendar";
+import { DEFAULT_TZ, MAX_FEEDS, SLOT_MINUTES } from "./config";
 import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
 import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
@@ -47,6 +47,8 @@ export interface AppDeps {
   log?: LogFn;
   /** Cache API key path for the saved feed copy. */
   cachePath?: string;
+  /** The day window, in minutes after midnight. Defaults to DAY_START and DAY_END. */
+  dayWindow?: DayWindow;
 }
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -90,6 +92,8 @@ export function createApp(deps: AppDeps = {}) {
   const now = deps.now ?? (() => Date.now());
   const log = deps.log ?? consoleLog;
   const cachePath = deps.cachePath ?? "/__feed-cache/v1";
+  const window = deps.dayWindow ?? DAY_WINDOW;
+  checkDayWindow(window.start, window.end, SLOT_MINUTES);
   const app = new Hono<{ Bindings: Env }>();
 
   const nowSec = () => Math.floor(now() / 1000);
@@ -217,9 +221,9 @@ export function createApp(deps: AppDeps = {}) {
       const merged = busyFrom(feed.roots, bounds.from, bounds.to);
       body =
         period.layout === "columns" ? (
-          <ColumnGrid columns={buildColumns(period, zone.zone, merged, t)} />
+          <ColumnGrid columns={buildColumns(period, zone.zone, merged, t, window)} />
         ) : (
-          <DayCellGrid weeks={buildDayCells(period, zone.zone, merged, t)} links={links} />
+          <DayCellGrid weeks={buildDayCells(period, zone.zone, merged, t, window)} links={links} />
         );
     } catch (e) {
       const err = toAppError(e);

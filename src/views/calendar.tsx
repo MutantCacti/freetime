@@ -1,12 +1,12 @@
 import type { Column, DayCell } from "../calendar";
-import { HOUR_ANCHOR } from "../links";
+import { HOUR_ANCHOR, timeAnchor } from "../links";
 import type { Links } from "../links";
 import { stepClasses } from "../dither";
 import { LEVELS } from "../levels";
 import { hhmm, weekdayShort } from "../format";
 import { addDays, startOfWeek } from "../dates";
 
-/** Day, Week and short Range: columns of 48 half-hour rows in a scrolling window. */
+/** Day, Week and short Range: columns of half-hour rows, one per slot of the day window, in a scrolling window. */
 export function ColumnGrid({ columns }: { columns: Column[] }) {
   const rows = columns[0]?.slots.length ?? 0;
   return (
@@ -21,11 +21,12 @@ export function ColumnGrid({ columns }: { columns: Column[] }) {
         {Array.from({ length: rows }, (_, r) => {
           const first = columns[0]!.slots[r]!;
           const fullHour = first.minute === 0;
-          const id = fullHour ? `h${String(first.hour).padStart(2, "0")}` : undefined;
+          // Labelled on the hour, and on the first row even when the day window starts at a half hour.
+          const labelled = fullHour || r === 0;
           return (
             <>
-              <div class={fullHour ? "timelabel hour" : "timelabel"} id={id}>
-                {fullHour ? hhmm(first.hour, 0) : ""}
+              <div class={fullHour ? "timelabel hour" : "timelabel"} id={labelled ? timeAnchor(first.hour * 60 + first.minute) : undefined}>
+                {labelled ? hhmm(first.hour, first.minute) : ""}
               </div>
               {columns.map((col) => {
                 const s = col.slots[r]!;

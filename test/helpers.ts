@@ -35,6 +35,8 @@ export function makeApp(options: { feed?: FeedSource; now?: number; env?: Partia
     now: () => now,
     log: (entry) => logs.push(entry),
     cachePath: `/__feed-cache/test-${++counter}-${Math.random().toString(36).slice(2)}`,
+    // Whole days, so midnight and clock-change behaviour stay covered; test/day-window.test.ts covers the real window.
+    dayWindow: { start: 0, end: 24 * 60 },
     ...options.deps,
   });
   const testEnv = { ...env, ...options.env } as Env;
