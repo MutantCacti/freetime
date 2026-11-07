@@ -1,8 +1,8 @@
 # freetime.mutantcacti.com — accounts spec
 
-Accounts let anyone sign in, connect their own calendar, and find a time with other people in a shared **space**: when2meet, built on everyone's real calendars instead of hand-painted grids.
+Accounts let anyone sign up, show their free time on a profile, add friends, and find a time together in a shared **space**: when2meet, built on everyone's real calendars instead of hand-painted grids. Think Steam profiles and friends, but simpler: a profile is **public** or **private**, and friends always see it as public.
 
-**Accounts are always a different Worker.** The site in `SPEC.md` (Maxence's calendar) stays exactly as it is: one Worker, read-only, no storage, no cookies, no login. Everything here runs in a second Worker, the **accounts Worker**, with its own code entry point, its own bindings and its own rules. The two share rendering code from `src/`, never state. Nothing in this file changes what `SPEC.md` allows the main Worker to do.
+**Accounts are always a different Worker.** The site in `SPEC.md` (Maxence's calendar) stays exactly as it is: one Worker, read-only, no storage, no cookies, no login. Everything here runs in a second Worker, the **accounts Worker**, with its own code entry point, its own bindings and its own rules. Nothing in this file changes what `SPEC.md` allows the main Worker to do.
 
 The model follows Maxence's [graph](https://github.com/MutantCacti/graph) demo, with freetime names:
 
@@ -10,22 +10,23 @@ The model follows Maxence's [graph](https://github.com/MutantCacti/graph) demo, 
 |---|---|---|
 | Instance | **User** | Someone who has signed up |
 | Space | **Space** | People finding a time together |
-| State | **Calendar** | A source of one user's busy times, shared into spaces |
+| State | **Calendar** | A source of one user's busy times |
 
-As in graph, users, spaces and calendars are joined only by membership tables. A user belongs to spaces and owns calendars; a space has members and the calendars they share into it.
+As in graph, users, spaces and calendars are joined only by membership tables.
 
 Everything in `SPEC.md` §2 still applies to the accounts Worker (stack, tokens, fonts, PRINTED OUTPUT, plain language, works without JS), unless this file says otherwise.
 
-It has six phases. Each is its own pull request. **Phase 0 is this spec, approved, plus the open items in §11 settled.**
-
 | Phase | What |
 |---|---|
-| 0 | This spec approved; open items settled |
-| 1 | The accounts Worker, its database, email and password sign-up and sign-in, sessions; the account icon on the main site |
-| 2 | Calendars from an iCal address; your own calendar view |
-| 3 | Sign in with Google; link Google to an email account; Google Calendar as a calendar source |
-| 4 | Spaces: create, invite, join, and the shared grid |
-| 5 | when2meet, revisited (§10) |
+| 0 | This spec |
+| 1 | The accounts Worker, its database and email (Resend); sign up with email and password, verify, sign in, sign out, reset a password; the account page with name, bio, time zone and visibility; the account icon on the main site |
+| 2 | Profile pictures; calendars from an iCal address; your own calendar; public profile pages and the share link |
+| 3 | Friends |
+| 4 | Spaces: new space from your account or a friend's profile, invite, join, the shared grid |
+| 5 | Sign in with Google; link Google; Google Calendar as a calendar source |
+| 6 | when2meet, revisited (§11) |
+
+Each phase is its own pull request.
 
 ---
 
@@ -36,27 +37,35 @@ It has six phases. Each is its own pull request. **Phase 0 is this spec, approve
 | Spec | `SPEC.md` | this file |
 | Entry point | `src/index.ts` | `src/accounts/index.ts` |
 | Config | `wrangler.toml` | `wrangler.accounts.toml` |
-| Storage | none | D1 database `freetime-accounts`; the Cache API for calendar copies |
-| Cookies | never read, never set (its middleware strips `Set-Cookie`) | one session cookie (§4) |
+| Storage | none | D1 database `freetime-accounts`; R2 bucket `freetime-pictures` (phase 2); the Cache API for calendar copies |
+| Cookies | never read, never set (its middleware strips `Set-Cookie`) | one session cookie (§5) |
 | Methods | GET, HEAD | GET, HEAD, POST |
-| Secrets | `ICAL_URL` | `ACCOUNTS_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| Secrets | `ICAL_URL` | `RESEND_API_KEY`, `ACCOUNTS_KEY` (phase 2), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (phase 5) |
 
-- **Shared code** lives in `src/` as now (calendar model, views, tokens, tz, ical). The accounts Worker imports it; the main Worker never imports anything from `src/accounts/`. A test checks that import direction.
-- **Addresses:** both Workers answer on `freetime.mutantcacti.com`, split by path, so the site keeps one name (`SITE_HOST`). The accounts Worker owns `/account`, `/account/*`, `/auth/*`, `/spaces`, `/spaces/*` and `/s/*`; the main Worker owns everything else. See §11, item 1.
-- **Tests** for each Worker run against its own app; a shared test checks that no route is claimed by both.
+- **One look, one stylesheet set.** Every page of both Workers is rendered by the same `Document` shell (`src/views/layout.tsx`) and loads the same stylesheets from `public/css/` (`fonts.css`, `tokens.css`, `app.css`, `calendar.css`), the same fonts and the same scripts. Account pages add their styles to `app.css`; there is no accounts-only stylesheet and no second set of tokens. Account pages use the same top bar, sub-page header, buttons, pills, forms, toasts and error panel.
+- **Addresses: one host, split by path.** Both Workers answer on `freetime.mutantcacti.com` (`SITE_HOST`). The accounts Worker owns `/account`, `/account/*`, `/u/*`, `/spaces`, `/spaces/*`, `/s/*` and `/auth/*`; the main Worker owns everything else, including `/css/*`, `/fonts/*` and `/js/*`, so account pages load the very same files. This needs zone routes for both Workers instead of the main Worker's custom domain (§13).
+- **The main site's one addition:** an **account** icon (a person, round pill) in the top bar, directly before the menu button: on phones it sits to the left of the menu and theme icons; on wide screens it comes before **Download .ics**. It's a plain link to `/account`, named "Account" for screen readers, and looks the same whether you're signed in or not, since the main Worker never reads the cookie.
+- **Shared code** lives in `src/` (calendar model, views, tokens, time zones, iCal). The accounts Worker imports it; the main Worker never imports anything from `src/accounts/`. A test checks that import direction, and another that no path is claimed by both Workers.
 
 ## 2. Data
 
-D1 (SQLite). Migrations in `migrations/accounts/`, applied with `wrangler d1 migrations apply`. Times are Unix seconds (UTC).
+D1 (SQLite). Migrations in `migrations/`, applied with `wrangler d1 migrations apply`. Times are Unix seconds (UTC). Phase 1 creates `users`, `sessions` and `email_tokens`; later phases add their tables with new migrations.
 
 ```sql
 CREATE TABLE users (
-  user_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  name           TEXT NOT NULL,              -- shown to people in your spaces
-  email          TEXT UNIQUE COLLATE NOCASE, -- sign-in name for email accounts
-  password_hash  TEXT,                       -- null for Google-only accounts
-  google_sub     TEXT UNIQUE,                -- Google's stable user id, once linked
-  created_at     INTEGER NOT NULL
+  user_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  public_id       TEXT NOT NULL UNIQUE,      -- 10 random characters: the profile address, /u/<public_id>
+  name            TEXT NOT NULL,             -- 1–60 characters
+  bio             TEXT NOT NULL DEFAULT '',  -- up to 280 characters, plain text
+  zone            TEXT NOT NULL,             -- IANA time zone, your default for every view
+  visibility      TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'private')),
+  email           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  email_verified  INTEGER NOT NULL DEFAULT 0,
+  password_hash   TEXT,                      -- null for Google-only accounts
+  google_sub      TEXT UNIQUE,               -- phase 5
+  picture_key     TEXT,                      -- phase 2: R2 object key
+  invite_code     TEXT NOT NULL UNIQUE,      -- 16 random characters: your share link's friend invite (§4)
+  created_at      INTEGER NOT NULL
 );
 
 CREATE TABLE sessions (
@@ -66,148 +75,189 @@ CREATE TABLE sessions (
   expires_at  INTEGER NOT NULL
 );
 
+CREATE TABLE email_tokens (
+  token_hash  TEXT PRIMARY KEY,              -- SHA-256 of the emailed token
+  user_id     INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
+  purpose     TEXT NOT NULL CHECK (purpose IN ('verify', 'reset')),
+  expires_at  INTEGER NOT NULL               -- verify: 24 hours; reset: 1 hour
+);
+
+-- Phase 2
 CREATE TABLE calendars (
   calendar_id  INTEGER PRIMARY KEY AUTOINCREMENT,
   kind         TEXT NOT NULL CHECK (kind IN ('ical', 'google')),
   label        TEXT NOT NULL,                -- "Work", "Personal": yours to name
-  secret       BLOB NOT NULL,                -- encrypted iCal address or Google refresh token (§5)
+  secret       BLOB NOT NULL,                -- encrypted iCal address or Google refresh token (§7)
   status       TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'disconnected')),
   created_at   INTEGER NOT NULL
 );
+CREATE TABLE user_calendars (user_id INTEGER REFERENCES users ON DELETE CASCADE, calendar_id INTEGER REFERENCES calendars ON DELETE CASCADE, PRIMARY KEY (user_id, calendar_id));
 
+-- Phase 3. A friendship is stored once, lower user_id first.
+CREATE TABLE friends (user_a INTEGER REFERENCES users ON DELETE CASCADE, user_b INTEGER REFERENCES users ON DELETE CASCADE, created_at INTEGER NOT NULL, PRIMARY KEY (user_a, user_b), CHECK (user_a < user_b));
+CREATE TABLE friend_requests (from_user INTEGER REFERENCES users ON DELETE CASCADE, to_user INTEGER REFERENCES users ON DELETE CASCADE, created_at INTEGER NOT NULL, PRIMARY KEY (from_user, to_user));
+
+-- Phase 4
 CREATE TABLE spaces (
   space_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  public_id    TEXT NOT NULL UNIQUE,         -- /spaces/<public_id>
   name         TEXT NOT NULL,
-  invite_code  TEXT NOT NULL UNIQUE,         -- 16 random characters; the join link
-  from_date    TEXT NOT NULL,                -- YYYY-MM-DD, the days the space covers
+  invite_code  TEXT NOT NULL UNIQUE,         -- the join link, /s/<invite_code>
+  from_date    TEXT NOT NULL,                -- YYYY-MM-DD
   to_date      TEXT NOT NULL,
-  zone         TEXT NOT NULL,                -- the space's time zone, an IANA name
+  zone         TEXT NOT NULL,
   created_at   INTEGER NOT NULL
 );
-
--- Membership, as in graph.
-CREATE TABLE user_calendars  (user_id INTEGER REFERENCES users ON DELETE CASCADE, calendar_id INTEGER REFERENCES calendars ON DELETE CASCADE, PRIMARY KEY (user_id, calendar_id));
 CREATE TABLE space_users     (space_id INTEGER REFERENCES spaces ON DELETE CASCADE, user_id INTEGER REFERENCES users ON DELETE CASCADE, PRIMARY KEY (space_id, user_id));
 CREATE TABLE space_calendars (space_id INTEGER REFERENCES spaces ON DELETE CASCADE, calendar_id INTEGER REFERENCES calendars ON DELETE CASCADE, PRIMARY KEY (space_id, calendar_id));
 ```
 
 - A **calendar** stores where busy times come from, never the events. Events are fetched when needed, reduced to busy blocks straight away (as `src/ical.ts` already does), and cached with the Cache API for 5 minutes, keyed by calendar id.
-- **Who can see what:** a user sees their own calendars. In a space, members see each other's **names** and **merged busy blocks** from the calendars shared into that space: never event titles, never which calendar a block came from, never anyone's calendar address or email.
-- A calendar can only be shared into a space by its owner, and only into a space they belong to. Leaving a space removes your calendars from it.
-- Deleting your account deletes your user row; the cascades remove your sessions, calendars and memberships. Spaces with no members left are deleted.
+- **Your busy time** is the merge of all your calendars. Nobody, including you, is ever shown an event's title, which calendar a block came from, or a calendar's address.
+- Deleting your account deletes your user row; the cascades remove sessions, tokens, calendars, friendships, requests and memberships, and your picture is deleted from R2. Spaces left with no members are deleted.
 
-## 3. Signing in
+## 3. Profiles and visibility
 
-Two ways, and an account can have both.
+Every user has a profile at `/u/<public_id>`.
 
-### 3.1 Email and password
+| Shown on the profile | Private | Public | To friends |
+|---|---|---|---|
+| Name and picture | ✓ | ✓ | ✓ |
+| Bio | ✓ | ✓ | ✓ |
+| Busy time: the main site's Day, Week, Month and Range views, from your calendars | ✓ | ✓ | ✓ |
+| Time zone | | ✓ | ✓ |
+| Friends (names and pictures, linking to their profiles) | | ✓ | ✓ |
+| Number of friends and spaces | | ✓ | ✓ |
+| Member since | | ✓ | ✓ |
 
-- **Sign up:** name, email, password (at least 10 characters, at most 256; nothing else is required of it). The email is your sign-in name. Whether it's verified is §11, item 2.
-- **Passwords** are hashed with PBKDF2-SHA-256 through WebCrypto, 100,000 iterations (the most Workers allows **(unverified)**), a 16-byte random salt, stored as `pbkdf2-sha256$100000$<salt>$<hash>` (base64url). The iteration count is in the stored value, so it can be raised later and old hashes still check.
-- **Sign in** checks the hash in constant time. A wrong email and a wrong password give the same message and take the same time.
-- **Limits:** 10 failed sign-ins per email per 15 minutes, and 30 per IP address, using Workers Rate Limiting **(unverified binding name)**. Over the limit: "Too many attempts. Try again in a few minutes." Sign-ups are limited per IP the same way.
-- **Changing your password** needs the current one, and signs out every other session.
-- **Forgotten passwords:** see §11, item 2.
+- **Friends always see the public profile**, whatever your setting. Signed-out visitors and everyone else see your setting's column.
+- **New accounts are private.** You choose public on the account page.
+- Your email is never shown on any profile, to anyone.
+- A profile's busy views are drawn in the **viewer's** zone (their device, or the selector), like the main site. Your own zone is what's shown as "Time zone" and is the default for your own views and the spaces you create.
 
-### 3.2 Sign in with Google
+## 4. Friends (phase 3) and the share link
 
-- Standard OAuth 2.0 / OpenID Connect, authorization-code flow with PKCE and a `state` value, both kept in a short-lived signed cookie (10 minutes) for the round trip.
-- **Scopes:** `openid email profile` to sign in. Phase 3 adds `https://www.googleapis.com/auth/calendar.freebusy` to read busy times: Google's narrowest calendar scope, which returns busy blocks and nothing else. It's asked for only when you choose to use Google Calendar, not at sign-in.
-- **Accounts:** the first Google sign-in creates a user with `google_sub` and your Google name. Later sign-ins find you by `google_sub`, never by email.
-- **Linking:** signed in with email and password, **Account → Link Google** runs the same flow and sets `google_sub` on your account. After that either way signs you in. **Unlink** is allowed only if you have a password, so nobody locks themselves out.
-- **Never merged by email:** a Google sign-in whose email matches an existing email account does **not** sign into it. It says "An account already uses this email. Sign in with your password, then link Google from your account." Matching by email would let anyone who registered that address first take over the Google user's account, or the other way round.
-- **Google's side:** you control freetime.'s access from your own Google account (Security → Third-party connections), and Google emails you when access is granted. If you remove access there, the next refresh fails, the calendar is marked `disconnected`, and your account page says "Google access was removed. Connect again to use this calendar."
+Making a friend should take one tap.
 
-## 4. Sessions and requests
+- **Your share link** is `https://freetime.mutantcacti.com/u/<public_id>?f=<invite_code>`. The account page has a **Copy link** button for it (the same in-button confirmation as the contact panel). It opens your profile, and it's also a friend invite.
+- **Add friend** is on every profile you visit while signed in (not your own, not existing friends):
+  - opened from your share link (with your `f` code): pressing it makes you friends at once, because you sent the link;
+  - otherwise: it sends a friend request. The other person sees it on their account page, with **Accept** and **Decline**. If both people request each other, they become friends at once.
+- **Signed out**, Add friend reads **Sign up to add friend** and goes to sign-up; after signing up (and verifying), you land back on the profile with the button ready.
+- **Unfriend** is on a friend's profile. **Reset share link** on the account page makes a new `invite_code`, so old links stop being invites (they still open your profile).
+- Friend requests and new friends are shown on the account page. No emails are sent for them.
 
-- **Cookie:** `__Host-session=<32 random bytes, base64url>`; `Secure; HttpOnly; SameSite=Lax; Path=/`; 30 days. Only its SHA-256 is stored. Each use more than a day after the last extends it by 30 days.
-- **Sign out** deletes the session row and the cookie. **Sign out everywhere** deletes all of the user's sessions.
-- **Every POST** must carry an `Origin` header equal to `https://freetime.mutantcacti.com` (`SITE_HOST`), or it's refused with 403. With `SameSite=Lax` this stops cross-site form posts without a token in every form.
-- **Forms** are plain HTML forms that POST and redirect (303) to a page you can reload. Every page works without JS.
-- **Headers:** as `SPEC.md` §9, plus `Cache-Control: no-store` on every page that shows account data. The CSP keeps `form-action 'self'`; Google's sign-in page is reached by a redirect, not a form, so it needs no CSP change.
-- The main Worker's routes receive the session cookie too (same host, `Path=/`). It never reads it, and its middleware already removes any `Set-Cookie`. A test checks the main Worker's output is identical with and without the cookie.
+## 5. Signing in and sessions
 
-## 5. Calendars
+### 5.1 Email and password (phase 1)
 
-- **Add an iCal address:** a box on **Account → Calendars** for a secret iCal address (Google, Outlook, Apple, Fastmail...). It's checked once on save (fetched and parsed, as `src/feed.ts` does), then stored encrypted.
-- **Use Google Calendar:** for accounts with Google linked or signed in with Google. Asks Google for the free/busy scope, stores the refresh token encrypted, and reads your primary calendar's busy times through the Calendar API's `freeBusy` query. Busy blocks only; no events are ever fetched.
-- **Encryption:** iCal addresses and refresh tokens are encrypted with AES-256-GCM before they reach D1, using a key derived from the secret `ACCOUNTS_KEY` (HKDF, one key per purpose), with a fresh 12-byte IV per value. They're decrypted only in memory to fetch, and never logged, shown back or sent to the browser. The account page shows a calendar's label, kind and status only.
-- **Errors** reuse the main site's codes (`FEED_FETCH`, `FEED_STATUS_<n>`, `FEED_PARSE`) on the account page, per calendar, plus `GOOGLE_REVOKED` for a removed Google grant.
+- **Sign up:** name, email, password (at least 10 characters, at most 256; nothing else is required of it) and time zone (filled from your device when JS is on; Europe/London otherwise; changeable later).
+- **Verify:** sign-up sends an email (§6) with a link to `/account/verify?t=<token>`. Until you verify, signing in shows "Check your email to finish signing up" with **Send it again**. Nothing else works until then, so an address can't be claimed by someone who doesn't own it.
+- **Passwords** are hashed with PBKDF2-SHA-256 through WebCrypto, 100,000 iterations (the most Workers allows **(unverified)**), a 16-byte random salt, stored as `pbkdf2-sha256$100000$<salt>$<hash>` (base64url). The iteration count is in the stored value, so it can be raised later.
+- **Sign in** checks the hash in constant time. A wrong email and a wrong password give the same message.
+- **Forgotten password:** `/account/reset` asks for your email and always answers "If that address has an account, we've sent a link", so it can't be used to test addresses. The link (1 hour, single use) sets a new password and signs out every session.
+- **Changing your password** needs the current one and signs out every other session. Changing your email sends a verification to the new address; the change applies when it's verified.
+- **Limits:** 10 failed sign-ins per email and 30 per IP address per 15 minutes; 5 sign-ups and 5 emails per IP per hour. Over a limit: "Too many attempts. Try again in a few minutes." Kept in D1 or with Workers Rate Limiting **(unverified)**.
 
-## 6. Pages
+### 5.2 Sign in with Google (phase 5)
 
-All on the accounts Worker. Same top bar, theme and tokens as the main site.
+- OAuth 2.0 / OpenID Connect, authorization code with PKCE and `state`, kept in a 10-minute signed cookie for the round trip. Scopes `openid email profile`; Google Calendar adds `https://www.googleapis.com/auth/calendar.freebusy` when you choose to use it, not at sign-in.
+- The first Google sign-in creates a user (Google has verified the email). Later sign-ins find you by `google_sub`, never by email.
+- **Link Google** from the account page sets `google_sub` on an email account. **Unlink** only if you have a password.
+- **Never merged by email:** a Google sign-in whose email belongs to an existing email account says "An account already uses this email. Sign in with your password, then link Google from your account."
+- You control freetime.'s access from your Google account; Google emails you when it's granted. If you remove it, the calendar is marked disconnected and the account page says so.
 
-| Path | Method | What |
-|---|---|---|
-| `/account` | GET | Signed out: **Sign in** and **Create account**. Signed in: your name, email, sign-in methods, calendars, spaces, and the account actions |
-| `/account/sign-in` | GET, POST | Email and password form, and **Sign in with Google** |
-| `/account/sign-up` | GET, POST | Name, email, password |
-| `/account/sign-out` | POST | Signs out (a form button, never a link) |
-| `/account/calendars` | GET, POST | Add, rename and remove calendars |
-| `/account/me` | GET | **Your calendar:** the main site's Day, Week, Month and Range views, drawn from your own calendars |
-| `/account/settings` | GET, POST | Name, email, password, link or unlink Google, sign out everywhere, delete account |
-| `/auth/google/start`, `/auth/google/callback` | GET | The OAuth round trip |
-| `/spaces` | GET | Your spaces, and **New space** |
-| `/spaces/new` | GET, POST | Name, dates, time zone |
-| `/spaces/<id>` | GET, POST | The shared grid (§7); share or unshare your calendars; leave |
-| `/s/<invite code>` | GET, POST | Join a space from its link (sign in first if needed) |
+### 5.3 Sessions and requests
 
-**The main site gets one addition:** an **account** icon (a person, round pill) in the top bar, directly before the menu button: on phones it sits to the left of the menu and theme icons; on wide screens it comes before **Download .ics**. It's a plain link to `/account`, named "Account" for screen readers. The main Worker can't know whether you're signed in, so the icon always looks the same. `SPEC.md` §5.0.1 records it.
+- **Cookie:** `__Host-session=<32 random bytes, base64url>`; `Secure; HttpOnly; SameSite=Lax; Path=/`; 30 days, extended on use (at most once a day). Only its SHA-256 is stored.
+- **Sign out** (a form button, never a link) deletes the session. **Sign out everywhere** deletes them all.
+- **Every POST** must carry an `Origin` equal to `https://<SITE_HOST>`, or it's refused with 403.
+- **Forms** are plain HTML forms that POST and redirect (303). Every page works without JS.
+- **Headers:** as `SPEC.md` §9, plus `Cache-Control: no-store` on every page that depends on who's signed in.
+- The main Worker's routes receive the cookie too. It never reads it and strips any `Set-Cookie`; a test checks its output is identical with and without the cookie.
 
-## 7. The shared grid
+## 6. Email (Resend)
 
-A space's page is the main site's calendar for the space's dates, in the space's zone (the selector still works), with one change of meaning:
+- Sent through Resend's HTTP API (`POST https://api.resend.com/emails`) with the secret `RESEND_API_KEY`, from `RESEND_FROM` (a variable, for example `freetime <noreply@freetime.mutantcacti.com>`; the domain is verified in Resend with the DNS records it gives).
+- **Emails:** verify your address (sign-up and email change), reset your password. Plain text plus simple HTML, every word with a PRINTED OUTPUT marker, no tracking pixels or link rewriting.
+- A send failure is logged (status only, never the address) and shown as "We couldn't send the email. Try again in a minute." (`EMAIL_SEND`).
+- Tests mock the API and check what would be sent.
 
-- **Each slot shows how many members are free**, not how busy one person is. The colour map, dither and colour bar are the same; the bar's ends read "Everyone free" and "Nobody free", and each slot's label says "Tue 3 Nov, 14:00–14:30, 3 of 4 free".
-- A member counts as free in a slot if none of the calendars they shared into the space has busy time overlapping it (the `W2M_BUSY_THRESHOLD` rule: any overlap is busy). A member who has shared no calendar counts as unknown, and the label says so ("2 of 4 free, 1 not shared").
-- Below the grid: the members, each with how many calendars they've shared. Hovering or focusing a slot lists who's free, by name.
-- The grid is computed per request from cached busy blocks; nothing derived is stored.
+## 7. Calendars (phase 2)
 
-## 8. Errors
+- **Add an iCal address** on the account page (a secret iCal address from Google, Outlook, Apple, Fastmail...). Checked once on save (fetched and parsed, as `src/feed.ts` does), then stored encrypted.
+- **Google Calendar** (phase 5): your primary calendar's busy times through the Calendar API's `freeBusy` query. Busy blocks only.
+- **Encryption:** iCal addresses and refresh tokens are encrypted with AES-256-GCM before they reach D1, with a key derived from `ACCOUNTS_KEY` (HKDF) and a fresh 12-byte IV per value; decrypted only in memory, never logged or sent to the browser.
+- **Errors** per calendar reuse `FEED_FETCH`, `FEED_STATUS_<n>` and `FEED_PARSE`, plus `GOOGLE_REVOKED`.
 
-The main site's toasts and error panel (`SPEC.md` §5.9), and these codes:
+## 8. The account page
+
+`/account`, signed in. Everything you can do is reachable from it, in this order:
+
+1. **Your profile card:** picture, name, bio, time zone, visibility (Public or Private), and **Copy link** (your share link, §4) with **View profile**.
+2. **New space** (phase 4): one button (§9).
+3. **Your calendar:** your busy time in the main site's views, plus **Add calendar** (phase 2).
+4. **Friends** (phase 3): requests waiting (Accept / Decline), then your friends, each linking to their profile.
+5. **Spaces** (phase 4): yours, newest first.
+6. **Edit profile:** change picture (phase 2), name, bio, time zone, visibility.
+7. **Sign-in and security:** email, password, Google (phase 5), sign out everywhere, reset share link, delete account.
+
+Signed out, `/account` shows **Sign in** and **Create account**.
+
+**Pictures** (phase 2): PNG, JPEG or WebP, at most 2 MB, checked by their first bytes; stored in R2 under a random key, served at `/u/<public_id>/picture`; shown as a circle. Without one, a circle with your initials. Removing it deletes the object.
+
+## 9. Spaces (phase 4)
+
+Making a space should take one tap.
+
+- **New space** on the account page creates a space at once: named "Your name's space", covering the next 7 days from today in your zone, with you as its only member. It opens the space, where the name, dates and zone can be changed and its invite link copied.
+- **Find a time** on a friend's profile creates a space at once with **both of you** as members: named "Alice & Bob", the next 7 days, your zone. Your friend sees it in their spaces.
+- **Invite link:** `/s/<invite_code>`, with **Copy link** on the space. Signed in, it joins; signed out, it asks you to sign up or sign in first, then joins.
+- Joining a space shares your calendars into it, so there's nothing to set up; **My calendars in this space** lets you turn each one off.
+- **The shared grid:** the main site's calendar for the space's dates, where **each slot shows how many members are free** instead of how busy one person is. Same colour map and dither; the bar reads "Everyone free" to "Nobody free"; each slot's label says "Tue 3 Nov, 14:00–14:30, 3 of 4 free". A member is free in a slot if no busy time from their calendars in the space overlaps it at all. A member with no calendars counts as unknown ("2 of 4 free, 1 unknown"). Focusing or hovering a slot lists who's free, by name.
+- Members see each other's names and pictures, never more than their busy blocks. **Leave space** removes you and your calendars from it.
+
+## 10. Errors
+
+The main site's toasts and error panel (`SPEC.md` §5.9), plus:
 
 | Code | Meaning | Status |
 |---|---|---|
 | `AUTH_REQUIRED` | The page needs you signed in (redirects to sign-in, then back) | 303 |
 | `AUTH_ORIGIN` | A POST without the site's `Origin` | 403 |
 | `AUTH_LIMIT` | Too many attempts | 429 |
-| `GOOGLE_AUTH` | Google sign-in failed or was cancelled | 400 |
-| `GOOGLE_REVOKED` | Google access was removed from your Google account | shown per calendar |
+| `TOKEN_INVALID` | An email link that's expired, used or wrong | 400 |
+| `EMAIL_SEND` | Resend couldn't send an email | 503 |
+| `PROFILE_NOT_FOUND` | No such profile | 404 |
 | `SPACE_NOT_FOUND` | No such space, or you're not a member | 404 |
+| `GOOGLE_AUTH` | Google sign-in failed or was cancelled | 400 |
+| `GOOGLE_REVOKED` | Google access was removed from your Google account | per calendar |
 | `DB` | The database couldn't be reached | 503 |
 
-Form mistakes (wrong password, email in use, password too short) are shown next to the field, not as codes.
+Form mistakes (wrong password, email in use, password too short) are shown next to the field.
 
-## 9. Tests
+## 11. when2meet, revisited (phase 6)
 
-- Each phase's routes, signed in and out, with and without JS-free form posts.
-- Passwords: hash and check, wrong password, constant-time path, changing the iteration count still checks old hashes.
-- Sessions: expiry, extension, sign out, sign out everywhere, a stolen cookie value stops working once signed out.
-- `Origin` check on every POST; `SameSite` and `__Host-` cookie attributes.
-- Google: the flow with Google mocked; never merged by email; linking and unlinking rules; revoked grant marks the calendar disconnected.
-- Encryption: what reaches D1 never contains the iCal address or token; a wrong key fails to decrypt.
-- Privacy: no event title, calendar address, email or other member's calendar label appears in any space page.
-- The main Worker: unchanged output with a session cookie present; no imports from `src/accounts/`.
-- D1 runs in the Workers test pool with migrations applied; Google and calendar fetches are mocked in every test.
+With spaces, people with accounts don't need when2meet. Phase 6 decides what's left: matching a space's grid to a when2meet event someone else made (the parked match-mode code and `docs/W2M-GET-SPEC.md`), or nothing. The bookmarklet is dropped for good.
 
-## 10. when2meet, revisited (phase 5)
+## 12. Tests
 
-With spaces, freetime does what when2meet does from real calendars, so people with accounts don't need when2meet. Phase 5 decides what's left: matching a space's grid to a when2meet event someone else made (the parked match-mode code and `docs/W2M-GET-SPEC.md`), or nothing. The bookmarklet is dropped for good.
+- Every route, signed in and out; every form works as a plain POST.
+- Passwords, sessions, email tokens (expiry, single use), the `Origin` check, cookie attributes, rate limits.
+- Visibility: each profile field shown or hidden for signed-out visitors, strangers, friends and yourself, public and private.
+- Friends: share-link add is instant; a plain add is a request; mutual requests become friends; unfriend; reset link.
+- Privacy: no email, event title, calendar address or calendar label of anyone else in any response.
+- Both Workers render with the same `Document` and stylesheets; the main Worker's output is unchanged with a session cookie; no imports from `src/accounts/` outside it; no path claimed by both.
+- D1 runs in the Workers test pool with the migrations applied; Resend, calendar and Google fetches are mocked in every test.
 
-## 11. Open items (settle in phase 0)
+## 13. Deployment notes
 
-1. **Path routing on one host.** Splitting `freetime.mutantcacti.com` by path between two Workers needs zone routes (`freetime.mutantcacti.com/account*` and so on to the accounts Worker, `freetime.mutantcacti.com/*` to the main one) instead of the main Worker's custom domain, plus a proxied DNS record for the name **(unverified)**. The alternative is a second subdomain for accounts, which is simpler to route but gives the site two names. Recommendation: path routing, one name.
-2. **Email.** Verifying addresses and resetting forgotten passwords both need freetime. to send email, which needs a sending service (and its key). Options: (a) no email in phase 1: addresses aren't verified, and a forgotten password is reset by Maxence with a one-off admin command; (b) a sending service from the start. Recommendation: (a) for phase 1, revisited before sign-up is opened widely.
-3. **Who can sign up.** Anyone, or only people with an invite link to a space? Recommendation: anyone, with the limits in §3.1.
-4. **Google's verification.** The free/busy scope is "sensitive": until Google verifies the app, only up to 100 listed test users can use it, and Google shows a warning screen **(unverified details)**. Sign-in alone (`openid email profile`) isn't affected. Phase 3 can start in Google's testing mode.
+- **Routes:** the main Worker moves from a custom domain to the zone route `freetime.mutantcacti.com/*`, with a proxied DNS record for `freetime` **(unverified exact record)**; the accounts Worker takes zone routes for its paths (more specific routes win). The README gets the exact steps in phase 1.
+- **Resend:** add `freetime.mutantcacti.com` (or the chosen sending domain) in Resend, add its DNS records in Cloudflare, then `npx wrangler secret put RESEND_API_KEY --config wrangler.accounts.toml`.
+- **Google** (phase 5): until Google verifies the app, the free/busy scope works for up to 100 listed test users **(unverified details)**. Sign-in alone isn't affected.
 
-## 12. Definition of done (per phase)
+## 14. Definition of done (per phase)
 
-- **Phase 0:** spec approved; §11 settled; no product code.
-- **Phase 1:** the accounts Worker deploys separately; sign up, sign in, sign out and settings work without JS; the account icon is on the main site; tests green; README deployment steps for the second Worker and D1 added; PRINTED OUTPUT count reported for both Workers.
-- **Phases 2–4:** their sections implemented and tested; README and decisions table updated.
-- **Phase 5:** decided with Maxence first.
-
-Each phase lands as its own pull request, and the README's decisions and error-code tables are updated each time.
+- **Phase 1:** the accounts Worker deploys on its own; sign up, verify, sign in, sign out, reset and the account page's profile settings work without JS; the account icon is on the main site; tests green; README deployment steps for the second Worker, D1, Resend and the routes; PRINTED OUTPUT count reported for both Workers.
+- **Phases 2–5:** their sections implemented and tested; README and decisions table updated.
+- **Phase 6:** decided with Maxence first.

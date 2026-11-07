@@ -124,7 +124,7 @@ The main page (`/`) has three regions, plus a floating notice layer:
 | 5 | Period label: months and year only (§5.0.2) | centre | text |
 | 6 | **Time-zone selector**, always visible (§5.11) | centre, after the label | pill, with chevron |
 | 7 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right | pill (round) |
-| 7a | **Account**: a person icon linking to `/account` on the accounts Worker (`ACCOUNTS-SPEC.md` §6). The same whether or not you're signed in, since this Worker never reads the cookie. On phones it sits to the left of the menu and theme icons | right | pill (round) |
+| 7a | **Account**: a person icon linking to `/account` on the accounts Worker (`ACCOUNTS-SPEC.md` §1). The same whether or not you're signed in, since this Worker never reads the cookie. On phones it sits to the left of the menu and theme icons | right | pill (round) |
 | 8 | **Download .ics** | right | pill |
 | 9 | **Contact me** | right | pill |
 | 10 | **Help** | right | pill |
