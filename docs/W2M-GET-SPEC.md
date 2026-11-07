@@ -202,6 +202,8 @@ Spans, column 0: weekdays (279823500 − 279795600) ÷ 31; dates (1793637900 −
 
 ## 4. Fill contract (phase 2)
 
+**Reference only:** the bookmarklet (W2M-SPEC phase 2) was dropped on 2026-11-07. This section records how when2meet's page selects and saves slots, in case it's needed again.
+
 All of this is the page's own inline script; the handlers are the same for mouse and touch. Phase 2 reads the grid from the page's own cells (`data-col`, `data-row`, `data-time`), so it works whichever zone the page has reloaded the grid in.
 
 ### 4.1 State

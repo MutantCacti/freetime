@@ -2,7 +2,7 @@
 
 A read-only view of Maxence's free and busy time, in the style of when2meet. Visitors find a slot here, then get in touch through the contact panel. Nothing on the site sends, books or stores anything.
 
-It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`SPEC.md`](SPEC.md).
+It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`SPEC.md`](SPEC.md). Accounts are planned as a separate Worker: see [`ACCOUNTS-SPEC.md`](ACCOUNTS-SPEC.md).
 
 - **Views:** Day, Week, Month and Range, plus `/help`, the contact panel (`/contact`) and a busy-only `.ics` export.
 - **Rendering:** HTML is rendered on the server, and every view, link and form works without JavaScript. Two small scripts in `public/js/` add the extras.

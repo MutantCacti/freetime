@@ -4,6 +4,8 @@ A read-only view of Maxence's free/busy time, in the style of when2meet. People 
 
 One Cloudflare Worker, one secret and one custom domain. It has **no storage and no login**.
 
+**Accounts are always a different Worker.** Sign-in, users, calendars and shared spaces live in a second Worker with its own spec (`ACCOUNTS-SPEC.md`). That never changes this one: this Worker stays read-only, stores nothing, and never reads or sets a cookie, whatever the accounts Worker does.
+
 
 ---
 
@@ -15,7 +17,7 @@ One Cloudflare Worker, one secret and one custom domain. It has **no storage and
 - `/help`, the contact panel and the `.ics` export;
 - tests and the README.
 
-**Out of scope:** forms that send anything, booking, stored state, accounts, analytics, and every other subdomain.
+**Out of scope:** forms that send anything, booking, stored state, accounts (the separate accounts Worker, `ACCOUNTS-SPEC.md`), analytics, and every other subdomain.
 
 ## 2. Conventions
 
@@ -122,6 +124,7 @@ The main page (`/`) has three regions, plus a floating notice layer:
 | 5 | Period label: months and year only (§5.0.2) | centre | text |
 | 6 | **Time-zone selector**, always visible (§5.11) | centre, after the label | pill, with chevron |
 | 7 | Notice indicator: appears only while a sticky notice is minimised (§5.9) | right | pill (round) |
+| 7a | **Account**: a person icon linking to `/account` on the accounts Worker (`ACCOUNTS-SPEC.md` §6). The same whether or not you're signed in, since this Worker never reads the cookie. On phones it sits to the left of the menu and theme icons | right | pill (round) |
 | 8 | **Download .ics** | right | pill |
 | 9 | **Contact me** | right | pill |
 | 10 | **Help** | right | pill |

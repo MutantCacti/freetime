@@ -8,7 +8,7 @@ It has four phases. Phase 0 is research and produces the **GET spec** that phase
 |---|---|---|
 | 0 | Experiment: inspect when2meet and write `docs/W2M-GET-SPEC.md` | when2meet reachable from the session (see §0.1) |
 | 1 | Match: paste a when2meet link; the calendar switches to that event's exact grid, in a binary copy-ready look | Phase 0 |
-| 2 | Bookmarklet: fill when2meet from freetime.'s busy blocks, then hand control back to you | Phase 0 |
+| 2 | ~~Bookmarklet~~: **dropped** (2026-11-07). Accounts and spaces (`ACCOUNTS-SPEC.md`) replace it | — |
 | 3 | Heartbeat: scheduled self-check that alerts Maxence when something breaks | Phase 1 |
 
 Maxence's own command-line fill tool is **out of scope** and lives only on his device (§5).
@@ -126,31 +126,9 @@ Use the toast and error-panel rules from SPEC.md §5.9, with new codes:
 
 ---
 
-## 2. Phase 2: bookmarklet
+## 2. Phase 2: bookmarklet (dropped)
 
-### 2.1 What it does
-Run on a when2meet event page, after signing in with a name:
-1. Reads the event's grid in the page (per the GET spec).
-2. Fetches `https://freetime.mutantcacti.com/free-busy.ics?from=…&to=…` for that range.
-3. Works out which slots are free (no overlap with any busy block) and which are busy.
-4. Shows a small overlay on the when2meet page: "Mark 23 slots as available and clear 4?" with **Fill** and **Cancel**.
-5. On **Fill**, makes your grid match freetime. exactly, using the fill contract (the page's own functions if available, otherwise synthetic mouse or touch events): free slots become available, and busy slots you'd marked available are cleared.
-6. Leaves the page for Maxence to adjust by hand. It never presses any save or submit button the page has, beyond whatever the page saves on its own when slots change (the GET spec says which).
-
-### 2.2 Rules
-- **CORS:** `/free-busy.ics` adds `Access-Control-Allow-Origin: https://www.when2meet.com` (that origin only) and `Vary: Origin`. No other route changes.
-- It uses the **same free/busy rule** as match mode (`W2M_BUSY_THRESHOLD`), so what it fills is exactly what freetime. shows.
-- If when2meet's CSP blocks the fetch, the bookmarklet says so in its overlay and links to freetime. in match mode for this event (phase 1) instead.
-- It refuses to run if nobody is signed in on the page, with a message saying to sign in first.
-- Desktop and mobile: test both with Playwright (mouse, and touch emulation).
-- The bookmarklet source lives in `public/js/w2m-bookmarklet.js`, is minified into a `javascript:` URL at build time, and has PRINTED OUTPUT markers like everything else.
-
-### 2.3 Setup on `/help`
-A short section, "Fill when2meet", with:
-- a draggable link for desktop browsers;
-- a **Copy** button (same in-button confirmation as the email) for phones;
-- one-time setup steps for iPhone (Safari: bookmark any page, edit it, replace the address with the copied code) and Android (Chrome: save it the same way, then type its name in the address bar on the when2meet page and tap it);
-- a note that it only reads busy times from freetime. and only changes the grid on the page you're looking at.
+Dropped on 2026-11-07. People with accounts find a time together in a freetime. space (`ACCOUNTS-SPEC.md`), so nothing fills when2meet from freetime. any more. `docs/W2M-GET-SPEC.md` §4 (the fill contract) stays as a record of how when2meet's page works.
 
 ---
 
@@ -161,7 +139,7 @@ A short section, "Fill when2meet", with:
 ### 3.1 Scheduled self-check
 - A Cron Trigger every **6 hours** (a constant) runs:
   1. **Feed:** fetch and parse `ICAL_URL`, expand the next 2 weeks.
-  2. **when2meet:** fetch and parse both canary events (Maxence's phase 0 test events, stored as secrets `W2M_CANARY_DATES` and `W2M_CANARY_WEEKDAYS`), and check the result matches what's expected (for example, the number of days and slots). If the parse reports `fill: "drift"` (the page lost a function or endpoint the bookmarklet uses, GET spec §3.9), that's a failure with code `W2M_FILL_DRIFT`.
+  2. **when2meet:** fetch and parse both canary events (Maxence's phase 0 test events, stored as secrets `W2M_CANARY_DATES` and `W2M_CANARY_WEEKDAYS`), and check the result matches what's expected (for example, the number of days and slots).
   3. **Self:** request `/` and `/free-busy.ics` on the production hostname and check the status and content type.
 - **Success:** ping `HEARTBEAT_URL` (a secret; a healthchecks.io check URL).
 - **Failure:** ping `HEARTBEAT_URL + "/fail"` with a short body: the error code and reference only (for example `W2M_PARSE · ref 7K2Q9M`). No feed address, no page content.
@@ -188,7 +166,7 @@ A short section, "Fill when2meet", with:
 
 - **Phase 0:** GET spec approved; scrubbed fixtures merged; no product code.
 - **Phase 1:** §1 implemented; §1.5 tests green; works without JS; PRINTED OUTPUT count reported.
-- **Phase 2:** §2 implemented; desktop and mobile Playwright runs pass on a local copy of the fixture pages; `/help` section written as a template.
+- **Phase 2:** dropped.
 - **Phase 3:** §3 implemented; §3.4 tests green; README deployment steps added and verified by Maxence.
 
 Each phase lands as its own pull request, and the README's decisions table and error-code table are updated each time.
@@ -202,8 +180,6 @@ Maxence keeps his own desktop fill tool on his own machine. It is **not** in thi
 freetime. supports it only through what is already public:
 - `/free-busy.ics?from=&to=` (busy blocks only), and
 - the free/busy rule in `W2M_BUSY_THRESHOLD`, which must be documented in the README so a local tool can reproduce it exactly.
-
-The bookmarklet's fill logic lives in its own file (`public/js/w2m-fill.js`) with no dependencies on the rest of the site, so it can be reused elsewhere without changes.
 
 - No custom URL scheme and no browser-to-program launcher, ever: any website could trigger one.
 - freetime.'s server never drives a browser or writes to when2meet.
