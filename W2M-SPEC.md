@@ -11,7 +11,7 @@ It has four phases. Phase 0 is research and produces the **GET spec** that phase
 | 2 | ~~Bookmarklet~~: **dropped** (2026-11-07). Accounts and spaces (`ACCOUNTS-SPEC.md`) replace it | — |
 | 3 | Heartbeat: scheduled self-check that alerts Maxence when something breaks | Phase 1 |
 
-Maxence's own command-line fill tool is **out of scope** and lives only on his device (§5).
+Maxence's own command-line fill tool is **out of scope** and lives only on their device (§5).
 
 ---
 
@@ -52,7 +52,7 @@ A precise, testable contract:
 - Mark anything inferred rather than observed as **(unverified)**.
 
 ### 0.4 Fixtures
-- Save one HTML snapshot per test event as `test/fixtures/w2m/*.html`, **scrubbed** of participant names and availability. A test checks the fixtures contain no names from a deny-list Maxence provides (his own test names).
+- Save one HTML snapshot per test event as `test/fixtures/w2m/*.html`, **scrubbed** of participant names and availability. A test checks the fixtures contain no names from a deny-list Maxence provides (their own test names).
 - Raw unscrubbed captures never get committed.
 
 **Done when:** `docs/W2M-GET-SPEC.md` and the scrubbed fixtures are merged, and Maxence has approved the spec.
@@ -149,7 +149,7 @@ Dropped on 2026-11-07. People with accounts find a time together in a freetime. 
 - Any `W2M_PARSE` or fatal `FEED_*` error during a real request also sends one failure ping, at most **once per hour per code**, using the Cache API as a short-lived marker (it's a cache entry, not stored state).
 
 ### 3.3 Deployment additions (README)
-1. Create a healthchecks.io check: period 6 hours, grace 1 hour, notifications to Maxence's email (and any other channel he wants).
+1. Create a healthchecks.io check: period 6 hours, grace 1 hour, notifications to Maxence's email (and any other channel they want).
 2. `npx wrangler secret put HEARTBEAT_URL`
 3. `npx wrangler secret put W2M_CANARY_DATES` and `npx wrangler secret put W2M_CANARY_WEEKDAYS`
 4. Add the Cron Trigger to `wrangler.toml` and deploy.
@@ -175,7 +175,7 @@ Each phase lands as its own pull request, and the README's decisions table and e
 
 ## 5. Out of scope: Maxence's local fill tool
 
-Maxence keeps his own desktop fill tool on his own machine. It is **not** in this repository, and nothing on freetime. mentions it, links to it or produces commands for it.
+Maxence keeps their own desktop fill tool on their own machine. It is **not** in this repository, and nothing on freetime. mentions it, links to it or produces commands for it.
 
 freetime. supports it only through what is already public:
 - `/free-busy.ics?from=&to=` (busy blocks only), and
