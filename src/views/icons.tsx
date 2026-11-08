@@ -97,16 +97,24 @@ export const CalendarIcon = () => (
   </svg>
 );
 
+/**
+ * A person, made of circles: a head (centre 8, 5.2; r 2.4) and a bigger body
+ * circle below it (centre 8, 16.5; r 6.5), the body cut by a larger circle
+ * centred on the head (r 9.5), which leaves a rounded shoulder arc. The cut is
+ * precomputed as two arcs meeting at (2.54, 12.97) and (13.46, 12.97), so
+ * there's no clipPath and no id to keep unique.
+ */
 export const UserIcon = () => (
   <svg {...base} class="icon icon-user">
-    <circle cx="8" cy="5.5" r="2.75" />
-    <path d="M2.75 14a5.25 5.25 0 0 1 10.5 0" />
+    <circle cx="8" cy="5.2" r="2.4" />
+    <path d="M2.54 12.97A6.5 6.5 0 0 1 13.46 12.97A9.5 9.5 0 0 1 2.54 12.97Z" />
   </svg>
 );
 
 export const UserPlusIcon = () => (
   <svg {...base} class="icon icon-user-plus">
-    <circle cx="6.5" cy="5.5" r="2.75" />
-    <path d="M1.25 14a5.25 5.25 0 0 1 10.5 0M13 4.5v4M11 6.5h4" />
+    <circle cx="6.5" cy="5.2" r="2.4" />
+    <path d="M1.04 12.97A6.5 6.5 0 0 1 11.96 12.97A9.5 9.5 0 0 1 1.04 12.97Z" />
+    <path d="M13.25 3v4.5M11 5.25h4.5" />
   </svg>
 );
