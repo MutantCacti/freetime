@@ -1,8 +1,9 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
-// Two projects, one per Worker, each running in its own Worker config:
-// the read-only site (wrangler.toml) and the accounts Worker (wrangler.accounts.toml).
+// One project per Worker, each running in its own Worker config: the read-only
+// site (wrangler.toml) and the accounts Worker (wrangler.accounts.toml). A third,
+// `scripts`, tests ./ft in plain Node.
 export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
   return {
@@ -34,6 +35,14 @@ export default defineConfig(async () => {
             include: ["test/accounts/*.test.ts"],
             setupFiles: ["./test/accounts/apply-migrations.ts"],
             css: true,
+          },
+        },
+        {
+          // ft, the developer script (DEV-SPEC.md): plain Node, a fake runner, no network.
+          test: {
+            name: "scripts",
+            include: ["test/scripts/*.test.mjs"],
+            environment: "node",
           },
         },
       ],

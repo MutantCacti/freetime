@@ -1,0 +1,9 @@
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+
+ ⛅️ wrangler 4.154.0 (update available 4.158.0)
+───────────────────────────────────────────────
+Getting User settings...
+You are not authenticated. Please run `wrangler login`.
+To deploy without logging in, run a command like `wrangler deploy --temporary` to use a temporary preview account.
