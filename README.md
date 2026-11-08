@@ -10,43 +10,35 @@ It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several c
 
 ## Run it locally
 
-Requires Node 20 or later.
+Requires Node 20 or later. Everything goes through one developer command, `./ft` ([`DEV-SPEC.md`](DEV-SPEC.md)); `npm run ft -- <command>` is the same thing.
 
 ```bash
-npm install
+./ft install
 ```
 
 ```bash
-npm run dev
+./ft start
 ```
 
-`npm run dev` serves the site at http://localhost:8787 from the fixture feed `test/fixtures/dev.ics`, so no secret is needed. It uses the `dev` environment in `wrangler.toml`, whose entry point is `src/dev.ts`. The fixture is never part of the production bundle.
+`./ft install` checks Node, runs `npm ci` only if `node_modules` doesn't match `package-lock.json`, and applies the D1 migrations to the local database. `./ft start` runs both Workers in one terminal, each line prefixed with its name, and stops both on Ctrl+C:
 
-To run locally against the real feed, copy `.dev.vars.example` to `.dev.vars`, put the secret iCal address in it, then:
+| Address | What |
+|---|---|
+| http://localhost:8780 | Both Workers, split by path as in production (ft's local router): open this one |
+| http://localhost:8787 | The site only, from the fixture feed `test/fixtures/dev.ics` (the `dev` environment in `wrangler.toml`, entry `src/dev.ts`). The fixture is never part of the production bundle |
+| http://localhost:8788 | The accounts Worker only (`ACCOUNTS-SPEC.md`), with a local D1 database. Emails aren't sent: they're printed in the terminal, links included |
 
-```bash
-npm run dev:live
-```
+`./ft start --live` uses the real feed instead: copy `.dev.vars.example` to `.dev.vars` and put the secret iCal address in it first. `--only site|accounts` starts one Worker; `--port-offset 10` moves every port, for a second checkout running at the same time. `./ft help` lists every command.
 
 Checks:
 
 ```bash
-npm test
+./ft test
 ```
 
-```bash
-npm run typecheck
-```
+That's `npm test` then `npm run typecheck`. Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`. There are three test projects: `site` (`test/*.test.ts`, in `wrangler.toml`), `accounts` (`test/accounts/`, in `wrangler.accounts.toml`, with the D1 migrations applied and email mocked), and `scripts` (`test/scripts/`, plain Node: `./ft` itself, with a fake runner, so no test runs wrangler or touches the network).
 
-Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`. There are two test projects, one per Worker: `site` (`test/*.test.ts`, in `wrangler.toml`) and `accounts` (`test/accounts/`, in `wrangler.accounts.toml`, with the D1 migrations applied and email mocked).
-
-### The accounts Worker
-
-```bash
-npm run dev:accounts
-```
-
-serves the accounts Worker (`ACCOUNTS-SPEC.md`) at http://localhost:8788 with a local D1 database (migrations applied first). Emails aren't sent: they're printed in the terminal, links included, so you can sign up and reset passwords without Resend. In production both Workers share one host; locally they're on two ports, so the account icon on :8787 doesn't reach :8788.
+The raw commands still work: `npm run dev` (site, :8787), `npm run dev:live`, `npm run dev:accounts` (:8788), `npm test`, `npm run typecheck`. On their own ports the account icon on :8787 doesn't reach :8788; the router on :8780 is what joins them.
 
 ## Layout
 
@@ -75,6 +67,8 @@ serves the accounts Worker (`ACCOUNTS-SPEC.md`) at http://localhost:8788 with a 
 | `public/js/head.js` | Runs before first paint: applies the theme, corrects `dtz` |
 | `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
 | `test/` | Vitest suites, `.ics` fixtures and scrubbed when2meet pages (`test/fixtures/w2m/`) |
+| `ft`, `scripts/` | The developer command (`DEV-SPEC.md`): `scripts/ft.mjs` and its modules in `scripts/ft/` |
+| `.secrets.example` | The template for `.secrets`, the gitignored file of production secrets `./ft deploy` sends |
 | `docs/W2M-GET-SPEC.md` | How to read and fill a when2meet event (for the when2meet add-on) |
 
 ## Dependencies
@@ -130,67 +124,50 @@ dig MX mutantcacti.com +short
 
 Then load the apex site and each existing subdomain in a browser, and send a test email to an address on the domain.
 
-### 4. Deploy freetime.
+### 4. Deploy both Workers with `./ft deploy`
 
-`wrangler.toml` sets `workers_dev = false` and the zone route `freetime.mutantcacti.com/*` (not a custom domain, so the accounts Worker can take its own paths on the same host; step 4a). The route needs a proxied DNS record for `freetime`: in **DNS → Records**, add `AAAA freetime 100::` with the proxy on (orange cloud). `100::` is a placeholder address: the Worker answers every request, so nothing is ever sent there **(unverified that it's still Cloudflare's recommended placeholder)**. If `freetime.` was deployed earlier with a custom domain, remove that first under **Workers & Pages → freetime → Settings → Domains & Routes**, then add the record.
+Both Workers deploy in one flow (`DEV-SPEC.md` §5): `./ft deploy` checks everything first, shows the plan and asks once, then applies the remote D1 migrations, deploys the accounts Worker, deploys the site (each with its secrets), and checks the live site. It stops at the first failure and never rolls back by itself; if production changed only partly, it says so in a `DEPLOY INCOMPLETE` block (exit 4) with the next steps. The manual commands are in [Deploy without ft](#deploy-without-ft-fallback).
+
+The two Workers stay separate (`ACCOUNTS-SPEC.md` §1): `wrangler.toml` (the site, zone route `freetime.mutantcacti.com/*`, `workers_dev = false`) and `wrangler.accounts.toml` (the paths `/account*`, `/u/*`, `/spaces*`, `/s/*` and `/auth/*` on the same host; the main Worker keeps everything else).
+
+**One-time setup** (`./ft status` shows which of these are missing, and `./ft deploy` stops with exit 3 until they're done):
+
+1. **Log in:** `npx wrangler login`.
+2. **DNS record:** the zone route needs a proxied DNS record for `freetime`: in **DNS → Records**, add `AAAA freetime 100::` with the proxy on (orange cloud). `100::` is a placeholder address: the Worker answers every request, so nothing is ever sent there **(unverified that it's still Cloudflare's recommended placeholder)**. If `freetime.` was deployed earlier with a custom domain, remove that under **Workers & Pages → freetime → Settings → Domains & Routes** at the same time (`DEV-SPEC.md` §9 has the order).
+3. **Database:** `npx wrangler d1 create freetime-accounts`, then put the `database_id` it prints into `wrangler.accounts.toml` (the top-level `[[d1_databases]]`, replacing the zeros) and commit it.
+4. **Pictures:** `npx wrangler r2 bucket create freetime-pictures` (accounts phase 2: profile pictures).
+5. **Resend:** in Resend, add the sending domain (`freetime.mutantcacti.com`, or whichever matches `RESEND_FROM` in `wrangler.accounts.toml`), add the DNS records Resend shows in Cloudflare's **DNS → Records**, wait until Resend shows the domain as verified, and create an API key with sending access only.
+6. **Secrets, in `.secrets`** (gitignored, never committed; `DEV-SPEC.md` §6). Either copy `.secrets.example` to `.secrets` and fill it in, or:
 
 ```bash
-npm ci && npm test
+./ft secrets --set ICAL_URL
 ```
 
 ```bash
-npx wrangler login
+./ft secrets --set RESEND_API_KEY
 ```
 
 ```bash
-npx wrangler secret put ICAL_URL
+./ft secrets --generate ACCOUNTS_KEY
 ```
 
-At the prompt, paste the calendar's **secret address in iCal format** (Google Calendar: Settings → the calendar → Integrate calendar). If Wrangler offers to create the Worker because it doesn't exist yet, accept. **(unverified)**
+   `ICAL_URL` is the calendar's **secret address in iCal format** (Google Calendar: Settings → the calendar → Integrate calendar). **Several calendars:** all their secret addresses on the one line, separated by spaces (commas also work). Busy time from all of them is merged. The most is 10. To change the list later, edit `.secrets` (or `./ft secrets --set ICAL_URL`) and deploy; the whole value is replaced. `ACCOUNTS_KEY` is 32 random bytes for encrypting calendar addresses (accounts phase 2): **keep a copy somewhere safe and never change it**; ft refuses to replace it.
 
-**Several calendars:** paste all their secret addresses on the one line, separated by spaces (commas also work). Busy time from all of them is merged. The most is 10. To add or remove a calendar later, run `npx wrangler secret put ICAL_URL` again with the full new list; the secret is replaced, not appended to.
-
-```bash
-npx wrangler deploy
-```
-
-### 4a. Deploy the accounts Worker
-
-The accounts Worker is always a separate Worker (`ACCOUNTS-SPEC.md` §1) with its own config, `wrangler.accounts.toml`. It takes the paths `/account*`, `/u/*`, `/spaces*`, `/s/*` and `/auth/*` on the same host; the main Worker keeps everything else.
-
-1. **Database:**
+**Each deploy:**
 
 ```bash
-npx wrangler d1 create freetime-accounts
-```
-
-   Put the `database_id` it prints into `wrangler.accounts.toml` (the top-level `[[d1_databases]]`, replacing the zeros).
-
-2. **Resend:** in Resend, add the sending domain (`freetime.mutantcacti.com`, or whichever matches `RESEND_FROM` in `wrangler.accounts.toml`), add the DNS records Resend shows in Cloudflare's **DNS → Records**, and wait until Resend shows the domain as verified. Create an API key with sending access only, then:
-
-```bash
-npx wrangler secret put RESEND_API_KEY -c wrangler.accounts.toml
-```
-
-3. **Pictures and calendar encryption:**
-
-```bash
-npx wrangler r2 bucket create freetime-pictures
+./ft deploy --dry-run
 ```
 
 ```bash
-openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' | npx wrangler secret put ACCOUNTS_KEY -c wrangler.accounts.toml
+./ft deploy
 ```
 
-   `ACCOUNTS_KEY` encrypts every calendar address in the database. Keep a copy somewhere safe: if it's lost or changed, saved calendars can't be read and have to be added again.
+`--dry-run` runs every check and prints the plan without changing anything. Deploys come from `main` with a clean tree (`--allow-branch` for another branch); `--only site` or `--only accounts` deploys one Worker. Secret values go to wrangler on stdin, never as arguments, and are never printed.
 
-4. **Deploy** (applies the migrations to the remote database, then deploys):
+**Then check the accounts by hand** (`./ft deploy` reminds you): open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
 
-```bash
-npm run deploy:accounts
-```
-
-5. **Check:** open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
+`./ft status` shows, any time, what each Worker runs compared with your commit, the secret names set, pending migrations, and the live checks. `./ft logs site` (or `accounts`) tails the logs.
 
 ### 5. Verify
 
@@ -235,6 +212,42 @@ Re-enable DNSSEC through Cloudflare (**DNS → Settings → Enable DNSSEC**), th
 - **Just freetime.:** remove its route under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
 - **Just accounts:** `npx wrangler delete -c wrangler.accounts.toml` removes the accounts Worker and its routes; the main site keeps working. The D1 database stays until deleted with `npx wrangler d1 delete freetime-accounts`.
 
+## Deploy without ft (fallback)
+
+These are the raw commands `./ft deploy` runs, for when ft itself is the problem. **Not through ft: no checks**, and secrets are typed at wrangler's prompt instead of read from `.secrets`.
+
+```bash
+npm ci && npm test && npm run typecheck
+```
+
+```bash
+npx wrangler secret put ICAL_URL
+```
+
+```bash
+npx wrangler secret put RESEND_API_KEY -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler secret put ACCOUNTS_KEY -c wrangler.accounts.toml
+```
+
+At each prompt, paste the value. If Wrangler offers to create the Worker because it doesn't exist yet, accept. **(unverified)**
+
+```bash
+npx wrangler d1 migrations apply freetime-accounts --remote -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler deploy -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler deploy
+```
+
+Then step 5's checks.
+
 ## Error codes
 
 When the calendar can't be drawn, the panel shows a code, a short random reference and the UTC time, for example `FEED_FETCH · ref 7K2Q9M · 2026-11-02 14:03Z`. The Worker log has the full details (message, stack, upstream status) under the same `ref`. Search for it in `wrangler tail` or Workers Logs. `ICAL_URL`, and each address in it, is replaced by `[ICAL_URL]` in logs and never reaches the browser.
@@ -276,10 +289,10 @@ With several calendars, **any one failing with no saved copy shows the error pan
 
 ## User-facing text
 
-Every string a visitor can see or hear has a `PRINTED OUTPUT` marker comment beside it (spec §2.1). To find them all:
+Every string a visitor can see or hear has a `PRINTED OUTPUT` marker comment beside it (spec §2.1), and so does every line `./ft` prints (`scripts/ft/messages.mjs`). To find them all:
 
 ```bash
-grep -rn "PRINTED OUTPUT" src public
+grep -rn "PRINTED OUTPUT" src public scripts ft
 ```
 
 `/help` (`HelpPage` in `src/views/pages.tsx`) is a template, ready to be rewritten. Each section has its own marker.
@@ -399,3 +412,5 @@ Anything not checked against current documentation is marked **(unverified)**.
 | A profile is drawn in its owner's map for every visitor, signed in or not | The viewer's own map everywhere they look | It's the owner's page; the map is part of how they present it. | Maxence meaning the viewer's choice should follow them. |
 | On phones, Add friend (and Accept, Sign up to add friend) is a full-width pill fixed at the bottom of the screen; Request sent and Friends are quiet lines in the profile card | Keep it in the card everywhere | The bottom of the screen is where a thumb rests, and it's the one action a visitor came to take. The page leaves room so it never covers the calendar. | — |
 | Below 640 px the profile card is compact and the bio is cut to two lines | Show the whole bio | The card sits above the calendar in a fixed-height page; a 280-character bio would take a third of a small screen. The full bio is on wider screens. | Maxence wanting the whole bio on phones (then: let the card scroll away). |
+| One developer command, `./ft` (`DEV-SPEC.md`), a Node script with no dependencies | Raw npm and wrangler commands; a shell script | One flow with checks: deploy stops on a dirty tree, failing tests, a missing setup step or an unsafe migration, and never rolls back by itself. | — |
+| Production secrets in a gitignored `.secrets`, sent with each deploy on stdin (`--secrets-file /dev/stdin`) | `wrangler secret put` by hand | Code and its secrets go live in one version; values never appear in arguments or output **(unverified that a real upload reads `/dev/stdin`; the dry run does)**. | A real deploy rejecting it. |
