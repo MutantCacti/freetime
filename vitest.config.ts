@@ -24,7 +24,8 @@ export default defineConfig(async () => {
           plugins: [
             cloudflareTest({
               wrangler: { configPath: "./wrangler.accounts.toml" },
-              miniflare: { bindings: { TEST_MIGRATIONS: migrations } },
+              // A fixed test key: 32 bytes, base64url. Production's is a secret.
+              miniflare: { bindings: { TEST_MIGRATIONS: migrations, ACCOUNTS_KEY: "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktdGVzdDE" } },
             }),
           ],
           publicDir: false as const,

@@ -34,7 +34,7 @@ const CHANNELS: Channel[] = [
 ];
 
 /** A Copy button that keeps its width as it shows "Copied" or "Copy failed". Hidden without JS. */
-function CopyButton({ value, what }: { value: string; what: string }) {
+export function CopyButton({ value, what }: { value: string; what: string }) {
   return (
     // PRINTED OUTPUT: contact / copy button accessible name
     <button type="button" class="btn copy-btn" data-copy={value} hidden aria-label={`Copy ${what}`}>

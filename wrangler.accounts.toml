@@ -17,6 +17,12 @@ routes = [
 [vars]
 RESEND_FROM = "freetime <noreply@freetime.mutantcacti.com>"
 
+# Dev only: the sample calendar (test/fixtures/dev.ics) bundled as text.
+[[rules]]
+type = "Text"
+globs = ["**/*.ics"]
+fallthrough = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "freetime-accounts"
@@ -38,6 +44,8 @@ routes = []
 
 [env.dev.vars]
 RESEND_FROM = "freetime <noreply@freetime.mutantcacti.com>"
+# Dev only, never a production secret: the key that encrypts calendar addresses in the local database.
+ACCOUNTS_KEY = "ZGV2LW9ubHkta2V5LWRldi1vbmx5LWtleS1kZXYtMDE"
 
 [[env.dev.d1_databases]]
 binding = "DB"

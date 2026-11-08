@@ -10,7 +10,7 @@ export const accountsEnv = env as unknown as AccountsEnv;
 
 /** Every test starts from empty tables. */
 export async function resetDb(): Promise<void> {
-  await accountsEnv.DB.batch(["attempts", "email_tokens", "sessions", "users"].map((t) => accountsEnv.DB.prepare(`DELETE FROM ${t}`)));
+  await accountsEnv.DB.batch(["attempts", "email_tokens", "sessions", "user_calendars", "calendars", "users"].map((t) => accountsEnv.DB.prepare(`DELETE FROM ${t}`)));
 }
 
 export interface Browser {
@@ -30,7 +30,13 @@ export interface TestAccounts {
 }
 
 /** The accounts app with a fixed clock, captured emails and logs, and browsers that keep their cookie. */
-export function makeAccounts(): TestAccounts {
+export interface AccountsOptions {
+  /** Calendar addresses and what fetching them returns; unknown addresses fail to fetch. */
+  calendars?: Record<string, string | (() => Response | Promise<Response>)>;
+}
+
+export function makeAccounts(options: AccountsOptions = {}): TestAccounts & { calendarFetches: string[] } {
+  const calendarFetches: string[] = [];
   let now = NOW;
   let fail = false;
   const emails: EmailMessage[] = [];
@@ -42,6 +48,16 @@ export function makeAccounts(): TestAccounts {
       if (fail) throw Object.assign(new Error("Resend down"), {});
       emails.push(m);
     },
+    fetchCalendar: async (url) => {
+      calendarFetches.push(url);
+      const source = options.calendars?.[url];
+      if (source === undefined) throw new Error("unreachable");
+      return typeof source === "string" ? new Response(source) : source();
+    },
+    // Each app gets its own cache, so tests don't share calendar copies.
+    calendarCachePath: `/__calendar-cache/test-${Math.random().toString(36).slice(2)}`,
+    // Whole days, like the main site's tests.
+    dayWindow: { start: 0, end: 24 * 60 },
   });
 
   async function request(path: string, init: RequestInit, jar: { cookie: string | null }): Promise<Response> {
@@ -58,6 +74,7 @@ export function makeAccounts(): TestAccounts {
   }
 
   return {
+    calendarFetches,
     browser() {
       const jar: { cookie: string | null } = { cookie: null };
       return {

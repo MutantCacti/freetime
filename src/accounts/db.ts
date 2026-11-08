@@ -18,6 +18,15 @@ export interface User {
 
 export type TokenPurpose = "verify" | "reset" | "change";
 
+export interface Calendar {
+  calendar_id: number;
+  kind: "ical" | "google";
+  label: string;
+  secret: ArrayBuffer;
+  status: "ok" | "disconnected";
+  created_at: number;
+}
+
 /** Session length, and how often a used session is extended (ACCOUNTS-SPEC.md §5.3). */
 export const SESSION_SECONDS = 30 * 24 * 3600;
 const SESSION_EXTEND_AFTER = 24 * 3600;
@@ -65,6 +74,43 @@ export class Db {
 
   async setEmail(id: number, email: string): Promise<void> {
     await this.db.prepare("UPDATE users SET email = ?, email_verified = 1 WHERE user_id = ?").bind(email, id).run();
+  }
+
+  userByPublicId(publicId: string): Promise<User | null> {
+    return this.db.prepare("SELECT * FROM users WHERE public_id = ?").bind(publicId).first<User>();
+  }
+
+  // ------------------------------------------------------------ calendars
+
+  /** A user's calendars, oldest first. */
+  async calendarsOf(userId: number): Promise<Calendar[]> {
+    const rows = await this.db
+      .prepare("SELECT calendars.* FROM calendars JOIN user_calendars USING (calendar_id) WHERE user_id = ? ORDER BY calendar_id")
+      .bind(userId)
+      .all<Calendar>();
+    return rows.results;
+  }
+
+  async addCalendar(userId: number, c: { kind: "ical"; label: string; secret: Uint8Array }, now: number): Promise<number> {
+    const row = await this.db
+      .prepare("INSERT INTO calendars (kind, label, secret, created_at) VALUES (?, ?, ?, ?) RETURNING calendar_id")
+      .bind(c.kind, c.label, c.secret, now)
+      .first<{ calendar_id: number }>();
+    await this.db.prepare("INSERT INTO user_calendars (user_id, calendar_id) VALUES (?, ?)").bind(userId, row!.calendar_id).run();
+    return row!.calendar_id;
+  }
+
+  /** Only the owner's own calendar is removed; returns whether one was. */
+  async removeCalendar(userId: number, calendarId: number): Promise<boolean> {
+    const owned = await this.db.prepare("SELECT 1 FROM user_calendars WHERE user_id = ? AND calendar_id = ?").bind(userId, calendarId).first();
+    if (!owned) return false;
+    await this.db.prepare("DELETE FROM calendars WHERE calendar_id = ?").bind(calendarId).run();
+    return true;
+  }
+
+  /** Delete a user's calendars (the user row's cascade only removes the memberships). */
+  async deleteCalendarsOf(userId: number): Promise<void> {
+    await this.db.prepare("DELETE FROM calendars WHERE calendar_id IN (SELECT calendar_id FROM user_calendars WHERE user_id = ?)").bind(userId).run();
   }
 
   // ------------------------------------------------------------ sessions

@@ -8,9 +8,12 @@ import { WithSeps } from "../views/sep";
 import { CloseControl, ThemeButton } from "../views/topbar";
 import { formatOffset, offsetSeconds, allZones } from "../tz";
 import type { User } from "./db";
+import { CopyButton } from "../views/panels";
+import { monthLabel } from "../format";
+import { dateAt } from "../tz";
 
 /** Limits shown in forms and checked on the server. */
-export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, email: 254 } as const;
+export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, email: 254, label: 40 } as const;
 
 // ---------------------------------------------------------------- shell
 
@@ -280,16 +283,27 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
+/** A calendar as the account page shows it: never its address. */
+export interface CalendarRow {
+  calendar_id: number;
+  label: string;
+  kind: "ical" | "google";
+  status: "ok" | "disconnected";
+}
+
 export interface AccountPageProps {
   user: User;
+  calendars: CalendarRow[];
+  /** The share link: the profile, and (phase 3) a friend invite. */
+  shareLink: string;
   /** What was just saved, for the confirmation line. */
   done?: string;
   errors?: Errors;
   /** Values to put back after a failed save. */
-  draft?: { name?: string; bio?: string; email?: string };
+  draft?: { name?: string; bio?: string; email?: string; label?: string; address?: string };
 }
 
-export function AccountPage({ user, done, errors = {}, draft = {} }: AccountPageProps) {
+export function AccountPage({ user, calendars, shareLink, done, errors = {}, draft = {} }: AccountPageProps) {
   const visibility = user.visibility === "public" ? "Public" : "Private"; // PRINTED OUTPUT: account / visibility names
   return (
     // PRINTED OUTPUT: account / title
@@ -308,7 +322,71 @@ export function AccountPage({ user, done, errors = {}, draft = {} }: AccountPage
           <p class="profile-meta">
             <WithSeps text={`${user.zone} · ${visibility}`} />
           </p>
+          <div class="actions actions-start">
+            {/* PRINTED OUTPUT: account / view profile link */}
+            <a class="pill" href={`/u/${user.public_id}`}>
+              View profile
+            </a>
+            {/* PRINTED OUTPUT: account / copy target name */}
+            <CopyButton value={shareLink} what="share link" />
+          </div>
+          {/* Without JS, the link to copy by hand. */}
+          <p class="field-hint share-link">
+            {/* PRINTED OUTPUT: account / share link label */}
+            Your share link: <code>{shareLink}</code>
+          </p>
         </div>
+      </section>
+
+      <section class="account-section" aria-labelledby="your-calendar">
+        {/* PRINTED OUTPUT: account / your calendar heading, intro and link */}
+        <h2 id="your-calendar">Your calendar</h2>
+        <p class="field-hint">Your busy times, merged from these calendars. Only when you're busy is shown, never what you're doing.</p>
+        {calendars.length ? (
+          <ul class="calendar-list">
+            {calendars.map((cal) => (
+              <li>
+                <span class="calendar-label">{cal.label}</span>
+                {/* PRINTED OUTPUT: account / calendar kind and status */}
+                <span class="field-hint">{cal.kind === "google" ? "Google Calendar" : "iCal"}{cal.status === "disconnected" ? " · disconnected" : ""}</span>
+                <form method="post" action="/account/calendars/remove">
+                  <input type="hidden" name="id" value={String(cal.calendar_id)} />
+                  {/* PRINTED OUTPUT: account / remove calendar button and accessible name */}
+                  <button type="submit" class="pill" aria-label={`Remove ${cal.label}`}>
+                    Remove
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          // PRINTED OUTPUT: account / no calendars yet
+          <p>No calendars yet: until you add one, your profile shows you as free.</p>
+        )}
+        <p>
+          {/* PRINTED OUTPUT: account / open your calendar */}
+          <a href={`/u/${user.public_id}`}>Open your calendar</a>
+        </p>
+        {/* PRINTED OUTPUT: account / add calendar form */}
+        <form class="form" method="post" action="/account/calendars">
+          <h3>Add a calendar</h3>
+          <Field label="Name" name="label" value={draft.label} error={errors.label} required maxlength={LIMITS.label} hint="For you only, like Work or Personal." />
+          <Field
+            label="Secret iCal address"
+            name="address"
+            value={draft.address}
+            error={errors.address}
+            required
+            maxlength={2048}
+            autocomplete="off"
+            hint="From your calendar's settings: in Google Calendar, Settings, your calendar, Integrate calendar, Secret address in iCal format. Stored encrypted; never shown again."
+          />
+          <div class="actions actions-start">
+            <button type="submit" class="pill pill-primary">
+              Add calendar
+            </button>
+          </div>
+        </form>
       </section>
 
       <section class="account-section" aria-labelledby="edit-profile">
@@ -408,3 +486,44 @@ export function AccountPage({ user, done, errors = {}, draft = {} }: AccountPage
 }
 
 export { ZoneSelect };
+
+// ---------------------------------------------------------------- profiles
+
+export interface ProfileCardProps {
+  user: User;
+  /** Time zone, friends and member since: public profiles, friends (phase 3) and the owner. */
+  showPublic: boolean;
+  isOwner: boolean;
+  shareLink?: string;
+}
+
+/** Above the calendar on /u/<id> (ACCOUNTS-SPEC.md §3). Never shows the email. */
+export function ProfileCard({ user, showPublic, isOwner, shareLink }: ProfileCardProps) {
+  const since = monthLabel(dateAt(user.created_at, user.zone));
+  return (
+    <section class="profile-card profile-strip" aria-labelledby="profile-name">
+      <span class="avatar" aria-hidden="true">
+        {initials(user.name)}
+      </span>
+      <div class="profile-text">
+        <h2 id="profile-name">{user.name}</h2>
+        {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
+        {showPublic ? (
+          // PRINTED OUTPUT: profile / time zone and member since
+          <p class="profile-meta">
+            <WithSeps text={`${user.zone} · Member since ${since}`} />
+          </p>
+        ) : null}
+        {isOwner && shareLink ? (
+          <div class="actions actions-start">
+            {/* PRINTED OUTPUT: profile / owner's actions */}
+            <a class="pill" href="/account">
+              Edit profile
+            </a>
+            <CopyButton value={shareLink} what="share link" />
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}

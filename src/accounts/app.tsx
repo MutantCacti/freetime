@@ -8,7 +8,14 @@ import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "
 import { SECURITY_HEADERS } from "../headers";
 import { canonicalZone } from "../tz";
 import { StatusPage } from "../views/pages";
+import { type DayWindow, DAY_WINDOW } from "../calendar";
+import { renderCalendar } from "../calendar-page";
+import { Links } from "../links";
+import { calendarCss, ditherAsset } from "../styles";
+import { resolveZone } from "../state";
+import { type FetchCalendar, busyOf, calendarAddress, fetchCalendarUrl, loadCalendar } from "./busy";
 import { checkPassword, dummyPasswordHash, hashPassword, sha256Hex } from "./crypto";
+import { seal } from "./secret-box";
 import { Db, SESSION_SECONDS, type User } from "./db";
 import { type SendEmail, confirmEmail, resendSender, resetEmail } from "./email";
 import {
@@ -19,6 +26,7 @@ import {
   Field,
   LIMITS,
   MessagePage,
+  ProfileCard,
   ResetRequestPage,
   SignInPage,
   SignUpPage,
@@ -27,6 +35,8 @@ import {
 
 export interface AccountsEnv {
   DB: D1Database;
+  /** Key material for encrypting calendar addresses (32 random bytes, base64url). */
+  ACCOUNTS_KEY?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
   ASSETS?: Fetcher;
@@ -37,6 +47,12 @@ export interface AccountsDeps {
   sendEmail?: SendEmail;
   now?: () => number;
   log?: LogFn;
+  /** Fetch one calendar's address. Defaults to fetching it, as the main site does. */
+  fetchCalendar?: FetchCalendar;
+  /** Cache API key path for calendar copies. */
+  calendarCachePath?: string;
+  /** The day window, as the main site's. */
+  dayWindow?: DayWindow;
 }
 
 type Ctx = Context<{ Bindings: AccountsEnv; Variables: { user: User | null; token: string | null } }>;
@@ -70,6 +86,14 @@ const MSG = {
   emailChanged: "Email changed.",
   signedOutAll: "Signed out everywhere else.",
   verified: "Email confirmed. Welcome to freetime.",
+  calendarAdded: "Calendar added.",
+  calendarRemoved: "Calendar removed.",
+  labelRequired: "Name this calendar.",
+  labelLong: `Use ${LIMITS.label} characters or fewer.`,
+  addressInvalid: "Paste the calendar's secret address: it starts with https:// or webcal://.",
+  addressUnreachable: "That address couldn't be reached. Check it and try again.",
+  addressRefused: "That address was refused: it may be wrong, or no longer secret.",
+  addressNotCalendar: "That address isn't a calendar in iCal format.",
   resetDone: "Password changed. You've been signed out everywhere else.",
 } as const;
 
@@ -94,6 +118,38 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   const send = (c: Ctx): SendEmail => deps.sendEmail ?? resendSender(c.env.RESEND_API_KEY, c.env.RESEND_FROM);
   const ip = (c: Ctx) => c.req.header("cf-connecting-ip") ?? "unknown";
   const origin = (c: Ctx) => new URL(c.req.url).origin;
+  const window = deps.dayWindow ?? DAY_WINDOW;
+
+  function waitUntilFor(c: Ctx) {
+    return (p: Promise<unknown>) => {
+      try {
+        c.executionCtx.waitUntil(p);
+      } catch {
+        void p; // no execution context (some tests): let it run
+      }
+    };
+  }
+
+  function sources(c: Ctx) {
+    return {
+      key: c.env.ACCOUNTS_KEY,
+      fetchCalendar: deps.fetchCalendar ?? fetchCalendarUrl,
+      cache: caches.default,
+      cacheBase: new URL(deps.calendarCachePath ?? "/__calendar-cache/v1", c.req.url).toString(),
+      nowSec: now(),
+      waitUntil: waitUntilFor(c),
+    };
+  }
+
+  /** The profile address, which is also the friend invite (ACCOUNTS-SPEC.md §4). */
+  function shareLink(c: Ctx, user: User): string {
+    return `${origin(c)}/u/${user.public_id}?f=${user.invite_code}`;
+  }
+
+  async function accountPage(c: Ctx, user: User, opts: Omit<Parameters<typeof AccountPage>[0], "user" | "calendars" | "shareLink">, status = 200) {
+    const calendars = (await db(c).calendarsOf(user.user_id)).map(({ calendar_id, label, kind, status }) => ({ calendar_id, label, kind, status }));
+    return page(c, <AccountPage user={user} calendars={calendars} shareLink={shareLink(c, user)} {...opts} />, status);
+  }
 
   function startSession(c: Ctx, token: string) {
     setCookie(c, SESSION_COOKIE, token, { path: "/", secure: true, httpOnly: true, sameSite: "Lax", maxAge: SESSION_SECONDS });
@@ -157,13 +213,13 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
 
   // ------------------------------------------------------------ account
 
-  app.get("/account", (c) => {
+  app.get("/account", async (c) => {
     const user = c.get("user");
     if (!user) return page(c, <SignedOutPage />);
-    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, reset: MSG.resetDone }[
+    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved }[
       c.req.query("done") ?? ""
     ];
-    return page(c, <AccountPage user={user} done={done} />);
+    return await accountPage(c, user, { done: done });
   });
 
   // ------------------------------------------------------------ sign up
@@ -399,7 +455,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (!name) errors.name = MSG.nameRequired;
     else if (name.length > LIMITS.name) errors.name = MSG.nameLong;
     if (bio.length > LIMITS.bio) errors.bio = MSG.bioLong;
-    if (Object.keys(errors).length) return page(c, <AccountPage user={user} errors={errors} draft={{ name, bio }} />, 400);
+    if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors, draft: { name, bio } }, 400);
     await db(c).updateProfile(user.user_id, { name, bio, zone, visibility });
     return c.redirect("/account?done=profile", 303);
   });
@@ -414,7 +470,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (!user.password_hash || !(await checkPassword(current, user.password_hash))) errors.current = MSG.passwordWrong;
     if (password.length < LIMITS.passwordMin) errors.password = MSG.passwordShort;
     else if (password.length > LIMITS.passwordMax) errors.password = MSG.passwordLong;
-    if (Object.keys(errors).length) return page(c, <AccountPage user={user} errors={errors} />, 400);
+    if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors }, 400);
     await db(c).setPassword(user.user_id, await hashPassword(password));
     await db(c).deleteSessions(user.user_id, c.get("token") ?? undefined);
     return c.redirect("/account?done=password", 303);
@@ -426,16 +482,16 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const f = await form(c);
     const email = clean(f.email).toLowerCase();
     if (email === user.email.toLowerCase()) return c.redirect("/account", 303);
-    if (!EMAIL_RE.test(email) || email.length > LIMITS.email) return page(c, <AccountPage user={user} errors={{ email: MSG.emailInvalid }} draft={{ email }} />, 400);
-    if (await db(c).userByEmail(email)) return page(c, <AccountPage user={user} errors={{ email: MSG.emailTaken }} draft={{ email }} />, 400);
+    if (!EMAIL_RE.test(email) || email.length > LIMITS.email) return await accountPage(c, user, { errors: { email: MSG.emailInvalid }, draft: { email } }, 400);
+    if (await db(c).userByEmail(email)) return await accountPage(c, user, { errors: { email: MSG.emailTaken }, draft: { email } }, 400);
     const t = now();
-    if (await limited(c, `email:${ip(c)}`, RATE.emailIp)) return page(c, <AccountPage user={user} errors={{ form: MSG.limit }} />, 429);
+    if (await limited(c, `email:${ip(c)}`, RATE.emailIp)) return await accountPage(c, user, { errors: { form: MSG.limit } }, 429);
     await db(c).recordAttempt(`email:${ip(c)}`, t);
     try {
       await sendConfirm(c, user, "change", email);
     } catch (e) {
       reportFatal(c, toAppError(e));
-      return page(c, <AccountPage user={user} errors={{ form: MSG.emailSend }} draft={{ email }} />, 503);
+      return await accountPage(c, user, { errors: { form: MSG.emailSend }, draft: { email } }, 503);
     }
     return c.redirect("/account?done=email", 303);
   });
@@ -446,12 +502,76 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const f = await form(c);
     const password = typeof f.password === "string" ? f.password : "";
     if (!user.password_hash || !(await checkPassword(password, user.password_hash))) {
-      return page(c, <AccountPage user={user} errors={{ delete: MSG.passwordWrong }} />, 400);
+      return await accountPage(c, user, { errors: { delete: MSG.passwordWrong } }, 400);
     }
+    await db(c).deleteCalendarsOf(user.user_id);
     await db(c).deleteUser(user.user_id);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     // PRINTED OUTPUT: account deleted / title, message and link
     return page(c, <MessagePage title="Account deleted" message="Your account and everything in it are gone." href="/" linkText="Go to the calendar" />);
+  });
+
+  // ------------------------------------------------------------ calendars
+
+  app.post("/account/calendars", async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const f = await form(c);
+    const label = clean(f.label);
+    const raw = clean(f.address);
+    const draft = { label, address: raw };
+    const errors: Errors = {};
+    if (!label) errors.label = MSG.labelRequired;
+    else if (label.length > LIMITS.label) errors.label = MSG.labelLong;
+    const address = calendarAddress(raw);
+    if (!address) errors.address = MSG.addressInvalid;
+    if (Object.keys(errors).length) return accountPage(c, user, { errors, draft }, 400);
+    // Checked once on save: it must load and parse, as the main site's feed does.
+    try {
+      await loadCalendar(address!, `check-${user.user_id}`, sources(c));
+    } catch (e) {
+      const err = toAppError(e);
+      const message = err.code === "FEED_PARSE" ? MSG.addressNotCalendar : err.code.startsWith("FEED_STATUS_") ? MSG.addressRefused : MSG.addressUnreachable;
+      return accountPage(c, user, { errors: { address: `${message} (${err.code})` }, draft }, 400);
+    }
+    await db(c).addCalendar(user.user_id, { kind: "ical", label, secret: await seal(c.env.ACCOUNTS_KEY, "calendar", address!) }, now());
+    return c.redirect("/account?done=calendar", 303);
+  });
+
+  app.post("/account/calendars/remove", async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const f = await form(c);
+    await db(c).removeCalendar(user.user_id, Number(f.id));
+    return c.redirect("/account?done=removed", 303);
+  });
+
+  // ------------------------------------------------------------ profiles
+
+  app.get("/u/:id", async (c) => {
+    const owner = /^[a-z0-9]{10}$/.test(c.req.param("id")) ? await db(c).userByPublicId(c.req.param("id")) : null;
+    if (!owner || !owner.email_verified) {
+      // PRINTED OUTPUT: profile / not found
+      return page(c, <MessagePage title="No such profile" message="Check the link, or ask for a new one." href="/account" linkText="Go to your account" />, 404);
+    }
+    const viewer = c.get("user");
+    const isOwner = viewer?.user_id === owner.user_id;
+    // Friends see the public profile too (phase 3).
+    const showPublic = isOwner || owner.visibility === "public";
+    // Drawn in the viewer's zone, like the main site.
+    const zone = resolveZone(c.req.query("tz"), c.req.query("dtz"));
+    const calendars = await db(c).calendarsOf(owner.user_id);
+    const { page: body, status } = await renderCalendar({
+      zone,
+      links: new Links(zone, `/u/${owner.public_id}`),
+      query: { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },
+      nowSec: now(),
+      window,
+      loadBusy: (from, to) => busyOf(calendars, from, to, sources(c)),
+      report: (err) => reportFatal(c, err),
+      profile: { title: owner.name, intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
+    });
+    return page(c, body, status);
   });
 
   // ------------------------------------------------------------ errors
@@ -461,6 +581,14 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     logError(log, err, ref, [c.env.RESEND_API_KEY]);
     return ref;
   }
+
+  // Local dev only, like the static files below: in production /css and /img are the main Worker's paths.
+  // The same generated files, from the same shared code.
+  app.get("/css/calendar.css", (c) => c.body(calendarCss(), 200, { "content-type": "text/css; charset=utf-8" }));
+  app.get("/img/dither/:name", (c) => {
+    const svg = ditherAsset(c.req.param("name"));
+    return svg ? c.body(svg, 200, { "content-type": "image/svg+xml" }) : c.notFound();
+  });
 
   app.get("*", async (c) => {
     // Local dev only: the stylesheets and scripts (in production these paths are the main Worker's).
