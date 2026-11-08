@@ -1,7 +1,7 @@
 // Decoding, resizing and the accent colour (image-decode.ts, accent.ts, pictures.ts).
 import { describe, expect, it } from "vitest";
 import tokens from "../../public/css/tokens.css?raw";
-import { ACCENT_LUMINANCE, KAWASE_WEIGHTS, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour } from "../../src/accounts/accent";
+import { ACCENT_LUMINANCE, KAWASE_WEIGHTS, SATURATION_BOOST, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour, saturate } from "../../src/accounts/accent";
 import { Grid, PICTURE_SIZE, decodeJpeg, decodePng } from "../../src/accounts/image-decode";
 import { processPicture } from "../../src/accounts/pictures";
 import { luminance, rgbToOklch } from "../../src/parula";
@@ -177,6 +177,42 @@ describe("accent", () => {
     const [, C0, h0] = rgbToOklch(rgb as [number, number, number]);
     const [, C, h] = rgbToOklch([1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number]);
     if (C0 > 0.05 && C > 0.03) expect(Math.abs(Math.atan2(Math.sin(h - h0), Math.cos(h - h0)))).toBeLessThan(0.15);
+  });
+
+  const hsl = ([r, g, b]: number[]) => {
+    const max = Math.max(r!, g!, b!), min = Math.min(r!, g!, b!), l = (max + min) / 2, d = max - min;
+    const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    let h = d === 0 ? 0 : max === r ? ((g! - b!) / d) % 6 : max === g ? (b! - r!) / d + 2 : (r! - g!) / d + 4;
+    if (h < 0) h += 6;
+    return [h, sat, l];
+  };
+
+  it("raises HSL saturation, keeping hue and lightness", () => {
+    for (const c of [[0.45, 0.48, 0.52], [0.63, 0.52, 0.47], [0.2, 0.5, 0.3], [0.8, 0.2, 0.2]]) {
+      const [h, s0, l] = hsl(c);
+      const [h2, s2, l2] = hsl(saturate(c as [number, number, number]));
+      expect(h2).toBeCloseTo(h!, 6);
+      expect(l2).toBeCloseTo(l!, 6);
+      expect(s2).toBeGreaterThan(s0!);
+      expect(s2).toBeLessThanOrEqual(s0! + (1 - s0!) * SATURATION_BOOST + 1e-9);
+    }
+  });
+
+  it("leaves grey and near-grey neutral rather than inventing a hue", () => {
+    for (const c of [[0.5, 0.5, 0.5], [0.1, 0.1, 0.1], [0.5, 0.505, 0.51]]) expect(saturate(c as [number, number, number])).toEqual(c);
+  });
+
+  it("the boosted accent still meets the clamp's contrast in both themes", () => {
+    const g = new Grid(32, 32);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) (x < 16 ? g.add8(x, y, 40, 150, 160) : g.add8(x, y, 230, 120, 40));
+    const hex = accentOf(g)!;
+    for (const bg of backgrounds) expect(contrast(hex, bg)).toBeGreaterThanOrEqual(3);
+    const text = accentText(hex) === "dark" ? raw["--raw-black"]! : raw["--raw-white"]!;
+    expect(contrast(hex, text)).toBeGreaterThanOrEqual(4.5);
+    // More colourful than clamping the plain average.
+    const plain = clampAccent(pictureColour(g)!);
+    const sat = (h: string) => hsl([1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255))[1]!;
+    expect(sat(hex)).toBeGreaterThan(sat(plain) + 0.05);
   });
 
   it("leaves a colour that already fits alone", () => {

@@ -16,7 +16,9 @@
 //    samples). Passes repeat until the image is 1 × 1: 7 passes from 128.
 // 2. That pixel is the colour (alpha-weighted, so transparent areas don't
 //    count). A fully transparent picture has no accent.
-// 3. Clamp it for its uses (the profile card's edge, its circle and its
+// 3. Raise its HSL saturation (saturate), since an average of a whole
+//    picture is usually greyer than the picture looks.
+// 4. Clamp it for its uses (the profile card's edge, its circle and its
 //    primary buttons), in both themes: keep the hue, cap chroma at
 //    ACCENT_MAX_CHROMA and to the sRGB gamut, and move OKLCH lightness until
 //    relative luminance is within ACCENT_LUMINANCE. In that band the accent is
@@ -135,10 +137,42 @@ export function clampAccent(rgb: [number, number, number]): string {
   return rgbToHex(fitGamut([L, C, h]));
 }
 
-/** The accent for a picture's grid, or null. */
+/** HSL saturation boost: S' = S + (1 − S) × SATURATION_BOOST × ramp(S). */
+export const SATURATION_BOOST = 0.35;
+/** Below `grey` the colour is left neutral (no hue to speak of); the boost reaches full strength at `full`. */
+export const SATURATION_RAMP = { grey: 0.03, full: 0.12 } as const;
+
+/**
+ * Blurring a whole picture to one pixel averages its colours, and colours
+ * that cancel out (a teal background behind an orange shirt) come out
+ * greyish. So the pixel is taken to HSL and its saturation raised towards 1
+ * by SATURATION_BOOST, fading in from SATURATION_RAMP.grey to .full so that a
+ * near-grey picture stays near grey instead of being given an invented hue.
+ * Hue and HSL lightness are kept; the contrast clamp runs afterwards.
+ */
+export function saturate([r, g, b]: [number, number, number]): [number, number, number] {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d < 1e-9) return [r, g, b];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const ramp = Math.min(1, Math.max(0, (s - SATURATION_RAMP.grey) / (SATURATION_RAMP.full - SATURATION_RAMP.grey)));
+  if (ramp === 0) return [r, g, b];
+  const s2 = Math.min(1, s + (1 - s) * SATURATION_BOOST * ramp);
+  // Hue from the original channels, then back from HSL.
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  if (h < 0) h += 6;
+  const c = (1 - Math.abs(2 * l - 1)) * s2;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const m = l - c / 2;
+  const [r1, g1, b1] = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+  return [r1 + m, g1 + m, b1 + m];
+}
+
+/** The accent for a picture's grid, or null: blurred to one pixel, saturated, clamped. */
 export function accentOf(grid: Grid): string | null {
   const colour = pictureColour(grid);
-  return colour ? clampAccent(colour) : null;
+  return colour ? clampAccent(saturate(colour)) : null;
 }
 
 /**
