@@ -98,7 +98,7 @@ const MSG = {
   calendarAdded: "Calendar added.",
   pictureSaved: "Picture updated.",
   pictureRemoved: "Picture removed.",
-  pictureType: "Choose a PNG, JPEG or WebP picture.",
+  pictureType: "Choose a PNG or JPEG picture.",
   pictureUnreadable: "We couldn't read that picture. Try saving it again as PNG or JPEG.",
   pictureLarge: "That picture is over 2 MB. Choose a smaller one.",
   calendarRemoved: "Calendar removed.",

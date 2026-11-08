@@ -483,8 +483,8 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         <form class="form" method="post" action="/account/picture" enctype="multipart/form-data">
           <div class="field">
             <label for="f-picture">Choose a picture</label>
-            <input id="f-picture" name="picture" type="file" accept="image/png,image/jpeg,image/webp" required aria-invalid={errors.picture ? "true" : undefined} />
-            <p class="field-hint">PNG, JPEG or WebP, up to 2 MB. Kept as a small square (the middle of your picture), shown as a circle to everyone who sees your profile.</p>
+            <input id="f-picture" name="picture" type="file" accept="image/png,image/jpeg" required aria-invalid={errors.picture ? "true" : undefined} />
+            <p class="field-hint">PNG or JPEG, up to 2 MB. Kept as a small square (the middle of your picture), shown as a circle to everyone who sees your profile.</p>
             {errors.picture ? <p class="field-error">{errors.picture}</p> : null}
           </div>
           <div class="actions actions-start">

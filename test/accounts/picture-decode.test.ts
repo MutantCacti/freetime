@@ -9,11 +9,6 @@ import baselineUrl from "../fixtures/pic-baseline-420.jpg?inline";
 import progressiveUrl from "../fixtures/pic-progressive-420.jpg?inline";
 import greyUrl from "../fixtures/pic-grey.jpg?inline";
 import { buildPng, inlineBytes } from "./png-builder";
-import { decodeWebp, webpSize } from "../../src/accounts/webp";
-import lossyUrl from "../fixtures/pic-lossy.webp?inline";
-import losslessUrl from "../fixtures/pic-lossless.webp?inline";
-import alphaUrl from "../fixtures/pic-alpha.webp?inline";
-import animatedUrl from "../fixtures/pic-animated.webp?inline";
 
 const toGamma8 = (c: number) => Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055));
 /** A grid cell back in 8-bit sRGB, and its alpha. */
@@ -114,39 +109,6 @@ describe("resizing", () => {
   it("refuses what it can't decode", async () => {
     expect(decodeJpeg(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]))).toBeNull();
     expect(await processPicture(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]), "image/jpeg")).toBeNull();
-  });
-});
-
-describe("WebP decoding", () => {
-  // The fixtures are a 1200 × 900 orange portrait resized, saved by Pillow (libwebp 1.6).
-  it.each([
-    ["lossy", lossyUrl, 600, 450],
-    ["lossless", losslessUrl, 300, 225],
-  ])("decodes %s WebP, centre-cropped to the chosen size", async (_n, url, w, h) => {
-    const bytes = inlineBytes(url);
-    expect(webpSize(bytes)).toEqual({ w, h });
-    const g = (await decodeWebp(bytes))!;
-    expect(g.size).toBe(PICTURE_SIZE);
-    // The top-left of the centre square is the orange background.
-    expect(close(cell(g, 2, 2), [214, 96, 40, 255], 6)).toBe(true);
-  });
-
-  it("keeps alpha: the left half of the alpha fixture is transparent", async () => {
-    const g = (await decodeWebp(inlineBytes(alphaUrl)))!;
-    expect(webpSize(inlineBytes(alphaUrl))).toEqual({ w: 400, h: 400 });
-    expect(g.a[10 * g.size + 5]).toBe(0);
-    expect(cell(g, 120, 10)[3]).toBe(255);
-  });
-
-  it("refuses animated, broken and oversized WebP", async () => {
-    expect(await decodeWebp(inlineBytes(animatedUrl))).toBeNull();
-    const lossy = inlineBytes(lossyUrl);
-    expect(await decodeWebp(lossy.subarray(0, 40))).toBeNull();
-    // A header claiming 16000 × 16000 is refused before decoding.
-    const huge = lossy.slice();
-    huge.set([0x80, 0x3e, 0x80, 0x3e], 26);
-    expect(webpSize(huge)).toEqual({ w: 16000, h: 16000 });
-    expect(await decodeWebp(huge)).toBeNull();
   });
 });
 

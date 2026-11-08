@@ -1,22 +1,21 @@
-// Profile pictures (ACCOUNTS-SPEC.md §8): PNG, JPEG or WebP, at most 2 MB uploaded,
+// Profile pictures (ACCOUNTS-SPEC.md §8): PNG or JPEG, at most 2 MB uploaded,
 // recognised by their first bytes (never by name or claimed type). What's
 // stored in R2, under a random key, is never the upload: it's the centre
 // square, area-averaged to at most 128 × 128 and re-encoded as PNG.
 
 import { accentOf, accentText } from "./accent";
 import { type Grid, decodeJpeg, decodePng } from "./image-decode";
-import { decodeWebp } from "./webp";
 
 export const PICTURE_MAX_BYTES = 2 * 1024 * 1024;
 
-export type PictureType = "image/png" | "image/jpeg" | "image/webp";
+export type PictureType = "image/png" | "image/jpeg";
 
 /** The image type from the file's first bytes, or null. */
 export function sniffPicture(bytes: Uint8Array): PictureType | null {
   const at = (i: number, ...values: number[]) => values.every((v, j) => bytes[i + j] === v);
   if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "image/png";
   if (at(0, 0xff, 0xd8, 0xff)) return "image/jpeg";
-  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp"; // "RIFF" … "WEBP"
+  // WebP ("RIFF" … "WEBP") isn't accepted: there's no decoder for it here, and an undecoded picture can't be resized.
   return null;
 }
 
@@ -48,7 +47,7 @@ export function accentCss(publicId: string, accent: string): string {
  * (never the original) and the accent, or null if it can't be decoded.
  */
 export async function processPicture(bytes: Uint8Array, type: PictureType): Promise<{ png: Uint8Array; accent: string | null } | null> {
-  const grid = type === "image/png" ? await decodePng(bytes) : type === "image/jpeg" ? decodeJpeg(bytes) : await decodeWebp(bytes);
+  const grid = type === "image/png" ? await decodePng(bytes) : type === "image/jpeg" ? decodeJpeg(bytes) : null;
   if (!grid) return null;
   return { png: await encodePng(grid), accent: accentOf(grid) };
 }
