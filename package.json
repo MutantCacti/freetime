@@ -6,9 +6,9 @@
     "dev": "wrangler dev --env dev",
     "dev:live": "wrangler dev",
     "dev:accounts": "wrangler d1 migrations apply freetime-accounts-dev --local -c wrangler.accounts.toml --env dev && wrangler dev -c wrangler.accounts.toml --env dev --port 8788",
-    "deploy:accounts": "wrangler d1 migrations apply freetime-accounts --remote -c wrangler.accounts.toml && wrangler deploy -c wrangler.accounts.toml",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ft": "node scripts/ft.mjs"
   },
   "dependencies": {
     "hono": "4.13.14",
