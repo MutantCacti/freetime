@@ -3,35 +3,29 @@
 
 import { Hono, type Context } from "hono";
 import { mergeIntervals } from "./busy";
-import { type DayWindow, DAY_WINDOW, buildColumns, buildDayCells, checkDayWindow, periodBounds } from "./calendar";
+import { renderCalendar } from "./calendar-page";
+import { type DayWindow, DAY_WINDOW, checkDayWindow, periodBounds } from "./calendar";
 import { DEFAULT_TZ, MAX_FEEDS, SLOT_MINUTES } from "./config";
-import { addDays } from "./dates";
 import { AppError, type LogFn, consoleLog, logError, newRef, toAppError } from "./errors";
 import { buildBusyIcs, EXPORT_FILENAME, exportEvents } from "./export-ics";
 import { type FeedResult, feedUrls, fetchFromUrl, loadFeed } from "./feed";
-import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
+import { exportSpanLabel } from "./format";
 import { expandBusyCached } from "./ical";
-import { Links } from "./links";
+import { Links, PROFILE_BASE_RE } from "./links";
 import {
   type Period,
   type ViewParams,
   type ZoneState,
-  navigation,
   normaliseRange,
   paramsFor,
   periodFor,
   resolveZone,
-  tabTargets,
   today,
 } from "./state";
 import { calendarCss, ditherAsset } from "./styles";
 import { SECURITY_HEADERS } from "./headers";
 import { allZones, formatOffset, offsetSeconds } from "./tz";
-import { ColumnGrid, DayCellGrid } from "./views/calendar";
-import { pageTitle } from "./views/layout";
-import { NOTICES, type Notice } from "./views/notices";
-import { CalendarPage, ContactPage, ExportPage, HelpPage, StatusPage, TzPage, type TzOption } from "./views/pages";
-import { ErrorPanel, RangeForm } from "./views/panels";
+import { ContactPage, ExportPage, HelpPage, StatusPage, TzPage, type TzOption } from "./views/pages";
 import { zoneLabel } from "./views/topbar";
 
 export interface Env {
@@ -167,83 +161,21 @@ export function createApp(deps: AppDeps = {}) {
 
   app.get("/", async (c) => {
     const zone = zoneFrom(c);
-    const links = new Links(zone);
-    const t = nowSec();
-    const todayDate = today(t, zone.zone);
-    const period = periodFor(
-      { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },
-      todayDate,
-    );
-    const here = hereFrom(period);
-    const nav = navigation(period, todayDate);
-    const label = period.view === "month" ? monthLabel(period.start) : period.view === "day" ? dayLong(period.start) : spanLabel(period.start, period.end);
-    const shortLabel = periodMonthsLabel(period.start, period.end);
-
-    const sticky: Notice[] = [];
-    const inline: Notice[] = [];
-    const rangeNotices: Notice[] = [];
-    if (zone.tzInvalid) inline.push({ id: "tz-unknown", kind: "transient", severity: "warning", message: NOTICES.unknownZone });
-    for (const adj of period.adjustments) {
-      const message = adj === "swapped" ? NOTICES.rangeSwapped : adj === "capped" ? NOTICES.rangeCapped : NOTICES.rangeInvalid;
-      rangeNotices.push({ id: `range-${adj}`, kind: "transient", severity: "warning", message });
-    }
-
-    let body;
-    let status = 200;
-    let showColourBar = true;
-    try {
-      const feed = await feedFor(c);
-      if (feed.stale.length) {
-        sticky.push({ id: "stale", kind: "sticky", severity: "warning", message: NOTICES.stale });
+    const { page, status } = await renderCalendar({
+      zone,
+      links: new Links(zone),
+      query: { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },
+      nowSec: nowSec(),
+      window,
+      loadBusy: async (from, to) => {
+        const feed = await feedFor(c);
         for (const s of feed.stale) {
           log({ level: "warn", code: s.problem?.code, message: "serving saved copy of feed", upstreamStatus: s.problem?.upstreamStatus, feed: s.problem?.feed });
         }
-      }
-      const gridStart = addDays(period.start, -7);
-      const gridEnd = addDays(period.end, 7);
-      const bounds = periodBounds(gridStart, gridEnd, zone.zone);
-      const merged = busyFrom(feed.roots, bounds.from, bounds.to);
-      body =
-        period.layout === "columns" ? (
-          <ColumnGrid columns={buildColumns(period, zone.zone, merged, t, window)} />
-        ) : (
-          <DayCellGrid weeks={buildDayCells(period, zone.zone, merged, t, window)} links={links} />
-        );
-    } catch (e) {
-      const err = toAppError(e);
-      const ref = reportFatal(err, c);
-      status = err.status;
-      showColourBar = false;
-      body = <ErrorPanel code={err.code} ref={ref} nowSec={t} contactHref={links.href("/contact", here)} />;
-    }
-
-    const exportParams = { ...here, from: period.start, to: period.end } as Record<string, string>;
-    const page = (
-      <CalendarPage
-        title={pageTitle(label)}
-        topbar={{
-          links,
-          period,
-          nav,
-          tabs: tabTargets(period, todayDate),
-          periodLabel: shortLabel,
-          periodFull: label,
-          zone: zoneLabel(zone, offsetSeconds(t, zone.zone)),
-          here,
-          exportParams,
-        }}
-        sticky={sticky}
-        inline={inline}
-        rangeForm={period.view === "range" ? <RangeForm links={links} from={period.start} to={period.end} notices={rangeNotices} /> : null}
-        body={body}
-        showColourBar={showColourBar}
-        download={{
-          span: exportSpanLabel(period.start, period.end),
-          zone: zone.zone,
-          downloadHref: links.href("/free-busy.ics", { from: period.start, to: period.end }),
-        }}
-      />
-    );
+        return { merged: busyFrom(feed.roots, from, to), stale: feed.stale.length > 0 };
+      },
+      report: (err) => reportFatal(err, c),
+    });
     c.header("cache-control", status === 200 ? PAGE_CACHE : "no-store");
     return c.html(page, status as 200);
   });
@@ -292,7 +224,9 @@ export function createApp(deps: AppDeps = {}) {
 
   app.get("/tz", (c) => {
     const zone = zoneFrom(c);
-    const links = new Links(zone);
+    // A profile's calendar (accounts Worker) comes back to itself; anything else comes back here.
+    const back = c.req.query("back");
+    const links = new Links(zone, back && PROFILE_BASE_RE.test(back) ? back : "/");
     const here = backTo(c, zone);
     const period = periodFor(
       { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },

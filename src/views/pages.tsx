@@ -19,6 +19,8 @@ export interface CalendarPageProps {
   body: Child;
   showColourBar: boolean;
   download: DownloadProps;
+  /** Above the calendar: a profile's card on the accounts Worker. */
+  intro?: Child;
 }
 
 export function CalendarPage(p: CalendarPageProps) {
@@ -31,6 +33,7 @@ export function CalendarPage(p: CalendarPageProps) {
         {/* PRINTED OUTPUT: calendar / region name */}
         <section class="cal-wrap" aria-label="Calendar">
           <NoticeLayer sticky={p.sticky} />
+          {p.intro}
           {p.inline.map((n) => (
             <InlineNotice notice={n} />
           ))}
@@ -39,6 +42,8 @@ export function CalendarPage(p: CalendarPageProps) {
         </section>
         {p.showColourBar ? <ColourBar /> : null}
       </main>
+      {p.topbar.pages === false ? null : (
+        <>
       <dialog class="dialog" id="dlg-download" aria-labelledby="dlg-download-title">
         <div class="dialog-head">
           {/* PRINTED OUTPUT: download dialog / title */}
@@ -78,6 +83,8 @@ export function CalendarPage(p: CalendarPageProps) {
           <HelpContent links={p.topbar.links} here={p.topbar.here} level={3} />
         </div>
       </dialog>
+        </>
+      )}
       <LiveRegions />
     </Document>
   );
@@ -158,6 +165,7 @@ export function TzPage(p: TzPageProps) {
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
+        {p.links.base !== "/" ? <input type="hidden" name="back" value={p.links.base} /> : null}
         {p.links.zoneParams.dtz ? <input type="hidden" name="dtz" value={p.links.zoneParams.dtz} /> : null}
         {/* PRINTED OUTPUT: time zone page / field accessible name */}
         <select name="tz" id="tz-select" aria-label="Time zone">

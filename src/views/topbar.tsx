@@ -50,6 +50,8 @@ export interface TopBarProps {
   /** Current view parameters, carried to Help, Contact, Download and /tz. */
   here: ViewParams;
   exportParams: Record<string, string>;
+  /** Maxence's pages (Download .ics, Contact me, Help). Off on profiles, which aren't Maxence's calendar. */
+  pages?: boolean;
 }
 
 export function TopBar(p: TopBarProps) {
@@ -87,7 +89,7 @@ export function TopBar(p: TopBarProps) {
         class="pill tz-button"
         id="tz-button"
         data-tb="tz"
-        href={p.links.href("/tz", p.here)}
+        href={p.links.href("/tz", p.links.base === "/" ? p.here : { ...p.here, back: p.links.base })}
         aria-label={p.zone.spoken}
         aria-haspopup="listbox"
         aria-expanded="false"
@@ -107,16 +109,20 @@ export function TopBar(p: TopBarProps) {
       <a class="pill round tb-account" data-tb="account" href={p.links.href("/account")} aria-label="Account">
         <UserIcon />
       </a>
-      {/* PRINTED OUTPUT: topbar / menu button accessible name */}
-      <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
-        <MenuIcon />
-      </button>
-      <div class="tb-menu-items" id="tb-menu-items" popover="auto">
-        {/* PRINTED OUTPUT: topbar / download, contact, help */}
-        <a class="pill" data-tb="download" data-dialog="dlg-download" href={p.links.href("/export", p.exportParams)}>Download .ics</a>
-        <a class="pill" data-tb="contact" data-dialog="dlg-contact" href={p.links.href("/contact", p.here)}>Contact me</a>
-        <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
-      </div>
+      {p.pages === false ? null : (
+        <>
+          {/* PRINTED OUTPUT: topbar / menu button accessible name */}
+          <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
+            <MenuIcon />
+          </button>
+          <div class="tb-menu-items" id="tb-menu-items" popover="auto">
+            {/* PRINTED OUTPUT: topbar / download, contact, help */}
+            <a class="pill" data-tb="download" data-dialog="dlg-download" href={p.links.href("/export", p.exportParams)}>Download .ics</a>
+            <a class="pill" data-tb="contact" data-dialog="dlg-contact" href={p.links.href("/contact", p.here)}>Contact me</a>
+            <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
+          </div>
+        </>
+      )}
       <ThemeButton tb />
       </div>
     </header>
