@@ -10,6 +10,8 @@ export const accountsEnv = env as unknown as AccountsEnv;
 
 /** Every test starts from empty tables. */
 export async function resetDb(): Promise<void> {
+  const objects = await accountsEnv.PICTURES!.list();
+  if (objects.objects.length) await accountsEnv.PICTURES!.delete(objects.objects.map((o) => o.key));
   await accountsEnv.DB.batch(["attempts", "email_tokens", "sessions", "user_calendars", "calendars", "users"].map((t) => accountsEnv.DB.prepare(`DELETE FROM ${t}`)));
 }
 
@@ -18,6 +20,8 @@ export interface Browser {
   cookie: string | null;
   get(path: string, headers?: Record<string, string>): Promise<Response>;
   post(path: string, fields: Record<string, string>, headers?: Record<string, string>): Promise<Response>;
+  /** A multipart form post with one file, as a browser sends it. */
+  upload(path: string, field: string, file: File): Promise<Response>;
 }
 
 export interface TestAccounts {
@@ -87,6 +91,11 @@ export function makeAccounts(options: AccountsOptions = {}): TestAccounts & { ca
         get: (path, headers = {}) => request(path, { headers }, jar),
         post: (path, fields, headers = {}) =>
           request(path, { method: "POST", body: new URLSearchParams(fields), headers: { origin: ORIGIN, "content-type": "application/x-www-form-urlencoded", ...headers } }, jar),
+        upload: (path, field, file) => {
+          const body = new FormData();
+          body.set(field, file);
+          return request(path, { method: "POST", body, headers: { origin: ORIGIN } }, jar);
+        },
       };
     },
     emails,

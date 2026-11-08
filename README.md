@@ -172,13 +172,25 @@ npx wrangler d1 create freetime-accounts
 npx wrangler secret put RESEND_API_KEY -c wrangler.accounts.toml
 ```
 
-3. **Deploy** (applies the migrations to the remote database, then deploys):
+3. **Pictures and calendar encryption:**
+
+```bash
+npx wrangler r2 bucket create freetime-pictures
+```
+
+```bash
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '=' | npx wrangler secret put ACCOUNTS_KEY -c wrangler.accounts.toml
+```
+
+   `ACCOUNTS_KEY` encrypts every calendar address in the database. Keep a copy somewhere safe: if it's lost or changed, saved calendars can't be read and have to be added again.
+
+4. **Deploy** (applies the migrations to the remote database, then deploys):
 
 ```bash
 npm run deploy:accounts
 ```
 
-4. **Check:** open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
+5. **Check:** open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
 
 ### 5. Verify
 
@@ -377,4 +389,7 @@ Anything not checked against current documentation is marked **(unverified)**.
 | An address that's never confirmed is free again after 24 hours | Hold it forever | Nobody can block someone else's address by signing up with it. | — |
 | Profiles show name and picture at every visibility level (with bio and busy times when private) | Hide the picture when private | A profile with a name but no face reads as broken; the picture is chosen to be seen. | Maxence preferring pictures hidden when private. |
 | `npm run dev:accounts` prints emails to the terminal | Send real email in dev | Dev works offline and without a Resend key; production always uses Resend. | — |
-
+| One calendar renderer for both Workers (`src/calendar-page.tsx`), given a busy-time loader; `Links` carry a base path ("/" or "/u/<id>"), and the main site's no-JS time-zone page returns to a profile with `back` (only `/u/<id>` is accepted) | A copy of the calendar page for profiles | Profiles show exactly the main site's views, and a fix to one is a fix to both. The main site's output is unchanged (its tests didn't move). | — |
+| A user's calendars are cached like the main site's feed (fresh 5 minutes, saved copy kept 7 days for failures), and one that can't be loaded at all shows the error panel | Cache busy blocks only; skip the broken calendar | Same code and behaviour as the main site. Skipping it would show that calendar's busy time as free. | Calendars that fail often: show the others with a warning instead. |
+| Calendar addresses are encrypted with AES-256-GCM under a key derived (HKDF) from `ACCOUNTS_KEY`, a fresh IV each; the address is checked once on save and never shown again | Store them plainly; show them masked | A secret iCal address is as good as the calendar itself. | — |
+| Pictures are recognised by their first bytes (PNG, JPEG, WebP), stored in R2 under a random key and served with a cache-forever URL that changes on each upload | Trust the file name or type; resize on upload | A file named `.png` can be anything; sniffing refuses the rest. Resizing needs an image service, and the circle is drawn by CSS. | Large pictures slowing profiles: add resizing. |

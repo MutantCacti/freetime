@@ -30,6 +30,11 @@ database_name = "freetime-accounts"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
+# Profile pictures (ACCOUNTS-SPEC.md §8). Create with `npx wrangler r2 bucket create freetime-pictures`.
+[[r2_buckets]]
+binding = "PICTURES"
+bucket_name = "freetime-pictures"
+
 # Local dev only: the same stylesheets and scripts as the main site, so account
 # pages look right on their own. In production these paths are the main Worker's.
 [assets]
@@ -52,6 +57,10 @@ binding = "DB"
 database_name = "freetime-accounts-dev"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
+
+[[env.dev.r2_buckets]]
+binding = "PICTURES"
+bucket_name = "freetime-pictures-dev"
 
 [env.dev.assets]
 directory = "./public"

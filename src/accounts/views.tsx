@@ -8,6 +8,7 @@ import { WithSeps } from "../views/sep";
 import { CloseControl, ThemeButton } from "../views/topbar";
 import { formatOffset, offsetSeconds, allZones } from "../tz";
 import type { User } from "./db";
+import { pictureUrl } from "./pictures";
 import { CopyButton } from "../views/panels";
 import { monthLabel } from "../format";
 import { dateAt } from "../tz";
@@ -275,7 +276,18 @@ export function SignedOutPage() {
 
 // ---------------------------------------------------------------- signed in
 
-/** Initials for the picture circle until pictures arrive (phase 2). */
+/** The picture circle: the user's picture, or their initials. Decorative: the name is always next to it. */
+export function Avatar({ user }: { user: User }) {
+  return user.picture_key ? (
+    <img class="avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={64} height={64} />
+  ) : (
+    <span class="avatar" aria-hidden="true">
+      {initials(user.name)}
+    </span>
+  );
+}
+
+/** Initials for the picture circle when there's no picture. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0] ?? "?";
@@ -312,9 +324,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
       {errors.form ? <FormMessage kind="error">{errors.form}</FormMessage> : null}
 
       <section class="profile-card" aria-labelledby="profile-name">
-        <span class="avatar" aria-hidden="true">
-          {initials(user.name)}
-        </span>
+        <Avatar user={user} />
         <div class="profile-text">
           <h2 id="profile-name">{user.name}</h2>
           {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
@@ -420,6 +430,31 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         </form>
       </section>
 
+      <section class="account-section" aria-labelledby="picture">
+        {/* PRINTED OUTPUT: account / picture heading, field, hint and buttons */}
+        <h2 id="picture">Picture</h2>
+        <form class="form" method="post" action="/account/picture" enctype="multipart/form-data">
+          <div class="field">
+            <label for="f-picture">Choose a picture</label>
+            <input id="f-picture" name="picture" type="file" accept="image/png,image/jpeg,image/webp" required aria-invalid={errors.picture ? "true" : undefined} />
+            <p class="field-hint">PNG, JPEG or WebP, up to 2 MB. Shown as a circle, to everyone who sees your profile.</p>
+            {errors.picture ? <p class="field-error">{errors.picture}</p> : null}
+          </div>
+          <div class="actions actions-start">
+            <button type="submit" class="pill pill-primary">
+              Upload picture
+            </button>
+          </div>
+        </form>
+        {user.picture_key ? (
+          <form method="post" action="/account/picture/remove">
+            <button type="submit" class="pill">
+              Remove picture
+            </button>
+          </form>
+        ) : null}
+      </section>
+
       <section class="account-section" aria-labelledby="security">
         {/* PRINTED OUTPUT: account / sign-in and security heading */}
         <h2 id="security">Sign-in and security</h2>
@@ -502,9 +537,7 @@ export function ProfileCard({ user, showPublic, isOwner, shareLink }: ProfileCar
   const since = monthLabel(dateAt(user.created_at, user.zone));
   return (
     <section class="profile-card profile-strip" aria-labelledby="profile-name">
-      <span class="avatar" aria-hidden="true">
-        {initials(user.name)}
-      </span>
+      <Avatar user={user} />
       <div class="profile-text">
         <h2 id="profile-name">{user.name}</h2>
         {user.bio ? <p class="profile-bio">{user.bio}</p> : null}

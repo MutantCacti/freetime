@@ -13,6 +13,7 @@ export interface User {
   email_verified: number;
   password_hash: string | null;
   invite_code: string;
+  picture_key: string | null;
   created_at: number;
 }
 
@@ -66,6 +67,10 @@ export class Db {
 
   async updateProfile(id: number, p: { name: string; bio: string; zone: string; visibility: "public" | "private" }): Promise<void> {
     await this.db.prepare("UPDATE users SET name = ?, bio = ?, zone = ?, visibility = ? WHERE user_id = ?").bind(p.name, p.bio, p.zone, p.visibility, id).run();
+  }
+
+  async setPicture(id: number, key: string | null): Promise<void> {
+    await this.db.prepare("UPDATE users SET picture_key = ? WHERE user_id = ?").bind(key, id).run();
   }
 
   async setPassword(id: number, passwordHash: string): Promise<void> {

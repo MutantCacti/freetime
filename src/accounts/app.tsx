@@ -14,7 +14,8 @@ import { Links } from "../links";
 import { calendarCss, ditherAsset } from "../styles";
 import { resolveZone } from "../state";
 import { type FetchCalendar, busyOf, calendarAddress, fetchCalendarUrl, loadCalendar } from "./busy";
-import { checkPassword, dummyPasswordHash, hashPassword, sha256Hex } from "./crypto";
+import { checkPassword, dummyPasswordHash, hashPassword, randomId, sha256Hex } from "./crypto";
+import { PICTURE_MAX_BYTES, sniffPicture } from "./pictures";
 import { seal } from "./secret-box";
 import { Db, SESSION_SECONDS, type User } from "./db";
 import { type SendEmail, confirmEmail, resendSender, resetEmail } from "./email";
@@ -35,6 +36,8 @@ import {
 
 export interface AccountsEnv {
   DB: D1Database;
+  /** Profile pictures. */
+  PICTURES?: R2Bucket;
   /** Key material for encrypting calendar addresses (32 random bytes, base64url). */
   ACCOUNTS_KEY?: string;
   RESEND_API_KEY?: string;
@@ -87,6 +90,10 @@ const MSG = {
   signedOutAll: "Signed out everywhere else.",
   verified: "Email confirmed. Welcome to freetime.",
   calendarAdded: "Calendar added.",
+  pictureSaved: "Picture updated.",
+  pictureRemoved: "Picture removed.",
+  pictureType: "Choose a PNG, JPEG or WebP picture.",
+  pictureLarge: "That picture is over 2 MB. Choose a smaller one.",
   calendarRemoved: "Calendar removed.",
   labelRequired: "Name this calendar.",
   labelLong: `Use ${LIMITS.label} characters or fewer.`,
@@ -216,7 +223,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   app.get("/account", async (c) => {
     const user = c.get("user");
     if (!user) return page(c, <SignedOutPage />);
-    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved }[
+    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved, picture: MSG.pictureSaved, pictureRemoved: MSG.pictureRemoved }[
       c.req.query("done") ?? ""
     ];
     return await accountPage(c, user, { done: done });
@@ -505,6 +512,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       return await accountPage(c, user, { errors: { delete: MSG.passwordWrong } }, 400);
     }
     await db(c).deleteCalendarsOf(user.user_id);
+    if (user.picture_key) await c.env.PICTURES?.delete(user.picture_key);
     await db(c).deleteUser(user.user_id);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
     // PRINTED OUTPUT: account deleted / title, message and link
@@ -544,6 +552,53 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const f = await form(c);
     await db(c).removeCalendar(user.user_id, Number(f.id));
     return c.redirect("/account?done=removed", 303);
+  });
+
+  // ------------------------------------------------------------ pictures
+
+  app.post("/account/picture", async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const bucket = c.env.PICTURES;
+    if (!bucket) throw new AppError("INTERNAL", "PICTURES bucket is not bound");
+    // Refuse oversized uploads before reading them (with room for the form's own bytes).
+    if (Number(c.req.header("content-length") ?? 0) > PICTURE_MAX_BYTES + 64 * 1024) return accountPage(c, user, { errors: { picture: MSG.pictureLarge } }, 413);
+    const body = await c.req.parseBody();
+    const file = body.picture;
+    if (!(file instanceof File) || file.size === 0) return accountPage(c, user, { errors: { picture: MSG.pictureType } }, 400);
+    if (file.size > PICTURE_MAX_BYTES) return accountPage(c, user, { errors: { picture: MSG.pictureLarge } }, 413);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const type = sniffPicture(bytes);
+    if (!type) return accountPage(c, user, { errors: { picture: MSG.pictureType } }, 400);
+    const key = `p/${randomId(24)}`;
+    await bucket.put(key, bytes, { httpMetadata: { contentType: type } });
+    await db(c).setPicture(user.user_id, key);
+    if (user.picture_key) await bucket.delete(user.picture_key);
+    return c.redirect("/account?done=picture", 303);
+  });
+
+  app.post("/account/picture/remove", async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    if (user.picture_key) {
+      await db(c).setPicture(user.user_id, null);
+      await c.env.PICTURES?.delete(user.picture_key);
+    }
+    return c.redirect("/account?done=pictureRemoved", 303);
+  });
+
+  /** Pictures are shown at every visibility level, so anyone may load them. */
+  app.get("/u/:id/picture", async (c) => {
+    const owner = /^[a-z0-9]{10}$/.test(c.req.param("id")) ? await db(c).userByPublicId(c.req.param("id")) : null;
+    const object = owner?.email_verified && owner.picture_key ? await c.env.PICTURES?.get(owner.picture_key) : null;
+    if (!object) return c.notFound();
+    return new Response(object.body, {
+      headers: {
+        "content-type": object.httpMetadata?.contentType ?? "application/octet-stream",
+        // The URL changes with every upload (?v=), so it can be kept for good.
+        "cache-control": "public, max-age=31536000, immutable",
+      },
+    });
   });
 
   // ------------------------------------------------------------ profiles

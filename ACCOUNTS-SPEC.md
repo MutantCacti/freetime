@@ -115,7 +115,7 @@ CREATE TABLE space_users     (space_id INTEGER REFERENCES spaces ON DELETE CASCA
 CREATE TABLE space_calendars (space_id INTEGER REFERENCES spaces ON DELETE CASCADE, calendar_id INTEGER REFERENCES calendars ON DELETE CASCADE, PRIMARY KEY (space_id, calendar_id));
 ```
 
-- A **calendar** stores where busy times come from, never the events. Events are fetched when needed, reduced to busy blocks straight away (as `src/ical.ts` already does), and cached with the Cache API for 5 minutes, keyed by calendar id.
+- A **calendar** stores where busy times come from, never the events. Events are fetched when needed and reduced to busy blocks straight away (as `src/ical.ts` already does). Each calendar's feed is cached exactly like the main site's (`src/feed.ts`): fresh for 5 minutes, with a saved copy kept for 7 days in case a fetch fails, keyed by calendar id and a hash of its address. A calendar that can't be loaded at all shows the error panel, as on the main site.
 - **Your busy time** is the merge of all your calendars. Nobody, including you, is ever shown an event's title, which calendar a block came from, or a calendar's address.
 - Deleting your account deletes your user row; the cascades remove sessions, tokens, calendars, friendships, requests and memberships, and your picture is deleted from R2. Spaces left with no members are deleted.
 
