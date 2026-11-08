@@ -11,7 +11,7 @@
 //   - Smaller JPEGs: decoded in full by the vendored jpeg-js. Huffman baseline and progressive (first
 //     DC scan; refinement scans only add precision). Arithmetic coding,
 //     lossless, 12-bit and CMYK are refused.
-//   - WebP isn't decoded, so it isn't accepted.
+//   - WebP: decoded by libwebp compiled to WebAssembly, in webp.ts.
 // Every decoder writes straight into a Grid: the centre square of the picture,
 // area-averaged down to at most PICTURE_SIZE pixels a side, in linear light,
 // with alpha. A refusal or a broken file gives null.

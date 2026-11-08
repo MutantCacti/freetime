@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { decodePng } from "../../src/accounts/image-decode";
 import baselineUrl from "../fixtures/pic-baseline-420.jpg?inline";
+import lossyUrl from "../fixtures/pic-lossy.webp?inline";
 import { accountsEnv, decode, makeAccounts, resetDb, signedUp } from "./helpers";
 import { buildPng, inlineBytes } from "./png-builder";
 
@@ -71,15 +72,18 @@ describe("profile pictures", () => {
     expect((await row())!.accent).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  it("refuses WebP and pictures it can't read, storing nothing", async () => {
+  it("stores a WebP as a 128 × 128 PNG, and refuses pictures it can't read, storing nothing", async () => {
     const a = makeAccounts();
     const b = await signedUp(a);
-    const webp = await b.upload("/account/picture", "picture", new File([WEBP], "me.webp", { type: "image/webp" }));
-    expect(webp.status).toBe(400);
-    expect(decode(await webp.text())).toContain("Choose a PNG or JPEG picture.");
+    const webp = await b.upload("/account/picture", "picture", new File([inlineBytes(lossyUrl)], "me.webp", { type: "image/webp" }));
+    expect(webp.status).toBe(303);
+    expect(pngSize(await stored())).toEqual([128, 128]);
+    await b.post("/account/picture/remove", {});
     const broken = await b.upload("/account/picture", "picture", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])], "me.jpg"));
     expect(broken.status).toBe(400);
     expect(decode(await broken.text())).toContain("We couldn't read that picture.");
+    const badWebp = await b.upload("/account/picture", "picture", new File([WEBP], "me.webp"));
+    expect(badWebp.status).toBe(400);
     expect(await objectCount()).toBe(0);
     expect((await row())!.picture_key).toBeNull();
   });
@@ -89,7 +93,7 @@ describe("profile pictures", () => {
     const b = await signedUp(a);
     const fake = await b.upload("/account/picture", "picture", new File(["<svg onload=alert(1)>"], "me.png", { type: "image/png" }));
     expect(fake.status).toBe(400);
-    expect(decode(await fake.text())).toContain("Choose a PNG or JPEG picture.");
+    expect(decode(await fake.text())).toContain("Choose a PNG, JPEG or WebP picture.");
     expect(await objectCount()).toBe(0);
     const jpeg = await b.upload("/account/picture", "picture", new File([JPEG], "me.txt", { type: "text/plain" }));
     expect(jpeg.status).toBe(303);
