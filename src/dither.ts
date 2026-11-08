@@ -24,9 +24,25 @@ export const BAYER_4X4: readonly (readonly number[])[] = [
   [15, 7, 13, 5],
 ];
 
-/** Dither level for a step: level = round(MIN + step / (LEVELS − 1) × (MAX − MIN)). */
+/**
+ * Where a step sits on the ramp, 0 (free) to 1 (fully busy): an S-curve
+ * (smoothstep, 3t² − 2t³ with t = step / (LEVELS − 1)) rather than a straight
+ * line, so more steps read close to the ends, near free and near busy, and
+ * the middle is compressed. The colour and the dots both follow it.
+ */
+export function stepPosition(step: number): number {
+  const t = Math.min(1, Math.max(0, step / (LEVELS - 1)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Dither level for a step: round(MIN + stepPosition(step) × (MAX − MIN)),
+ * at least MIN + 1 for any busy step so busy time always has dots.
+ * With 0 and 12: 0, 1, 2, 4, 6, 8, 10, 11, 12.
+ */
 export function ditherLevelForStep(step: number): number {
-  return Math.round(DITHER_MIN_LEVEL + (step / (LEVELS - 1)) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
+  const level = Math.round(DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
+  return step > 0 ? Math.max(DITHER_MIN_LEVEL + 1, level) : level;
 }
 
 /** Dither level for a busy fraction, through its step. */
@@ -36,7 +52,7 @@ export function ditherLevel(fraction: number): number {
 
 /** Pixel size of one Bayer cell in the pattern tile. */
 export const DOT_PX = 2;
-const DOT_OPACITY = 0.42;
+export const DOT_OPACITY = 0.42;
 
 /** The repeating 8×8 px SVG tile for a level. Level n fills n of 16 cells. */
 export function ditherSvg(level: number, tone: "k" | "w"): string {

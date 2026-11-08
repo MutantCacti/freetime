@@ -5,6 +5,7 @@
 // lightness is monotonic and the dither and contrast rules hold for each. This file and public/css/tokens.css are the only places hex
 // colours may appear (test/colour-rule.test.ts enforces it).
 
+import { DOT_OPACITY, ditherLevelForStep, stepPosition } from "./dither";
 import { LEVELS } from "./levels";
 
 /** The original parula(64) table, the default map. */
@@ -149,18 +150,6 @@ export const PARULA_TONED: readonly string[] = toneTable(PARULA_SOURCE);
 /** Chroma scale for time that has passed: the same colours, less saturated. */
 export const PAST_CHROMA = 0.5;
 
-/** The calendar's palette: the toned table sampled at the LEVELS steps, low to high. */
-export const PALETTE: readonly string[] = Array.from(
-  { length: LEVELS },
-  (_, step) => PARULA_TONED[Math.round((step / (LEVELS - 1)) * (PARULA_TONED.length - 1))]!,
-);
-
-/** The palette for past time: each step with chroma scaled by PAST_CHROMA. */
-export const PALETTE_PAST: readonly string[] = PALETTE.map((hex) => {
-  const [L, C, h] = rgbToOklch(hexToRgb(hex));
-  return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
-});
-
 export function luminance(hex: string): number {
   const [r, g, b] = hexToRgb(hex).map(toLinear) as RGB;
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -175,23 +164,131 @@ export function toneFor(hex: string): "k" | "w" {
   return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? "k" : "w";
 }
 
-/** Dot tone for a step of the dark-theme palette. */
-export function dotTone(step: number): "k" | "w" {
-  return toneFor(PALETTE[step]!);
-}
-
 export type Theme = "light" | "dark";
+export type Tone = "k" | "w";
+
+/** One theme's ramp: each step's colour, its past colour, and its dot tone. */
+export interface StepPalette {
+  colours: readonly string[];
+  past: readonly string[];
+  tones: readonly Tone[];
+}
+type ThemePalettes = Record<Theme, StepPalette>;
 
 /**
- * The colours each step uses in each theme. Dark: free is dark purple, busy
- * is yellow. Light: the map is inverted, so free is yellow and busy is dark
- * purple, which reads as "busy" against a white page. The dither is the same
- * in both; only the colours (and the dot tone that suits them) change.
+ * What a cell looks like from arm's length: its colour with its dots blended
+ * in, in linear light (dots cover level / 16 of the cell at DOT_OPACITY).
  */
-export const THEME_PALETTES: Record<Theme, { colours: readonly string[]; past: readonly string[] }> = {
-  dark: { colours: PALETTE, past: PALETTE_PAST },
-  light: { colours: [...PALETTE].reverse(), past: [...PALETTE_PAST].reverse() },
-};
+export function averagedCell(hex: string, tone: Tone, level: number): RGB {
+  const cover = (level / 16) * DOT_OPACITY;
+  const dot = tone === "k" ? 0 : 1;
+  return hexToRgb(hex).map((c) => toGamma(toLinear(c) * (1 - cover) + dot * cover)) as RGB;
+}
+
+/** Dots must differ from the colour under them by at least this (WCAG ratio). */
+export const MIN_DOT_CONTRAST = 1.4;
+
+/** WCAG contrast between a colour and one dot on it (dot blended at DOT_OPACITY in sRGB, as drawn). */
+export function dotContrast(hex: string, tone: Tone): number {
+  const base = hexToRgb(hex);
+  const d = tone === "k" ? 0 : 1;
+  const dot = rgbToHex(base.map((c) => c * (1 - DOT_OPACITY) + d * DOT_OPACITY) as RGB);
+  const [x, y] = [luminance(hex), luminance(dot)].sort((p, q) => q - p) as [number, number];
+  return (x + 0.05) / (y + 0.05);
+}
+
+/**
+ * A theme's ramp from the map's colours, free to busy. Step i is meant to
+ * read at stepPosition(i) between free and fully busy, but the dots change
+ * how light a cell looks (light dots lift it, dark dots sink it), and where
+ * the dot tone flips the cell would jump the wrong way. So each step's
+ * colour keeps its hue and chroma and has its lightness solved so that the
+ * averaged cell (colour plus dots) lands on target: the free cell's
+ * lightness moved towards the fully busy cell's by stepPosition(i). The dot
+ * tone is whichever can reach the target with the clearer dots.
+ */
+function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPalette {
+  const last = LEVELS - 1;
+  const okL = (rgb: RGB) => rgbToOklch(rgb)[0];
+  // Fully busy: of the two dot tones, whichever leaves the cell furthest towards busy with
+  // its dots still showing. If the dots don't show on the map's end colour, that colour's
+  // lightness is moved (away from busy) just until they do.
+  const levelN = ditherLevelForStep(last);
+  const [Ln, Cn, hn] = rgbToOklch(hexToRgb(sampled[last]!));
+  const ends = (["k", "w"] as const).map((tone) => {
+    let hex = sampled[last]!;
+    if (dotContrast(hex, tone) < MIN_DOT_CONTRAST) {
+      // Dark dots need a lighter colour under them, light dots a darker one.
+      const away = tone === "k" ? 1 : -1;
+      let lo = 0, hi = tone === "k" ? 1 - Ln : Ln;
+      for (let k = 0; k < 32; k++) {
+        const mid = (lo + hi) / 2;
+        if (dotContrast(rgbToHex(fitGamut([Ln + away * mid, Cn, hn])), tone) >= MIN_DOT_CONTRAST) hi = mid;
+        else lo = mid;
+      }
+      hex = rgbToHex(fitGamut([Ln + away * hi, Cn, hn]));
+    }
+    return { hex, tone, L: okL(averagedCell(hex, tone, levelN)) };
+  });
+  const end = ends.sort((a, b) => (busyIsLighter ? b.L - a.L : a.L - b.L))[0]!;
+  const toneN = end.tone;
+  const from = okL(hexToRgb(sampled[0]!));
+  const to = end.L;
+  const colours: string[] = [sampled[0]!];
+  const tones: Tone[] = [toneFor(sampled[0]!)]; // no dots at step 0; the tone is unused
+  for (let i = 1; i < last; i++) {
+    const level = ditherLevelForStep(i);
+    const target = from + (to - from) * stepPosition(i);
+    const [, C, h] = rgbToOklch(hexToRgb(sampled[i]!));
+    const options: { hex: string; tone: Tone; contrast: number }[] = [];
+    for (const tone of ["k", "w"] as const) {
+      let lo = 0, hi = 1;
+      for (let k = 0; k < 32; k++) {
+        const mid = (lo + hi) / 2;
+        if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
+        else hi = mid;
+      }
+      const hex = rgbToHex(fitGamut([(lo + hi) / 2, C, h]));
+      if (Math.abs(okL(averagedCell(hex, tone, level)) - target) > 0.004) continue; // this tone can't reach it
+      options.push({ hex, tone, contrast: dotContrast(hex, tone) });
+    }
+    options.sort((a, b) => b.contrast - a.contrast);
+    const best = options[0] ?? { hex: sampled[i]!, tone: toneFor(sampled[i]!), contrast: 0 };
+    colours.push(best.hex);
+    tones.push(best.tone);
+  }
+  colours.push(end.hex);
+  tones.push(toneN);
+  const past = colours.map((hex) => {
+    const [L, C, h] = rgbToOklch(hexToRgb(hex));
+    return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
+  });
+  return { colours, past, tones };
+}
+
+/**
+ * A map's ramps for both themes. Dark: free is the map's dark end, busy its
+ * light end. Light: the map is inverted, so busy is dark against a white
+ * page. Each step's colour is sampled from the toned table at
+ * stepPosition(step), then solveRamp sets its lightness for its dots.
+ */
+export function themePalettesFor(source: readonly string[], chroma = PALETTE_CHROMA): ThemePalettes {
+  const toned = toneTable(source, chroma);
+  const sampled = Array.from({ length: LEVELS }, (_, step) => toned[Math.round(stepPosition(step) * (toned.length - 1))]!);
+  return { dark: solveRamp(sampled, true), light: solveRamp([...sampled].reverse(), false) };
+}
+
+/** Parula's ramps: the main site's, and the default. */
+export const THEME_PALETTES: ThemePalettes = themePalettesFor(PARULA_SOURCE);
+/** Parula's dark-theme colours, free to busy. */
+export const PALETTE: readonly string[] = THEME_PALETTES.dark.colours;
+/** Parula's dark-theme past colours: each step with chroma scaled by PAST_CHROMA. */
+export const PALETTE_PAST: readonly string[] = THEME_PALETTES.dark.past;
+
+/** Dot tone for a step of parula's dark-theme ramp. */
+export function dotTone(step: number): Tone {
+  return THEME_PALETTES.dark.tones[step]!;
+}
 
 // ---------------------------------------------------------------- presets
 
@@ -211,22 +308,6 @@ export const PALETTE_SOURCES: Record<PaletteName, readonly string[]> = {
   magma: MAGMA_SOURCE,
   plasma: PLASMA_SOURCE,
 };
-
-type ThemePalettes = Record<Theme, { colours: readonly string[]; past: readonly string[] }>;
-
-/** A source table toned, sampled at the LEVELS steps, with its past colours, per theme. */
-export function themePalettesFor(source: readonly string[], chroma = PALETTE_CHROMA): ThemePalettes {
-  const toned = toneTable(source, chroma);
-  const colours = Array.from({ length: LEVELS }, (_, step) => toned[Math.round((step / (LEVELS - 1)) * (toned.length - 1))]!);
-  const past = colours.map((hex) => {
-    const [L, C, h] = rgbToOklch(hexToRgb(hex));
-    return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
-  });
-  return {
-    dark: { colours, past },
-    light: { colours: [...colours].reverse(), past: [...past].reverse() },
-  };
-}
 
 /** Every preset's colours in each theme. PALETTES.parula is THEME_PALETTES. */
 export const PALETTES: Record<PaletteName, ThemePalettes> = Object.fromEntries(

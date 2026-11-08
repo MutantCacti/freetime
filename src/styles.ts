@@ -5,7 +5,7 @@ import { RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
-import { PALETTES, PALETTE_NAMES, type PaletteName, type Theme, toneFor } from "./parula";
+import { PALETTES, PALETTE_NAMES, type PaletteName, type Theme } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -27,11 +27,11 @@ export function calendarCss(): string {
   const out: string[] = [];
   // Per-theme variables for each step: its colour, its past colour, and its dots.
   const vars = (name: PaletteName, theme: Theme) => {
-    const { colours, past } = PALETTES[name][theme];
+    const { colours, past, tones } = PALETTES[name][theme];
     return colours
       .map((c, i) => {
         const level = ditherLevelForStep(i);
-        const dots = level === 0 ? "none" : `url(${ditherAssetPath(level, toneFor(c))})`;
+        const dots = level === 0 ? "none" : `url(${ditherAssetPath(level, tones[i]!)})`;
         return `--cell-${i}:${c};--cell-past-${i}:${past[i]};--dots-${i}:${dots}`;
       })
       .join(";");

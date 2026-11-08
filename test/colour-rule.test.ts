@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import tokens from "../public/css/tokens.css?raw";
-import { PALETTE, PALETTES, PALETTE_NAMES, dotTone, toneFor } from "../src/parula";
+import { PALETTE, PALETTES, PALETTE_NAMES, averagedCell, dotTone, rgbToOklch } from "../src/parula";
+import { ditherLevelForStep } from "../src/dither";
 
 const ALLOWED = new Set(["/public/css/tokens.css", "/src/parula.ts"]);
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9A-Za-z_-])/g;
@@ -103,8 +104,8 @@ describe("dither in greyscale", () => {
     for (const [kind, ramp] of [["now", colours], ["past", past]] as const) {
       for (let i = 0; i < ramp.length; i++) {
         const base = ramp[i]!;
-        // Past cells use the tone chosen for the current colour of the same step.
-        const dot = toneFor(colours[i]!) === "k" ? 0 : 255;
+        // Past cells use the current step's dots.
+        const dot = PALETTES[name][theme].tones[i] === "k" ? 0 : 255;
         const blended = [1, 3, 5].map((k) => Math.round(parseInt(base.slice(k, k + 2), 16) * (1 - OPACITY) + dot * OPACITY));
         const hex = "#" + blended.map((v) => v.toString(16).padStart(2, "0")).join("");
         expect(contrast(base, hex), `${kind} step ${i}`).toBeGreaterThanOrEqual(1.4);
@@ -123,3 +124,28 @@ describe("dither in greyscale", () => {
     }
   });
 });
+
+describe("cells read steadily busier from free to busy", () => {
+  // From arm's length a cell is its colour with its dots averaged in; past cells also have a
+  // 50% veil of page colour on top, composited in sRGB. That averaged lightness must move
+  // towards busy at every step: lighter in the dark theme, darker in the light theme.
+  const bg = { dark: darkChosen["--color-bg"]!, light: light["--color-bg"]! };
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  it.each(PALETTE_NAMES.flatMap((n) => (["dark", "light"] as const).flatMap((t) => (["now", "past"] as const).map((k) => [n, t, k] as const))))(
+    "%s, %s theme, %s",
+    (name, theme, kind) => {
+      const ramp = PALETTES[name][theme];
+      const page = rgb(bg[theme]);
+      const ls = (kind === "now" ? ramp.colours : ramp.past).map((hex, i) => {
+        let c = averagedCell(hex, ramp.tones[i]!, ditherLevelForStep(i)) as number[];
+        if (kind === "past") c = c.map((v, k) => 0.5 * v + 0.5 * page[k]!);
+        return rgbToOklch(c as [number, number, number])[0];
+      });
+      for (let i = 1; i < ls.length; i++) {
+        const step = theme === "dark" ? ls[i]! - ls[i - 1]! : ls[i - 1]! - ls[i]!;
+        expect(step, `step ${i}: ${ls.map((l) => l.toFixed(3)).join(" ")}`).toBeGreaterThan(0.005);
+      }
+    },
+  );
+});
+
