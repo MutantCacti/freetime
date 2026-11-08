@@ -138,7 +138,7 @@ export function clampAccent(rgb: [number, number, number]): string {
 }
 
 /** HSL saturation boost: S' = S + (1 − S) × SATURATION_BOOST × ramp(S). */
-export const SATURATION_BOOST = 0.35;
+export const SATURATION_BOOST = 0.42;
 /** Below `grey` the colour is left neutral (no hue to speak of); the boost reaches full strength at `full`. */
 export const SATURATION_RAMP = { grey: 0.03, full: 0.12 } as const;
 
