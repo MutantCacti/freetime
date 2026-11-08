@@ -32,9 +32,15 @@ describe("signed out", () => {
 describe("sign up and confirm", () => {
   it("creates an unconfirmed account and emails a link; the password is only stored hashed", async () => {
     const a = makeAccounts();
-    const res = await a.browser().post("/account/sign-up", { name: "Ada Lovelace", email: "Ada@Example.com", password: PASSWORD, zone: "Asia/Tokyo" });
-    expect(res.status).toBe(200);
-    expect(decode(await res.text())).toContain("We've sent a link to ada@example.com.");
+    const b = a.browser();
+    const res = await b.post("/account/sign-up", { name: "Ada Lovelace", email: "Ada@Example.com", password: PASSWORD, zone: "Asia/Tokyo" });
+    // Signed in straight away, with a notice to confirm.
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/account?done=signedup");
+    expect(b.cookie).not.toBeNull();
+    const html = decode(await (await b.get("/account?done=signedup")).text());
+    expect(html).toContain("Welcome to freetime.");
+    expect(html).toContain("Confirm your email: we sent a link to ada@example.com. Until then, your profile stays hidden.");
     const row = (await userRow("ada@example.com"))!;
     expect(row.email_verified).toBe(0);
     expect(row.zone).toBe("Asia/Tokyo");
@@ -66,13 +72,17 @@ describe("sign up and confirm", () => {
     expect(html).toMatch(/name="zone" value="America\/New_York" data-device-zone=""/);
   });
 
-  it("can't sign in before confirming", async () => {
+  it("can sign in before confirming, with the notice and Send it again", async () => {
     const a = makeAccounts();
+    await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     const b = a.browser();
-    await b.post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     const res = await b.post("/account/sign-in", { email: "ada@example.com", password: PASSWORD });
-    expect(decode(await res.text())).toContain("Open it to finish setting up your account.");
-    expect(b.cookie).toBeNull();
+    expect(res.headers.get("location")).toBe("/account");
+    expect(decode(await (await b.get("/account")).text())).toContain("Confirm your email");
+    const again = await b.post("/account/verify/send", {});
+    expect(again.headers.get("location")).toBe("/account?done=resent");
+    expect(a.emails).toHaveLength(2);
+    expect(a.emails[1]!.to).toBe("ada@example.com");
   });
 
   it("the link shows a button first; pressing it confirms and signs you in", async () => {
@@ -130,7 +140,7 @@ describe("sign up and confirm", () => {
     const a = makeAccounts();
     a.failEmail(true);
     const res = await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(303);
     expect(await userRow("ada@example.com")).not.toBeNull();
     expect(a.logs.length).toBeGreaterThan(0);
     expect(JSON.stringify(a.logs)).not.toContain("ada@example.com");

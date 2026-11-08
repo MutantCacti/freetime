@@ -66,14 +66,22 @@ export interface FieldProps {
   required?: boolean;
   maxlength?: number;
   minlength?: number;
+  /** A short noun or example, never a sentence: "Your name", "you@example.com". */
+  placeholder?: string;
 }
 
+/** Label, then hint, then the field, then any error: everything that explains a field sits above it. */
 export function Field(p: FieldProps) {
   const id = `f-${p.name}`;
   const describedBy = [p.hint ? `${id}-hint` : "", p.error ? `${id}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
     <div class="field">
       <label for={id}>{p.label}</label>
+      {p.hint ? (
+        <p class="field-hint" id={`${id}-hint`}>
+          {p.hint}
+        </p>
+      ) : null}
       <input
         id={id}
         name={p.name}
@@ -83,14 +91,10 @@ export function Field(p: FieldProps) {
         required={p.required}
         maxlength={p.maxlength}
         minlength={p.minlength}
+        placeholder={p.placeholder}
         aria-invalid={p.error ? "true" : undefined}
         aria-describedby={describedBy}
       />
-      {p.hint ? (
-        <p class="field-hint" id={`${id}-hint`}>
-          {p.hint}
-        </p>
-      ) : null}
       {p.error ? (
         <p class="field-error" id={`${id}-error`}>
           {p.error}
@@ -139,9 +143,9 @@ export function SignInPage({ email, next, error, done }: { email?: string; next?
       {error ? <FormMessage kind="error">{error}</FormMessage> : null}
       <form class="form" method="post" action="/account/sign-in">
         {next ? <input type="hidden" name="next" value={next} /> : null}
-        {/* PRINTED OUTPUT: sign in / field labels and button */}
-        <Field label="Email" name="email" type="email" value={email} autocomplete="email" required maxlength={LIMITS.email} />
-        <Field label="Password" name="password" type="password" autocomplete="current-password" required maxlength={LIMITS.passwordMax} />
+        {/* PRINTED OUTPUT: sign in / field labels, placeholders and button */}
+        <Field label="Email" name="email" placeholder="you@example.com" type="email" value={email} autocomplete="email" required maxlength={LIMITS.email} />
+        <Field label="Password" name="password" placeholder="Password" type="password" autocomplete="current-password" required maxlength={LIMITS.passwordMax} />
         <div class="actions">
           <button type="submit" class="pill pill-primary">
             Sign in
@@ -150,7 +154,8 @@ export function SignInPage({ email, next, error, done }: { email?: string; next?
       </form>
       <p class="form-links">
         {/* PRINTED OUTPUT: sign in / links to reset and sign up */}
-        <a href="/account/reset">Forgot your password?</a> <span class="sep">·</span> <a href={next ? `/account/sign-up?next=${encodeURIComponent(next)}` : "/account/sign-up"}>Create an account</a>
+        <a href="/account/reset">Forgot your password?</a>
+        <a href={next ? `/account/sign-up?next=${encodeURIComponent(next)}` : "/account/sign-up"}>Create an account</a>
       </p>
     </AccountShell>
   );
@@ -172,12 +177,13 @@ export function SignUpPage({ values, errors = {} }: { values: SignUpValues; erro
         {values.next ? <input type="hidden" name="next" value={values.next} /> : null}
         {/* Filled from the device's zone by app.js; `dtz` or Europe/London without JS. Changeable later. */}
         <input type="hidden" name="zone" value={values.zone} data-device-zone="" />
-        {/* PRINTED OUTPUT: sign up / field labels, hints and button */}
-        <Field label="Name" name="name" value={values.name} error={errors.name} autocomplete="name" required maxlength={LIMITS.name} hint="Shown on your profile." />
-        <Field label="Email" name="email" type="email" value={values.email} error={errors.email} autocomplete="email" required maxlength={LIMITS.email} hint="We'll send a link to confirm it. Never shown to anyone." />
+        {/* PRINTED OUTPUT: sign up / field labels, hints, placeholders and button */}
+        <Field label="Name" name="name" placeholder="Your name" value={values.name} error={errors.name} autocomplete="name" required maxlength={LIMITS.name} hint="Shown on your profile." />
+        <Field label="Email" name="email" placeholder="you@example.com" type="email" value={values.email} error={errors.email} autocomplete="email" required maxlength={LIMITS.email} hint="We'll send a link to confirm it. Never shown to anyone." />
         <Field
           label="Password"
           name="password"
+          placeholder="Password"
           type="password"
           error={errors.password}
           autocomplete="new-password"
@@ -194,7 +200,9 @@ export function SignUpPage({ values, errors = {} }: { values: SignUpValues; erro
       </form>
       <p class="form-links">
         {/* PRINTED OUTPUT: sign up / link to sign in */}
-        Already have an account? <a href={values.next ? `/account/sign-in?next=${encodeURIComponent(values.next)}` : "/account/sign-in"}>Sign in</a>
+        <span>
+          Already have an account? <a href={values.next ? `/account/sign-in?next=${encodeURIComponent(values.next)}` : "/account/sign-in"}>Sign in</a>
+        </span>
       </p>
     </AccountShell>
   );
@@ -246,8 +254,8 @@ export function ResetRequestPage({ email, sent, error }: { email?: string; sent?
       {sent ? <FormMessage kind="done">If that address has an account, we've sent a link to reset its password.</FormMessage> : null}
       {error ? <FormMessage kind="error">{error}</FormMessage> : null}
       <form class="form" method="post" action="/account/reset">
-        {/* PRINTED OUTPUT: reset / field label and button */}
-        <Field label="Email" name="email" type="email" value={email} autocomplete="email" required maxlength={LIMITS.email} />
+        {/* PRINTED OUTPUT: reset / field label, placeholder and button */}
+        <Field label="Email" name="email" placeholder="you@example.com" type="email" value={email} autocomplete="email" required maxlength={LIMITS.email} />
         <div class="actions">
           <button type="submit" class="pill pill-primary">
             Send link
@@ -348,6 +356,17 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
     <AccountShell title="Account" user={user}>
       {done ? <FormMessage kind="done">{done}</FormMessage> : null}
       {errors.form ? <FormMessage kind="error">{errors.form}</FormMessage> : null}
+      {user.email_verified ? null : (
+        <div class="form-message confirm-notice" role="status">
+          {/* PRINTED OUTPUT: account / confirm your email notice and button */}
+          <p>Confirm your email: we sent a link to {user.email}. Until then, your profile stays hidden.</p>
+          <form method="post" action="/account/verify/send">
+            <button type="submit" class="pill">
+              Send it again
+            </button>
+          </form>
+        </div>
+      )}
 
       <section class="profile-card" data-accent-user={user.public_id} aria-labelledby="profile-name">
         <IdentityCircle user={user} />
@@ -406,10 +425,11 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         {/* PRINTED OUTPUT: account / add calendar form */}
         <form class="form" method="post" action="/account/calendars">
           <h3>Add a calendar</h3>
-          <Field label="Name" name="label" value={draft.label} error={errors.label} required maxlength={LIMITS.label} hint="For you only, like Work or Personal." />
+          <Field label="Name" name="label" placeholder="Work" value={draft.label} error={errors.label} required maxlength={LIMITS.label} hint="For you only, like Work or Personal." />
           <Field
             label="Secret iCal address"
             name="address"
+            placeholder="https://calendar.example/…/basic.ics"
             value={draft.address}
             error={errors.address}
             required
@@ -426,13 +446,13 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
       </section>
 
       <section class="account-section" aria-labelledby="edit-profile">
-        {/* PRINTED OUTPUT: account / edit profile heading, fields, choices and button */}
+        {/* PRINTED OUTPUT: account / edit profile heading, fields, placeholders, choices and button */}
         <h2 id="edit-profile">Edit profile</h2>
         <form class="form" method="post" action="/account/profile">
-          <Field label="Name" name="name" value={draft.name ?? user.name} error={errors.name} required maxlength={LIMITS.name} autocomplete="name" />
+          <Field label="Name" name="name" placeholder="Your name" value={draft.name ?? user.name} error={errors.name} required maxlength={LIMITS.name} autocomplete="name" />
           <div class="field">
             <label for="f-bio">Bio</label>
-            <textarea id="f-bio" name="bio" rows={3} maxlength={LIMITS.bio} aria-invalid={errors.bio ? "true" : undefined}>
+            <textarea id="f-bio" name="bio" rows={3} maxlength={LIMITS.bio} placeholder="A line about you" aria-invalid={errors.bio ? "true" : undefined}>
               {draft.bio ?? user.bio}
             </textarea>
             <p class="field-hint">Up to {LIMITS.bio} characters.</p>
@@ -488,7 +508,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
 
         {/* PRINTED OUTPUT: account / email form */}
         <form class="form" method="post" action="/account/email">
-          <Field label="Email" name="email" type="email" value={draft.email ?? user.email} error={errors.email} required maxlength={LIMITS.email} autocomplete="email" hint="Changing it sends a link to the new address; it changes when you open it." />
+          <Field label="Email" name="email" placeholder="you@example.com" type="email" value={draft.email ?? user.email} error={errors.email} required maxlength={LIMITS.email} autocomplete="email" hint="Changing it sends a link to the new address; it changes when you open it." />
           <div class="actions actions-start">
             <button type="submit" class="pill">
               Change email
@@ -498,10 +518,11 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
 
         {/* PRINTED OUTPUT: account / password form */}
         <form class="form" method="post" action="/account/password">
-          <Field label="Current password" name="current" type="password" error={errors.current} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
+          <Field label="Current password" name="current" placeholder="Current password" type="password" error={errors.current} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
           <Field
             label="New password"
             name="password"
+            placeholder="New password"
             type="password"
             error={errors.password}
             required
@@ -535,7 +556,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         <form class="form danger" method="post" action="/account/delete">
           <h3>Delete account</h3>
           <p class="field-hint">Deletes your profile and everything in it. This can't be undone.</p>
-          <Field label="Password" name="password" type="password" error={errors.delete} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
+          <Field label="Password" name="password" placeholder="Password" type="password" error={errors.delete} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
           <div class="actions actions-start">
             <button type="submit" class="pill pill-danger">
               Delete my account
