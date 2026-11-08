@@ -137,6 +137,7 @@ Every user has a profile at `/u/<public_id>`.
 - **New accounts are private.** You choose public on the account page.
 - Your email is never shown on any profile, to anyone.
 - A profile's busy views are drawn in the **viewer's** zone (their device, or the selector), like the main site. Your own zone is what's shown as "Time zone" and is the default for your own views and the spaces you create.
+- A profile's calendar and colour bar are drawn in its **owner's colour map**, for everyone who sees it: parula (the default, and always the main site's), viridis, cividis, magma or plasma, all toned the same way so lightness rises steadily from free to busy. Light mode inverts it, as on the main site.
 
 ## 4. Friends (phase 3) and the share link
 
@@ -202,7 +203,7 @@ Making a friend should take one tap.
 3. **Your calendar:** your busy time in the main site's views, plus **Add calendar** (phase 2).
 4. **Friends** (phase 3): requests waiting (Accept / Decline), then your friends, each linking to their profile.
 5. **Spaces** (phase 4): yours, newest first.
-6. **Edit profile:** change picture (phase 2), name, bio, time zone, visibility.
+6. **Edit profile:** change picture (phase 2), name, bio, time zone, visibility, colour map (each choice shown as a swatch).
 7. **Sign-in and security:** email, password, Google (phase 5), sign out everywhere, reset share link, delete account.
 
 Signed out, `/account` shows **Sign in** and **Create account**.
