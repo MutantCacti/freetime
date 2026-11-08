@@ -10,6 +10,8 @@ It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several c
 
 ## Run it locally
 
+A single developer command, `./ft` (install, start, test, deploy), is specified in [`DEV-SPEC.md`](DEV-SPEC.md); it isn't built yet.
+
 Requires Node 20 or later.
 
 ```bash
