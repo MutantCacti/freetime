@@ -125,7 +125,7 @@ Every user has a profile at `/u/<public_id>`.
 
 | Shown on the profile | Private | Public | To friends |
 |---|---|---|---|
-| Name, in a card coloured by the owner's accent with their initials (the picture itself shows once per page, to its owner, in the header: §8) | ✓ | ✓ | ✓ |
+| Name and picture: the picture in the top bar, the name in a card edged in the owner's accent (§8) | ✓ | ✓ | ✓ |
 | Bio | ✓ | ✓ | ✓ |
 | Busy time: the main site's Day, Week, Month and Range views, from your calendars | ✓ | ✓ | ✓ |
 | Time zone | | ✓ | ✓ |
@@ -208,9 +208,9 @@ Making a friend should take one tap.
 
 Signed out, `/account` shows **Sign in** and **Create account**.
 
-**Pictures** (phase 2): PNG or JPEG, at most 2 MB uploaded, checked by their first bytes, then decoded in the Worker: the centre square is kept, area-averaged to 128 × 128 (smaller pictures keep their own size) and stored as PNG in R2 under a random key; the upload itself is never stored. Served at `/u/<public_id>/picture`. A picture that can't be decoded is refused (WebP can't be, so it isn't accepted). Removing it deletes the object and the accent. **Where it shows:** once per page, to its owner: in the top bar's account button on profiles, and in the account page's header (the main site never knows who's signed in, so it keeps the icon). Everyone else sees the owner's identity as the card's accent circle with initials, plus their name.
+**Pictures** (phase 2): PNG or JPEG, at most 2 MB uploaded, checked by their first bytes, then decoded in the Worker: the centre square is kept, area-averaged to 128 × 128 (smaller pictures keep their own size) and stored as PNG in R2 under a random key; the upload itself is never stored. Served at `/u/<public_id>/picture`. A picture that can't be decoded is refused. WebP isn't accepted: the WebAssembly decoder tried had a libwebp older than the fix for CVE-2023-4863. Removing it deletes the object and the accent. **Where it shows:** once per page. On a profile, the owner's picture is in the top bar right before the account and theme buttons, for every visitor, with their name as its text; with no picture there's nothing extra there. On the account page, your own picture is in the header. The account button is always the plain icon. The profile card is marked by the owner's accent border, with no circle of its own. Profiles keep the top bar's menu, holding only Help.
 
-**Accent** (phase 2): picked from the picture on upload (Kawase passes down to one pixel), then clamped so it keeps 3:1 on both themes' page colours and 4.5:1 with black or white text on it. It colours the owner's profile card (its edge, initials circle and primary buttons, Add friend included), on their profile and their account page, through `/u/<public_id>/accent.css`. No picture, no accent: the site's link colour.
+**Accent** (phase 2): picked from the picture on upload (Kawase passes down to one pixel), then clamped so it keeps 3:1 on both themes' page colours and 4.5:1 with black or white text on it. It colours the owner's profile card (its edge and primary buttons, Add friend included), on their profile and their account page, through `/u/<public_id>/accent.css`. No picture, no accent: the site's link colour.
 
 ## 9. Spaces (phase 4)
 

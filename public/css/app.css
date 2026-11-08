@@ -381,7 +381,6 @@ code { font-family: var(--font-mono); }
 img.avatar { object-fit: cover; padding: 0; }
 /* A profile's card, above its calendar (/u/<id>). */
 .profile-strip { padding: var(--space-3); border-bottom: 1px solid var(--color-divider); }
-.profile-strip .identity { width: 3rem; height: 3rem; font-size: 1rem; }
 .profile-strip .actions { margin-top: var(--space-2); }
 .account-section { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-divider); }
 .account-section h2 { font-size: 1.1rem; margin: 0 0 var(--space-2); }
@@ -398,13 +397,7 @@ img.avatar { object-fit: cover; padding: 0; }
 }
 .profile-card .pill-primary { background: var(--card-accent); border-color: var(--card-accent); color: var(--card-on-accent); }
 .profile-card .pill-primary:hover { background: var(--card-accent); }
-/* Who the card belongs to: a circle in the accent with the user icon (the picture is in the header). */
-.identity {
-  flex: none; display: inline-grid; place-items: center; width: 4rem; height: 4rem; border-radius: 50%;
-  background: var(--card-accent); color: var(--card-on-accent); font-weight: 600; font-size: 1.25rem; letter-spacing: 0.02em;
-}
-.identity .icon { width: 56%; height: 56%; stroke-width: 1.4; }
-/* The viewer's own picture, in the top bar's account button and the account page header. */
+/* Your own picture, in the account page's header. */
 .tb-avatar { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .pill.round:has(> .tb-avatar) { padding: 0; overflow: hidden; }
 .profile-text h2 { margin: 0; font-size: 1.25rem; }
@@ -507,7 +500,7 @@ img.avatar { object-fit: cover; padding: 0; }
      the sub-page header, form fields and buttons, and links standing alone. */
   .tz-button { min-height: 2.75rem; }
   .tb-owner { width: 2.75rem; height: 2.75rem; }
-  .pill.round.tb-account, .pill.round.tb-theme, .subheader .pill.round { width: 2.75rem; min-height: 2.75rem; }
+  .pill.round.tb-account, .pill.round.tb-theme, .pill.round.tb-menu, .subheader .pill.round { width: 2.75rem; min-height: 2.75rem; }
   .pill, .btn { min-height: 2.75rem; }
   .field input, .field select, .field textarea { min-height: 2.75rem; font-size: 1rem; }
   .field.choice label { min-height: 2.75rem; align-items: center; margin-top: 0; }
@@ -516,9 +509,7 @@ img.avatar { object-fit: cover; padding: 0; }
 
   /* A profile's card stays short, so the calendar keeps its height. */
   .profile-card { gap: var(--space-3); }
-  .profile-card > .identity { width: 3rem; height: 3rem; font-size: 1rem; }
   .profile-strip { padding: var(--space-2) var(--space-3); }
-  .profile-strip .identity { width: 2.5rem; height: 2.5rem; font-size: 0.9rem; }
   .profile-strip h2 { font-size: 1.05rem; }
   .profile-strip .profile-bio {
     margin: 2px 0 0; font-size: 0.9rem; line-height: 1.35;
@@ -549,6 +540,18 @@ img.avatar { object-fit: cover; padding: 0; }
   .tb-tabs { flex: 1 1 100%; }
   .tb-today { flex: 1 1 auto; margin-left: 0; }
   .pill.round.tb-prev, .pill.round.tb-next { width: 2.75rem; }
+  /* Row 1 on a profile holds the period, the zone, the menu, the owner's picture, Account and the
+     theme: slightly smaller round buttons (40 px) and tighter gaps keep the zone button usable. */
+  .tb-right { gap: 2px; }
+  .tb-centre { gap: var(--space-1); }
+  .pill.round.tb-account, .pill.round.tb-theme, .pill.round.tb-menu, .pill.round.tb-indicator { width: 2.5rem; min-height: 2.5rem; }
+  .tb-owner { width: 2.5rem; height: 2.5rem; }
+  .tz-button { min-height: 2.5rem; }
+}
+/* 320–339 px: the zone button shows only its arrow (its accessible name still says the zone). */
+@media (max-width: 339px) {
+  .tz-text { display: none; }
+  .tz-button { flex: none; width: 2.5rem; padding: 0; justify-content: center; }
 }
 
 /* ================================================================ motion */

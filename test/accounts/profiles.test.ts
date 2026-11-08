@@ -154,11 +154,15 @@ describe("profiles", () => {
     const a = makeAccounts();
     await signedUp(a);
     const html = await (await a.browser().get((await profilePath()) + WEEK)).text();
-    for (const tb of ["tabs", "today", "prev", "next", "period", "tz", "account", "theme"]) expect(html).toContain(`data-tb="${tb}"`);
-    for (const tb of ["download", "contact", "help"]) expect(html).not.toContain(`data-tb="${tb}"`);
+    for (const tb of ["tabs", "today", "prev", "next", "period", "tz", "account", "theme", "help"]) expect(html).toContain(`data-tb="${tb}"`);
+    for (const tb of ["download", "contact"]) expect(html).not.toContain(`data-tb="${tb}"`);
     // The Add friend control is drawn (FriendButton) but wired up in phase 3.
     expect(html).not.toContain("friend-action");
     expect(html).not.toContain('id="dlg-download"');
+    expect(html).not.toContain('id="dlg-contact"');
+    // The menu holds only Help here, and comes before the account and theme buttons.
+    expect(html).toContain('id="dlg-help"');
+    expect(html.indexOf('class="pill round tb-menu"')).toBeLessThan(html.indexOf('class="pill round tb-account"'));
   });
 
   it("a calendar that can't be loaded shows the error panel, not a free week", async () => {

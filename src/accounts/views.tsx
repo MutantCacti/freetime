@@ -308,19 +308,6 @@ export function Avatar({ user }: { user: User }) {
   );
 }
 
-/** How a profile card shows who it belongs to (the picture itself is shown once per page, in the header). */
-export type IdentityStyle = "icon" | "initials";
-export const IDENTITY_STYLE: IdentityStyle = "initials";
-
-/** A circle in the owner's accent (the site's link colour without one), with the user icon or initials. Decorative. */
-export function IdentityCircle({ user, style = IDENTITY_STYLE }: { user: User; style?: IdentityStyle }) {
-  return (
-    <span class={`identity identity-${style}`} aria-hidden="true">
-      {style === "icon" ? <UserIcon /> : initials(user.name)}
-    </span>
-  );
-}
-
 /** Initials for the picture circle when there's no picture. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -369,7 +356,6 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
       )}
 
       <section class="profile-card" data-accent-user={user.public_id} aria-labelledby="profile-name">
-        <IdentityCircle user={user} />
         <div class="profile-text">
           <h2 id="profile-name">{user.name}</h2>
           {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
@@ -633,7 +619,6 @@ export function ProfileCard({ user, showPublic, isOwner, shareLink, friend }: Pr
   const since = monthLabel(dateAt(user.created_at, user.zone));
   return (
     <section class="profile-card profile-strip" data-accent-user={user.public_id} aria-labelledby="profile-name">
-      <IdentityCircle user={user} />
       <div class="profile-text">
         <h2 id="profile-name">{user.name}</h2>
         {user.bio ? <p class="profile-bio">{user.bio}</p> : null}

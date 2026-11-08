@@ -78,6 +78,8 @@ export function CalendarPage(p: CalendarPageProps) {
           <ContactContent />
         </div>
       </dialog>
+        </>
+      )}
       <dialog class="dialog dialog-wide" id="dlg-help" aria-labelledby="dlg-help-title">
         <div class="dialog-head">
           {/* PRINTED OUTPUT: help dialog / title */}
@@ -88,8 +90,6 @@ export function CalendarPage(p: CalendarPageProps) {
           <HelpContent links={p.topbar.links} here={p.topbar.here} level={3} />
         </div>
       </dialog>
-        </>
-      )}
       <LiveRegions />
     </Document>
   );

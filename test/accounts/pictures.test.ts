@@ -42,9 +42,9 @@ describe("profile pictures", () => {
       const html = decode(await (await viewer.get(`/u/${public_id}`)).text());
       expect(html).toContain(`<img class="tb-owner" data-tb="owner" src="${src}" alt="Ada Lovelace"`);
       expect(html.split(src).length - 1).toBe(1);
-      // The account button is the icon for everyone; the card shows the initials circle.
-      expect(html).toMatch(/class="pill round tb-account"[^>]*><svg[^>]*class="icon icon-user"/);
-      expect(html).toContain('<span class="identity identity-initials" aria-hidden="true">AL</span>');
+      // The account button is the icon for everyone, right after the picture; the card has no circle of its own.
+      expect(html).toMatch(/<img class="tb-owner"[^>]*\/><a class="pill round tb-account"[^>]*><svg[^>]*class="icon icon-user"/);
+      expect(html).not.toContain('class="identity');
     }
     const pic = await a.browser().get(src);
     expect(pic.status).toBe(200);
