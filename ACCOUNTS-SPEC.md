@@ -155,7 +155,7 @@ Making a friend should take one tap.
 ### 5.1 Email and password (phase 1)
 
 - **Sign up:** name, email, password (at least 10 characters, at most 256; nothing else is required of it) and time zone (filled from your device when JS is on; Europe/London otherwise; changeable later).
-- **Verify:** sign-up sends an email (§6) with a link to `/account/verify?t=<token>`. Until you verify, signing in shows "Check your email to finish signing up" with **Send it again**. Nothing else works until then, so an address can't be claimed by someone who doesn't own it.
+- **Verify:** sign-up signs you in straight away and sends an email (§6) with a link to `/account/verify?t=<token>`. Until you confirm, the account page shows "Confirm your email" with **Send it again**, and your profile is hidden (404). An address nobody confirms within 24 hours is free for someone else to sign up with, so it can't be held by someone who doesn't own it.
 - **Passwords** are hashed with PBKDF2-SHA-256 through WebCrypto, 100,000 iterations (the most Workers allows **(unverified)**), a 16-byte random salt, stored as `pbkdf2-sha256$100000$<salt>$<hash>` (base64url). The iteration count is in the stored value, so it can be raised later.
 - **Sign in** checks the hash in constant time. A wrong email and a wrong password give the same message.
 - **Forgotten password:** `/account/reset` asks for your email and always answers "If that address has an account, we've sent a link", so it can't be used to test addresses. The link (1 hour, single use) sets a new password and signs out every session.

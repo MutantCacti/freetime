@@ -38,6 +38,7 @@
    * - sets `dtz` to the device zone when it is missing or different;
    * - keeps every other parameter, including `tz`, and the hash;
    * - on "/" with no `view` on a narrow screen, adds view=day;
+   * - never on account pages (/account…), which are often the answer to a form post;
    * - never replaces twice: not again in this page view (state.replaced),
    *   and not when this page is the one the last replace went to (lastTarget):
    *   if that page still needs a change, replacing again would loop.
@@ -48,6 +49,9 @@
     if (state.replaced) return null;
     if (o.lastTarget && o.lastTarget === href) return null;
     var url = new URL(href);
+    // Account pages have no calendar to put in a zone, and many are the answer to a
+    // form post: reloading them would lose that answer and show the empty form again.
+    if (url.pathname === "/account" || url.pathname.indexOf("/account/") === 0) return null;
     var changed = false;
     if (deviceZone && url.searchParams.get("dtz") !== deviceZone) {
       url.searchParams.set("dtz", deviceZone);

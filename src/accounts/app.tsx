@@ -89,6 +89,8 @@ const MSG = {
   emailChanged: "Email changed.",
   signedOutAll: "Signed out everywhere else.",
   verified: "Email confirmed. Welcome to freetime.",
+  signedUp: "Welcome to freetime.",
+  resent: "Sent again. It can take a minute to arrive.",
   calendarAdded: "Calendar added.",
   pictureSaved: "Picture updated.",
   pictureRemoved: "Picture removed.",
@@ -223,7 +225,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   app.get("/account", async (c) => {
     const user = c.get("user");
     if (!user) return page(c, <SignedOutPage />);
-    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved, picture: MSG.pictureSaved, pictureRemoved: MSG.pictureRemoved }[
+    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, signedup: MSG.signedUp, resent: MSG.resent, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved, picture: MSG.pictureSaved, pictureRemoved: MSG.pictureRemoved }[
       c.req.query("done") ?? ""
     ];
     return await accountPage(c, user, { done: done });
@@ -270,10 +272,12 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     try {
       await sendConfirm(c, user, "verify", email, next);
     } catch (e) {
-      // The account exists; "Send it again" on the next page retries.
+      // The account exists; "Send it again" on the account page retries.
       reportFatal(c, toAppError(e));
     }
-    return page(c, <CheckEmailPage email={email} />);
+    // Signed in straight away; the profile stays hidden until the address is confirmed.
+    startSession(c, await db(c).createSession(user.user_id, t));
+    return c.redirect(next ?? "/account?done=signedup", 303);
   });
 
   async function sendConfirm(c: Ctx, user: User, purpose: "verify" | "change", to: string, next?: string) {
@@ -284,7 +288,8 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
 
   app.post("/account/verify/send", async (c) => {
     const f = await form(c);
-    const email = clean(f.email).toLowerCase();
+    const signedIn = c.get("user");
+    const email = signedIn ? signedIn.email : clean(f.email).toLowerCase();
     const t = now();
     if (await limited(c, `email:${ip(c)}`, RATE.emailIp)) return page(c, <CheckEmailPage email={email} />, 429);
     await db(c).recordAttempt(`email:${ip(c)}`, t);
@@ -297,6 +302,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
         reportFatal(c, toAppError(e));
       }
     }
+    if (signedIn) return c.redirect("/account?done=resent", 303);
     return page(c, <CheckEmailPage email={email} sent />);
   });
 
@@ -361,7 +367,6 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       await db(c).recordAttempt(`signin:${ip(c)}`, t);
       return page(c, <SignInPage email={email} next={next} error={MSG.badSignIn} />, 400);
     }
-    if (!user.email_verified) return page(c, <CheckEmailPage email={user.email} />);
     startSession(c, await db(c).createSession(user.user_id, t));
     return c.redirect(next ?? "/account", 303);
   });
@@ -411,6 +416,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
         <Field
           label="New password"
           name="password"
+          placeholder="New password"
           type="password"
           error={error}
           required

@@ -155,6 +155,12 @@ describe("the head script", () => {
 
   it("does nothing when dtz is already right", () => {
     expect(head.headRedirect("https://example.test/?dtz=Europe/Paris", "Europe/Paris", { state: {} })).toBeNull();
+    // Account pages are never reloaded: many are the answer to a form post.
+    for (const href of ["https://example.test/account", "https://example.test/account/sign-in", "https://example.test/account/sign-up?next=/u/x"]) {
+      expect(head.headRedirect(href, "Europe/Paris", { state: {}, narrow: true })).toBeNull();
+    }
+    // Profiles still get the device zone.
+    expect(head.headRedirect("https://example.test/u/abcdefghij", "Europe/Paris", { state: {} })).toBe("https://example.test/u/abcdefghij?dtz=Europe/Paris");
   });
 
   it("never replaces twice in one page view, or again on the page it just replaced to", () => {
