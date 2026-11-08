@@ -38,7 +38,15 @@ npm test
 npm run typecheck
 ```
 
-Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`.
+Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`. There are two test projects, one per Worker: `site` (`test/*.test.ts`, in `wrangler.toml`) and `accounts` (`test/accounts/`, in `wrangler.accounts.toml`, with the D1 migrations applied and email mocked).
+
+### The accounts Worker
+
+```bash
+npm run dev:accounts
+```
+
+serves the accounts Worker (`ACCOUNTS-SPEC.md`) at http://localhost:8788 with a local D1 database (migrations applied first). Emails aren't sent: they're printed in the terminal, links included, so you can sign up and reset passwords without Resend. In production both Workers share one host; locally they're on two ports, so the account icon on :8787 doesn't reach :8788.
 
 ## Layout
 
@@ -55,6 +63,10 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), 
 | `src/parula.ts`, `src/dither.ts`, `src/styles.ts` | Source parula table, the toned palette derived from it, Bayer dither, and the generated `/css/calendar.css` |
 | `src/export-ics.ts` | The busy-only `.ics` file |
 | `src/views/` | JSX for the top bar, calendar, notices, panels and pages |
+| `src/headers.ts` | Security headers, shared by both Workers |
+| `src/accounts/` | The accounts Worker (`ACCOUNTS-SPEC.md`): routes, D1 queries, passwords and tokens, Resend email, pages. Never imported by the main Worker |
+| `migrations/` | D1 migrations for the accounts database |
+| `wrangler.accounts.toml` | The accounts Worker's config: routes, D1, `RESEND_FROM` |
 | `src/config.ts` | Settings you might change (see below) |
 | `public/css/tokens.css` | Design tokens: raw values, then semantic tokens, light and dark |
 | `public/css/fonts.css`, `public/fonts/` | Self-hosted Figtree and Fragment Mono (WOFF2) and their OFL licences |
@@ -120,7 +132,7 @@ Then load the apex site and each existing subdomain in a browser, and send a tes
 
 ### 4. Deploy freetime.
 
-`wrangler.toml` already sets `workers_dev = false` and the route `{ pattern = "freetime.mutantcacti.com", custom_domain = true }`.
+`wrangler.toml` sets `workers_dev = false` and the zone route `freetime.mutantcacti.com/*` (not a custom domain, so the accounts Worker can take its own paths on the same host; step 4a). The route needs a proxied DNS record for `freetime`: in **DNS → Records**, add `AAAA freetime 100::` with the proxy on (orange cloud). `100::` is a placeholder address: the Worker answers every request, so nothing is ever sent there **(unverified that it's still Cloudflare's recommended placeholder)**. If `freetime.` was deployed earlier with a custom domain, remove that first under **Workers & Pages → freetime → Settings → Domains & Routes**, then add the record.
 
 ```bash
 npm ci && npm test
@@ -141,6 +153,32 @@ At the prompt, paste the calendar's **secret address in iCal format** (Google Ca
 ```bash
 npx wrangler deploy
 ```
+
+### 4a. Deploy the accounts Worker
+
+The accounts Worker is always a separate Worker (`ACCOUNTS-SPEC.md` §1) with its own config, `wrangler.accounts.toml`. It takes the paths `/account*`, `/u/*`, `/spaces*`, `/s/*` and `/auth/*` on the same host; the main Worker keeps everything else.
+
+1. **Database:**
+
+```bash
+npx wrangler d1 create freetime-accounts
+```
+
+   Put the `database_id` it prints into `wrangler.accounts.toml` (the top-level `[[d1_databases]]`, replacing the zeros).
+
+2. **Resend:** in Resend, add the sending domain (`freetime.mutantcacti.com`, or whichever matches `RESEND_FROM` in `wrangler.accounts.toml`), add the DNS records Resend shows in Cloudflare's **DNS → Records**, and wait until Resend shows the domain as verified. Create an API key with sending access only, then:
+
+```bash
+npx wrangler secret put RESEND_API_KEY -c wrangler.accounts.toml
+```
+
+3. **Deploy** (applies the migrations to the remote database, then deploys):
+
+```bash
+npm run deploy:accounts
+```
+
+4. **Check:** open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
 
 ### 5. Verify
 
@@ -182,7 +220,8 @@ Re-enable DNSSEC through Cloudflare (**DNS → Settings → Enable DNSSEC**), th
 ### 7. Rollback
 
 - **Whole zone:** put the old nameservers back at the registrar. The records at the old provider were never changed.
-- **Just freetime.:** remove the custom domain under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
+- **Just freetime.:** remove its route under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
+- **Just accounts:** `npx wrangler delete -c wrangler.accounts.toml` removes the accounts Worker and its routes; the main site keeps working. The D1 database stays until deleted with `npx wrangler d1 delete freetime-accounts`.
 
 ## Error codes
 
@@ -196,6 +235,10 @@ With several calendars, the log entry also has `feed`: the failing calendar's po
 | `FEED_STATUS_<n>` | The feed answered with HTTP status `<n>`, for example `FEED_STATUS_403` (address revoked or wrong) or `FEED_STATUS_404`. The body is never shown or logged. | 503 |
 | `FEED_PARSE` | The feed arrived but isn't a usable iCalendar file. | 503 |
 | `RANGE_EXPAND` | Expanding recurrences for the requested period failed. | 500 |
+| `AUTH_ORIGIN` | Accounts Worker: a POST that didn't come from the site's own pages (no matching `Origin`). | 403 |
+| `AUTH_LIMIT` | Accounts Worker: too many sign-in, sign-up or email attempts (shown on the form). | 429 |
+| `TOKEN_INVALID` | Accounts Worker: an emailed link that's expired, used or wrong. | 400 |
+| `EMAIL_SEND` | Accounts Worker: Resend couldn't send an email, or `RESEND_API_KEY` isn't set. Logged with Resend's status only, never the address. | 503 |
 | `INTERNAL` | Anything else. | 500 |
 
 If a fetch fails but a good copy from the last 7 days is saved, the page still renders from it with a sticky warning ("Showing a saved copy. Times may be out of date."). The log gets a `warn` entry with the code. Each calendar has its own saved copy.
@@ -325,3 +368,13 @@ Anything not checked against current documentation is marked **(unverified)**.
 | Renamed from time. to freetime. (user review), with the name locked: one constant (`SITE_HOST`), the route in `wrangler.toml`, and a test that fails if the name appears anywhere else in code. Code identifiers carry no name (`SiteApp`, `SiteHead`, `site.theme`), tests use `example.test`, and the spec is `SPEC.md`. No redirect from the old address. | free., busy., avail., when., cal.; keep time. | "time" collided with other subdomains. freetime. says what the site shows and matches the calendar's own name ("Maxence's free time"). The site had no users yet, so the old address and stored theme keys were dropped rather than forwarded or migrated. | — |
 | Day window as minutes after midnight, `[DAY_START, DAY_END)`, with `DAY_END = 1440` meaning the midnight that ends the day; it replaces `START_HOUR` | "HH:MM" strings; leave unset for whole days | "24:00" isn't a clock time, but as an exclusive end it needs no special case. Whole days are just 0 and 1440, so there's nothing to leave unset. Day cells count only the window, otherwise a free night would make a busy day look free. Tests run with whole days (an app option, like the feed fetcher), so midnight and clock-change behaviour stay covered; `test/day-window.test.ts` checks 08:00–midnight. | — |
 | Contact: icon only, with the medium's name for screen readers; the link text is the address (`github.com/MutantCacti`), and Discord shows and copies the username | Visible names | Maxence's review. The icons use the muted text colour and a thinner stroke (1.5). | — |
+| Accounts are a second Worker (`wrangler.accounts.toml`, `src/accounts/`), on the same host split by path; the main Worker moved from a custom domain to the zone route `freetime.mutantcacti.com/*` | A second subdomain; accounts inside the main Worker | `SPEC.md` keeps the main site read-only forever; one host keeps one name (`SITE_HOST`), and the accounts pages load the main site's own `/css` and `/js` files. More specific routes win, so the accounts paths go to the accounts Worker **(unverified until the first deploy)**. | Route precedence not behaving as documented. |
+| Both Workers render through the same `Document` shell and load the same four stylesheets and two scripts; account styles live in `app.css` | An accounts stylesheet | Maxence's requirement: one look, one source. Tests check both Workers' pages load exactly the same files. | — |
+| Passwords: PBKDF2-SHA-256, 100,000 iterations, 16-byte salt, the count stored with the hash; sessions: a random 32-byte `__Host-session` cookie, only its SHA-256 stored, 30 days, extended at most daily | bcrypt or argon2 in WASM; JWT sessions | WebCrypto only, no dependencies, and 100,000 is the most Workers allows **(unverified)**. Stored session hashes mean a database leak signs nobody in, and signing out really ends a session. | Workers raising the PBKDF2 limit: raise `PBKDF2_ITERATIONS`. |
+| Every POST must carry the site's own `Origin`; cookies are `SameSite=Lax` | A token in every form | Stops cross-site posts with no hidden fields to maintain. | Browsers that send no `Origin` on same-origin posts (none current). |
+| Emailed links open a page with a button; the button does the work | The link does it on open | Mail scanners open links; a GET that confirms or resets would be used up before the person sees it. | — |
+| Limits are counted in a D1 table (`attempts`), keyed by hashed email or by IP | Workers Rate Limiting | Testable in the Workers pool with no extra binding, and exact per window. | Heavy traffic: move to the Rate Limiting binding. |
+| An address that's never confirmed is free again after 24 hours | Hold it forever | Nobody can block someone else's address by signing up with it. | — |
+| Profiles show name and picture at every visibility level (with bio and busy times when private) | Hide the picture when private | A profile with a name but no face reads as broken; the picture is chosen to be seen. | Maxence preferring pictures hidden when private. |
+| `npm run dev:accounts` prints emails to the terminal | Send real email in dev | Dev works offline and without a Resend key; production always uses Resend. | — |
+

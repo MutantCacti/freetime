@@ -25,6 +25,7 @@ import {
   today,
 } from "./state";
 import { calendarCss, ditherAsset } from "./styles";
+import { SECURITY_HEADERS } from "./headers";
 import { allZones, formatOffset, offsetSeconds } from "./tz";
 import { ColumnGrid, DayCellGrid } from "./views/calendar";
 import { pageTitle } from "./views/layout";
@@ -53,23 +54,6 @@ export interface AppDeps {
 
 type AppContext = Context<{ Bindings: Env }>;
 
-const SECURITY_HEADERS: Record<string, string> = {
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "strict-origin",
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self'",
-    "img-src 'self'",
-    "font-src 'self'",
-    "connect-src 'self'",
-    "object-src 'none'",
-    "base-uri 'none'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join("; "),
-};
 
 /** HTML and .ics: short, so the calendar is never long out of date. */
 export const PAGE_CACHE = "private, max-age=60";

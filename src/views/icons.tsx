@@ -96,3 +96,10 @@ export const CalendarIcon = () => (
     <path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" />
   </svg>
 );
+
+export const UserIcon = () => (
+  <svg {...base} class="icon icon-user">
+    <circle cx="8" cy="5.5" r="2.75" />
+    <path d="M2.75 14a5.25 5.25 0 0 1 10.5 0" />
+  </svg>
+);

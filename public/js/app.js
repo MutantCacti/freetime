@@ -453,6 +453,22 @@
     };
   }
 
+  // -------------------------------------------------------------- account forms
+
+  /** Sign-up's hidden time-zone field gets the device's zone (ACCOUNTS-SPEC.md §5.1). */
+  function initDeviceZone() {
+    var zone = null;
+    try {
+      zone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+    } catch (e) {
+      zone = null;
+    }
+    if (!zone) return;
+    $$("input[data-device-zone]").forEach(function (input) {
+      input.value = zone;
+    });
+  }
+
   // -------------------------------------------------------------- theme
 
   function initTheme() {
@@ -1127,6 +1143,7 @@
     initToday();
     var toasts = initToasts();
     initTheme();
+    initDeviceZone();
     initDialogs();
     initCopy(toasts);
     initCalendar();

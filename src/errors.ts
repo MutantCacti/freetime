@@ -1,6 +1,17 @@
 // Error codes, references and the debug line shown on the fatal error panel.
 
-export type ErrorCode = "FEED_FETCH" | `FEED_STATUS_${number}` | "FEED_PARSE" | "RANGE_EXPAND" | "INTERNAL";
+export type ErrorCode =
+  | "FEED_FETCH"
+  | `FEED_STATUS_${number}`
+  | "FEED_PARSE"
+  | "RANGE_EXPAND"
+  // The accounts Worker (ACCOUNTS-SPEC.md §10).
+  | "AUTH_ORIGIN"
+  | "AUTH_LIMIT"
+  | "TOKEN_INVALID"
+  | "EMAIL_SEND"
+  | "DB"
+  | "INTERNAL";
 
 export class AppError extends Error {
   readonly code: ErrorCode;
@@ -14,9 +25,14 @@ export class AppError extends Error {
     this.upstreamStatus = options.upstreamStatus;
   }
 
-  /** 503 for feed problems, 500 for anything else. */
-  get status(): 500 | 503 {
-    return this.code.startsWith("FEED_") ? 503 : 500;
+  /** 503 for feed, email and database problems; the account codes as ACCOUNTS-SPEC.md §10; 500 for anything else. */
+  get status(): 400 | 403 | 429 | 500 | 503 {
+    const c = this.code;
+    if (c.startsWith("FEED_") || c === "EMAIL_SEND" || c === "DB") return 503;
+    if (c === "AUTH_ORIGIN") return 403;
+    if (c === "AUTH_LIMIT") return 429;
+    if (c === "TOKEN_INVALID") return 400;
+    return 500;
   }
 }
 

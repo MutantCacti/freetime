@@ -49,7 +49,7 @@ Each phase is its own pull request.
 
 ## 2. Data
 
-D1 (SQLite). Migrations in `migrations/`, applied with `wrangler d1 migrations apply`. Times are Unix seconds (UTC). Phase 1 creates `users`, `sessions` and `email_tokens`; later phases add their tables with new migrations.
+D1 (SQLite). Migrations in `migrations/`, applied with `wrangler d1 migrations apply`. Times are Unix seconds (UTC). Phase 1 creates `users`, `sessions`, `email_tokens` and `attempts`; later phases add their tables with new migrations.
 
 ```sql
 CREATE TABLE users (
@@ -78,9 +78,12 @@ CREATE TABLE sessions (
 CREATE TABLE email_tokens (
   token_hash  TEXT PRIMARY KEY,              -- SHA-256 of the emailed token
   user_id     INTEGER NOT NULL REFERENCES users ON DELETE CASCADE,
-  purpose     TEXT NOT NULL CHECK (purpose IN ('verify', 'reset')),
-  expires_at  INTEGER NOT NULL               -- verify: 24 hours; reset: 1 hour
+  purpose     TEXT NOT NULL CHECK (purpose IN ('verify', 'reset', 'change')),
+  new_email   TEXT,                          -- 'change' only: the address being confirmed
+  expires_at  INTEGER NOT NULL               -- verify and change: 24 hours; reset: 1 hour
 );
+
+CREATE TABLE attempts (key TEXT NOT NULL, at INTEGER NOT NULL);  -- counts for the limits in §5.1; rows older than a day are deleted
 
 -- Phase 2
 CREATE TABLE calendars (
@@ -122,7 +125,7 @@ Every user has a profile at `/u/<public_id>`.
 
 | Shown on the profile | Private | Public | To friends |
 |---|---|---|---|
-| Name and picture | ✓ | ✓ | ✓ |
+| Name and picture (the picture isn't on Maxence's list for private; kept because a profile without a face reads as broken) | ✓ | ✓ | ✓ |
 | Bio | ✓ | ✓ | ✓ |
 | Busy time: the main site's Day, Week, Month and Range views, from your calendars | ✓ | ✓ | ✓ |
 | Time zone | | ✓ | ✓ |

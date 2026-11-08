@@ -26,7 +26,7 @@ describe("the site's name", () => {
   });
 
   it("is the production route in wrangler.toml", () => {
-    expect(wrangler).toContain(`{ pattern = "${SITE_HOST}", custom_domain = true }`);
+    expect(wrangler).toContain(`{ pattern = "${SITE_HOST}/*", zone_name = "mutantcacti.com" }`);
   });
 
   it("no longer uses the old name anywhere", () => {

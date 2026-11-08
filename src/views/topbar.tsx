@@ -1,7 +1,7 @@
 import type { Links } from "../links";
 import type { Navigation, Period, View, ViewParams, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, UserIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
@@ -102,6 +102,11 @@ export function TopBar(p: TopBarProps) {
       <button type="button" class="pill round tb-indicator" id="notice-indicator" data-tb="indicator" hidden aria-label="Show notice">
         <WarningIcon />
       </button>
+      {/* The accounts Worker's page (ACCOUNTS-SPEC.md §1). The same signed in or out: this Worker never reads the cookie. */}
+      {/* PRINTED OUTPUT: topbar / account button accessible name */}
+      <a class="pill round tb-account" data-tb="account" href={p.links.href("/account")} aria-label="Account">
+        <UserIcon />
+      </a>
       {/* PRINTED OUTPUT: topbar / menu button accessible name */}
       <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
         <MenuIcon />
@@ -118,7 +123,7 @@ export function TopBar(p: TopBarProps) {
   );
 }
 
-function ThemeButton({ tb }: { tb?: boolean }) {
+export function ThemeButton({ tb }: { tb?: boolean }) {
   return (
     // PRINTED OUTPUT: topbar / theme switcher accessible name (JS updates it)
     <button type="button" class="pill round tb-theme theme-toggle" data-tb={tb ? "theme" : undefined} hidden aria-label="Switch theme">

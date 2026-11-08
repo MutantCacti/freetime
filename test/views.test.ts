@@ -313,7 +313,7 @@ describe("top bar", () => {
     const html = await app.html("/?view=week&date=2026-11-02");
     const topbar = html.slice(html.indexOf('<header class="topbar"'), html.indexOf("</header>"));
     const order = [...topbar.matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1]);
-    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "download", "contact", "help", "theme"]);
+    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "account", "download", "contact", "help", "theme"]);
     const tabs = [...topbar.matchAll(/<a class="tab"[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
     expect(tabs).toEqual(["Day", "Week", "Month", "Range"]);
   });
@@ -326,7 +326,7 @@ describe("top bar", () => {
     const between = (a: string, b: string) => topbar.slice(topbar.indexOf(a), b ? topbar.indexOf(b) : undefined);
     expect([...between('class="tb-left"', 'class="tb-centre"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["tabs", "today", "prev", "next"]);
     expect([...between('class="tb-centre"', 'class="tb-right"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["period", "tz"]);
-    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "download", "contact", "help", "theme"]);
+    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "account", "download", "contact", "help", "theme"]);
     const css = files["/public/css/app.css"]!;
     expect(css).toMatch(/grid-template-columns: minmax\(max-content, 1fr\) minmax\(0, max-content\) minmax\(max-content, 1fr\);\s*grid-template-areas: "left centre right"/);
   });
@@ -343,7 +343,7 @@ describe("top bar", () => {
 
   it("uses pills for Today, the arrows, the zone selector and the right-hand buttons, and keeps tabs as a segmented control", async () => {
     const html = await app.html("/?view=week&date=2026-11-09");
-    for (const name of ["today", "prev", "next", "tz", "indicator", "download", "contact", "help", "theme"]) {
+    for (const name of ["today", "prev", "next", "tz", "indicator", "account", "download", "contact", "help", "theme"]) {
       expect(attr(tagWith(html, `data-tb="${name}"`), "class")!.split(" "), name).toContain("pill");
     }
     for (const name of ["prev", "next", "indicator", "theme"]) expect(attr(tagWith(html, `data-tb="${name}"`), "class")).toContain("round");
