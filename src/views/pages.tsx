@@ -24,11 +24,13 @@ export interface CalendarPageProps {
   intro?: Child;
   /** A profile's colour map (its owner's choice). */
   palette?: PaletteName;
+  /** A profile's accent stylesheet (its owner's), if they have one. */
+  accentSheet?: string;
 }
 
 export function CalendarPage(p: CalendarPageProps) {
   return (
-    <Document title={p.title} bodyClass="page-calendar" palette={p.palette}>
+    <Document title={p.title} bodyClass="page-calendar" palette={p.palette} accentSheet={p.accentSheet}>
       {/* PRINTED OUTPUT: calendar / skip link */}
       <a class="skip-link" href="#main">Skip to calendar</a>
       <TopBar {...p.topbar} />

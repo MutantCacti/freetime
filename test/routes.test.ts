@@ -86,5 +86,9 @@ describe("colour map", () => {
     const html = await (await app.get("/?view=week&date=2026-11-02")).text();
     expect(html).toContain('<html lang="en-GB">');
     expect(html).not.toContain("data-palette");
+    // It never knows who's signed in: the account button is always the icon, and there's no accent sheet.
+    expect(html).toContain('class="icon icon-user"');
+    expect(html).not.toContain("tb-avatar");
+    expect(html).not.toContain("accent.css");
   });
 });

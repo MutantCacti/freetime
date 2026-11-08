@@ -35,8 +35,13 @@ describe("profile pictures", () => {
     const { public_id, picture_key } = (await row())!;
     expect(picture_key).toMatch(/^p\/[a-z0-9]{24}$/);
     const src = `/u/${public_id}/picture?v=${picture_key!.slice(-8)}`;
-    expect(await (await b.get("/account")).text()).toContain(`<img class="avatar" src="${src}" alt=""`);
-    expect(await (await a.browser().get(`/u/${public_id}`)).text()).toContain(`src="${src}"`);
+    // Shown once per page, to its owner: in the account page's header and the profile's top bar.
+    expect(await (await b.get("/account")).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
+    expect(await (await b.get(`/u/${public_id}`)).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
+    // A visitor sees the owner's accent circle and name instead.
+    const visitor = await (await a.browser().get(`/u/${public_id}`)).text();
+    expect(visitor).not.toContain(src);
+    expect(visitor).toContain('<span class="identity identity-initials" aria-hidden="true">');
     const pic = await a.browser().get(src);
     expect(pic.status).toBe(200);
     expect(pic.headers.get("content-type")).toBe("image/png");
@@ -110,7 +115,7 @@ describe("profile pictures", () => {
     expect((await row())!.accent).toBeNull();
     expect(await objectCount()).toBe(0);
     expect((await a.browser().get(`/u/${(await row())!.public_id}/picture`)).status).toBe(404);
-    expect(await (await b.get("/account")).text()).toContain('<span class="avatar" aria-hidden="true">AL</span>');
+    expect(await (await b.get("/account")).text()).not.toContain("tb-avatar");
   });
 
   it("deleting the account deletes the picture", async () => {
@@ -125,5 +130,46 @@ describe("profile pictures", () => {
     const a = makeAccounts();
     expect((await a.browser().upload("/account/picture", "picture", new File([PNG], "a.png"))).status).toBe(303);
     expect(await objectCount()).toBe(0);
+  });
+});
+
+describe("accent", () => {
+  const sheets = (html: string) => [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
+  const SHARED = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css"];
+
+  it("a picture's accent is served as a stylesheet, linked after the shared four on the owner's pages", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    expect(sheets(await (await b.get("/account")).text())).toEqual(SHARED);
+    await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
+    const { public_id, accent } = (await row())!;
+    const href = `/u/${public_id}/accent.css?v=${accent!.slice(1)}`;
+    for (const html of [await (await b.get("/account")).text(), await (await a.browser().get(`/u/${public_id}`)).text()]) {
+      expect(sheets(html)).toEqual([...SHARED, href]);
+      expect(html).toContain(`data-accent-user="${public_id}"`);
+    }
+    const css = await a.browser().get(href);
+    expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(css.headers.get("cache-control")).toContain("immutable");
+    expect(await css.text()).toBe(`[data-accent-user="${public_id}"]{--user-accent:${accent};--user-on-accent:var(--raw-black)}\n`);
+    expect((await a.browser().get(`/u/${public_id}/accent.css?v=000000`)).headers.get("cache-control")).toBe("no-cache");
+  });
+
+  it("no picture, no accent: no stylesheet, and the card falls back to the site's colour", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    const { public_id } = (await row())!;
+    expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
+    expect(sheets(await (await a.browser().get(`/u/${public_id}`)).text())).toEqual(SHARED);
+    await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
+    await b.post("/account/picture/remove", {});
+    expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
+  });
+
+  it("the database refuses an accent that isn't #rrggbb", async () => {
+    const a = makeAccounts();
+    await signedUp(a);
+    await expect(accountsEnv.DB.prepare("UPDATE users SET accent = 'red'").run()).rejects.toThrow(/CHECK/);
+    await expect(accountsEnv.DB.prepare("UPDATE users SET accent = '#' || 'ABCDEF'").run()).rejects.toThrow(/CHECK/);
   });
 });

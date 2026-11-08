@@ -8,9 +8,10 @@ import { WithSeps } from "../views/sep";
 import { CloseControl, ThemeButton } from "../views/topbar";
 import { formatOffset, offsetSeconds, allZones } from "../tz";
 import type { User } from "./db";
-import { pictureUrl } from "./pictures";
+import { accentSheetUrl, pictureUrl } from "./pictures";
+import { isAccent } from "./accent";
 import { CopyButton } from "../views/panels";
-import { CheckIcon, UserPlusIcon } from "../views/icons";
+import { CheckIcon, UserIcon, UserPlusIcon } from "../views/icons";
 import { monthLabel } from "../format";
 import { dateAt } from "../tz";
 import { PALETTE_NAMES, type PaletteName } from "../parula";
@@ -25,14 +26,22 @@ export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, e
 export interface ShellProps {
   title: string;
   children: Child;
+  /** Signed in: their picture in the header, and their accent stylesheet. */
+  user?: User;
 }
 
 /** A sub-page like /help: title, theme switcher, and Close back to the calendar. */
-export function AccountShell({ title, children }: ShellProps) {
+export function AccountShell({ title, children, user }: ShellProps) {
   return (
-    <Document title={pageTitle(title)} bodyClass="page-sub">
+    <Document title={pageTitle(title)} bodyClass="page-sub" accentSheet={user && isAccent(user.accent) ? accentSheetUrl(user.public_id, user.accent) : undefined}>
       <header class="subheader">
         <h1>{title}</h1>
+        {user ? (
+          // PRINTED OUTPUT: account / header picture link accessible name
+          <a class="pill round sub-avatar" href={`/u/${user.public_id}`} aria-label="Your profile">
+            {user.picture_key ? <img class="tb-avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={36} height={36} /> : <UserIcon />}
+          </a>
+        ) : null}
         <ThemeButton />
         <CloseControl href="/" />
       </header>
@@ -291,6 +300,19 @@ export function Avatar({ user }: { user: User }) {
   );
 }
 
+/** How a profile card shows who it belongs to (the picture itself is shown once per page, in the header). */
+export type IdentityStyle = "icon" | "initials";
+export const IDENTITY_STYLE: IdentityStyle = "initials";
+
+/** A circle in the owner's accent (the site's link colour without one), with the user icon or initials. Decorative. */
+export function IdentityCircle({ user, style = IDENTITY_STYLE }: { user: User; style?: IdentityStyle }) {
+  return (
+    <span class={`identity identity-${style}`} aria-hidden="true">
+      {style === "icon" ? <UserIcon /> : initials(user.name)}
+    </span>
+  );
+}
+
 /** Initials for the picture circle when there's no picture. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -323,12 +345,12 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
   const visibility = user.visibility === "public" ? "Public" : "Private"; // PRINTED OUTPUT: account / visibility names
   return (
     // PRINTED OUTPUT: account / title
-    <AccountShell title="Account">
+    <AccountShell title="Account" user={user}>
       {done ? <FormMessage kind="done">{done}</FormMessage> : null}
       {errors.form ? <FormMessage kind="error">{errors.form}</FormMessage> : null}
 
-      <section class="profile-card" aria-labelledby="profile-name">
-        <Avatar user={user} />
+      <section class="profile-card" data-accent-user={user.public_id} aria-labelledby="profile-name">
+        <IdentityCircle user={user} />
         <div class="profile-text">
           <h2 id="profile-name">{user.name}</h2>
           {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
@@ -589,8 +611,8 @@ export interface ProfileCardProps {
 export function ProfileCard({ user, showPublic, isOwner, shareLink, friend }: ProfileCardProps) {
   const since = monthLabel(dateAt(user.created_at, user.zone));
   return (
-    <section class="profile-card profile-strip" aria-labelledby="profile-name">
-      <Avatar user={user} />
+    <section class="profile-card profile-strip" data-accent-user={user.public_id} aria-labelledby="profile-name">
+      <IdentityCircle user={user} />
       <div class="profile-text">
         <h2 id="profile-name">{user.name}</h2>
         {user.bio ? <p class="profile-bio">{user.bio}</p> : null}

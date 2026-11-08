@@ -31,7 +31,7 @@ export interface CalendarInput {
   /** Log a fatal error; returns its reference for the panel. */
   report: (err: AppError) => string;
   /** Profiles: no Download, Contact or Help, and a card above the calendar. */
-  profile?: { intro: Child; title: string; palette?: PaletteName };
+  profile?: { intro: Child; title: string; palette?: PaletteName; accentSheet?: string; accountPicture?: string };
 }
 
 export async function renderCalendar(input: CalendarInput): Promise<{ page: ReturnType<typeof CalendarPage>; status: number }> {
@@ -86,11 +86,13 @@ export async function renderCalendar(input: CalendarInput): Promise<{ page: Retu
         here,
         exportParams: { ...here, from: period.start, to: period.end } as Record<string, string>,
         pages: !input.profile,
+        accountPicture: input.profile?.accountPicture,
       }}
       sticky={sticky}
       inline={inline}
       intro={input.profile?.intro}
       palette={input.profile?.palette}
+      accentSheet={input.profile?.accentSheet}
       rangeForm={period.view === "range" ? <RangeForm links={links} from={period.start} to={period.end} notices={rangeNotices} /> : null}
       body={body}
       showColourBar={showColourBar}

@@ -8,11 +8,13 @@ export interface DocumentProps {
   bodyClass?: string;
   /** The calendar's colour map, for a profile drawn in its owner's map; parula when omitted. */
   palette?: PaletteName;
+  /** One extra stylesheet after the shared four: a user's accent (/u/<id>/accent.css), on accounts pages only. */
+  accentSheet?: string;
   children: Child;
 }
 
 /** The HTML shell shared by every page. */
-export function Document({ title, bodyClass, palette, children }: DocumentProps) {
+export function Document({ title, bodyClass, palette, accentSheet, children }: DocumentProps) {
   return (
     <>
       {raw("<!doctype html>")}
@@ -32,6 +34,7 @@ export function Document({ title, bodyClass, palette, children }: DocumentProps)
           <link rel="stylesheet" href="/css/tokens.css" />
           <link rel="stylesheet" href="/css/app.css" />
           <link rel="stylesheet" href="/css/calendar.css" />
+          {accentSheet ? <link rel="stylesheet" href={accentSheet} /> : null}
           {/* Not deferred: applies the theme and fixes `dtz` before first paint. */}
           <script src="/js/head.js"></script>
           <script src="/js/app.js" defer></script>

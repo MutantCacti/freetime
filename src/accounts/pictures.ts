@@ -3,7 +3,7 @@
 // stored in R2, under a random key, is never the upload: it's the centre
 // square, area-averaged to at most 128 × 128 and re-encoded as PNG.
 
-import { accentOf } from "./accent";
+import { accentOf, accentText } from "./accent";
 import { type Grid, decodeJpeg, decodePng } from "./image-decode";
 
 export const PICTURE_MAX_BYTES = 2 * 1024 * 1024;
@@ -22,6 +22,21 @@ export function sniffPicture(bytes: Uint8Array): PictureType | null {
 /** Where a user's picture is served; the key in the query changes with each upload, so it can be cached for good. */
 export function pictureUrl(publicId: string, key: string): string {
   return `/u/${publicId}/picture?v=${encodeURIComponent(key.slice(-8))}`;
+}
+
+/** A user's accent stylesheet; the accent is in the query, so it can be cached for good. */
+export function accentSheetUrl(publicId: string, accent: string): string {
+  return `/u/${publicId}/accent.css?v=${accent.slice(1)}`;
+}
+
+/**
+ * The accent stylesheet's body: the accent, and black or white for text and
+ * icons on it, scoped to elements carrying that user's data-accent-user.
+ * A stylesheet, not an inline style: the CSP allows only style-src 'self'.
+ */
+export function accentCss(publicId: string, accent: string): string {
+  const on = accentText(accent) === "dark" ? "var(--raw-black)" : "var(--raw-white)";
+  return `[data-accent-user="${publicId}"]{--user-accent:${accent};--user-on-accent:${on}}\n`;
 }
 
 // ---------------------------------------------------------------- resize and re-encode

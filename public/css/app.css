@@ -375,11 +375,32 @@ code { font-family: var(--font-mono); }
 img.avatar { object-fit: cover; padding: 0; }
 /* A profile's card, above its calendar (/u/<id>). */
 .profile-strip { padding: var(--space-3); border-bottom: 1px solid var(--color-divider); }
-.profile-strip .avatar { width: 3rem; height: 3rem; font-size: 1rem; }
+.profile-strip .identity { width: 3rem; height: 3rem; font-size: 1rem; }
 .profile-strip .actions { margin-top: var(--space-2); }
 .account-section { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-divider); }
 .account-section h2 { font-size: 1.1rem; margin: 0 0 var(--space-2); }
 .profile-card { display: flex; gap: var(--space-4); align-items: flex-start; }
+/*
+ * A profile card is drawn in its owner's accent (from their picture, set by
+ * /u/<id>/accent.css on [data-accent-user]); without one, the site's link colour.
+ * The accent keeps 3:1 on both themes' page colours, and its text colour 4.5:1.
+ */
+.profile-card {
+  --card-accent: var(--user-accent, var(--color-link));
+  --card-on-accent: var(--user-on-accent, var(--color-on-accent));
+  border-left: 4px solid var(--card-accent); padding-left: var(--space-3);
+}
+.profile-card .pill-primary { background: var(--card-accent); border-color: var(--card-accent); color: var(--card-on-accent); }
+.profile-card .pill-primary:hover { background: var(--card-accent); }
+/* Who the card belongs to: a circle in the accent with the user icon (the picture is in the header). */
+.identity {
+  flex: none; display: inline-grid; place-items: center; width: 4rem; height: 4rem; border-radius: 50%;
+  background: var(--card-accent); color: var(--card-on-accent); font-weight: 600; font-size: 1.25rem; letter-spacing: 0.02em;
+}
+.identity .icon { width: 56%; height: 56%; stroke-width: 1.4; }
+/* The viewer's own picture, in the top bar's account button and the account page header. */
+.tb-avatar { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.pill.round:has(> .tb-avatar) { padding: 0; overflow: hidden; }
 .profile-text h2 { margin: 0; font-size: 1.25rem; }
 .profile-bio { margin: var(--space-1) 0; white-space: pre-line; overflow-wrap: anywhere; }
 .profile-meta { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: 0.85rem; }
@@ -488,9 +509,9 @@ img.avatar { object-fit: cover; padding: 0; }
 
   /* A profile's card stays short, so the calendar keeps its height. */
   .profile-card { gap: var(--space-3); }
-  .profile-card > .avatar { width: 3rem; height: 3rem; font-size: 1rem; }
+  .profile-card > .identity { width: 3rem; height: 3rem; font-size: 1rem; }
   .profile-strip { padding: var(--space-2) var(--space-3); }
-  .profile-strip .avatar { width: 2.5rem; height: 2.5rem; font-size: 0.9rem; }
+  .profile-strip .identity { width: 2.5rem; height: 2.5rem; font-size: 0.9rem; }
   .profile-strip h2 { font-size: 1.05rem; }
   .profile-strip .profile-bio {
     margin: 2px 0 0; font-size: 0.9rem; line-height: 1.35;
