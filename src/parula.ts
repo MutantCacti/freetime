@@ -81,11 +81,11 @@ type LCH = [number, number, number];
 const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 
-function hexToRgb(hex: string): RGB {
+export function hexToRgb(hex: string): RGB {
   return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as RGB;
 }
 
-function rgbToHex(rgb: RGB): string {
+export function rgbToHex(rgb: RGB): string {
   return "#" + rgb.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, "0")).join("");
 }
 
@@ -117,7 +117,7 @@ export function oklchToRgb([L, C, h]: LCH): RGB {
 const inGamut = (rgb: RGB) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
 /** Keep lightness and hue; reduce chroma until the colour fits in sRGB. */
-function fitGamut([L, C, h]: LCH): RGB {
+export function fitGamut([L, C, h]: LCH): RGB {
   let rgb = oklchToRgb([L, C, h]);
   if (inGamut(rgb)) return rgb;
   let lo = 0;
@@ -215,8 +215,8 @@ export const PALETTE_SOURCES: Record<PaletteName, readonly string[]> = {
 type ThemePalettes = Record<Theme, { colours: readonly string[]; past: readonly string[] }>;
 
 /** A source table toned, sampled at the LEVELS steps, with its past colours, per theme. */
-export function themePalettesFor(source: readonly string[]): ThemePalettes {
-  const toned = toneTable(source);
+export function themePalettesFor(source: readonly string[], chroma = PALETTE_CHROMA): ThemePalettes {
+  const toned = toneTable(source, chroma);
   const colours = Array.from({ length: LEVELS }, (_, step) => toned[Math.round((step / (LEVELS - 1)) * (toned.length - 1))]!);
   const past = colours.map((hex) => {
     const [L, C, h] = rgbToOklch(hexToRgb(hex));
