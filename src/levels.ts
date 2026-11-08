@@ -1,7 +1,7 @@
-// The busy fraction is shown in LEVELS steps (0, 1/8, …, 1). Colour and
+// The busy fraction is shown in LEVELS steps (0, 1/16, …, 1). Colour and
 // dither both use the same step; labels still give the real percentage.
 
-export const LEVELS = 9;
+export const LEVELS = 17;
 
 /**
  * The step (0 … LEVELS − 1) for a busy fraction. Rounds to the nearest step,

@@ -37,12 +37,18 @@ export function stepPosition(step: number): number {
 
 /**
  * Dither level for a step: round(MIN + stepPosition(step) × (MAX − MIN)),
- * at least MIN + 1 for any busy step so busy time always has dots.
- * With 0 and 12: 0, 1, 2, 4, 6, 8, 10, 11, 12.
+ * at least MIN + 1 for any busy step (busy time always has dots) and at most
+ * MAX − 1 short of fully busy (only a full slot gets the full pattern).
+ * There are more steps (17) than levels (13), so some neighbouring steps
+ * share a level and differ by colour alone; levels never go down.
+ * With 0 and 12: 0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12.
  */
 export function ditherLevelForStep(step: number): number {
+  const last = LEVELS - 1;
   const level = Math.round(DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
-  return step > 0 ? Math.max(DITHER_MIN_LEVEL + 1, level) : level;
+  if (step <= 0) return DITHER_MIN_LEVEL;
+  if (step >= last) return DITHER_MAX_LEVEL;
+  return Math.min(DITHER_MAX_LEVEL - 1, Math.max(DITHER_MIN_LEVEL + 1, level));
 }
 
 /** Dither level for a busy fraction, through its step. */

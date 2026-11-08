@@ -259,7 +259,7 @@ describe("colour and dither", () => {
   it("gives a fraction the same colour and Bayer level in every view", async () => {
     const half = cellClasses(0.5);
     const full = cellClasses(1);
-    expect(half).toBe("p4");
+    expect(half).toBe(`p${(LEVELS - 1) / 2}`);
     expect(full).toBe(`p${LEVELS - 1}`);
     // A half-busy 30-minute slot, in each column view.
     for (const path of ["/?view=day&date=2026-11-03", "/?view=week&date=2026-11-02", "/?view=range&from=2026-11-01&to=2026-11-05"]) {
@@ -276,7 +276,7 @@ describe("colour and dither", () => {
     expect(ditherLevel(1)).toBe(DITHER_MAX_LEVEL);
   });
 
-  it("the colour bar shows the same 9 steps as the cells", async () => {
+  it("the colour bar shows the same steps as the cells", async () => {
     const html = await app.html("/?view=week&date=2026-11-02");
     const bands = [...html.matchAll(/<div class="cb-band ([^"]*)"><\/div>/g)].map((m) => m[1]);
     expect(bands).toEqual(Array.from({ length: LEVELS }, (_, step) => cellClasses(step / (LEVELS - 1))));
@@ -286,12 +286,13 @@ describe("colour and dither", () => {
 
   it("serves the generated colour CSS and dither tiles", async () => {
     const css = await (await app.get("/css/calendar.css")).text();
-    expect(css).toContain(".p8{background-color:var(--cell-8);background-image:var(--dots-8);background-size:8px 8px}");
-    expect(css).not.toContain(".p9{");
+    const top = LEVELS - 1;
+    expect(css).toContain(`.p${top}{background-color:var(--cell-${top});background-image:var(--dots-${top});background-size:8px 8px}`);
+    expect(css).not.toContain(`.p${LEVELS}{`);
     // Fully busy: level 12 dots in both themes, for the default and for each
     // preset (the dot tone follows the colour underneath).
     const blocks = 2 * (1 + PALETTE_NAMES.length);
-    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(blocks);
+    expect(css.match(new RegExp(`--dots-${top}:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(blocks);
     expect(css.match(/--dots-0:none/g)?.length).toBe(blocks);
     expect(css).not.toContain("prefers-color-scheme");
     const svg = await app.get(`/img/dither/${DITHER_MAX_LEVEL}k.svg`);

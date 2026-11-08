@@ -143,7 +143,7 @@ describe("cells read steadily busier from free to busy", () => {
       });
       for (let i = 1; i < ls.length; i++) {
         const step = theme === "dark" ? ls[i]! - ls[i - 1]! : ls[i - 1]! - ls[i]!;
-        expect(step, `step ${i}: ${ls.map((l) => l.toFixed(3)).join(" ")}`).toBeGreaterThan(0.005);
+        expect(step, `step ${i}: ${ls.map((l) => l.toFixed(3)).join(" ")}`).toBeGreaterThan(0.0005);
       }
     },
   );

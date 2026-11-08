@@ -18,9 +18,12 @@ describe("dither", () => {
       const t = step / (LEVELS - 1);
       expect(stepPosition(step)).toBeCloseTo(t * t * (3 - 2 * t), 12);
     }
-    expect(Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s))).toEqual([0, 1, 2, 4, 6, 8, 10, 11, 12]);
-    // Any busy step has dots; levels only go up.
-    for (let step = 1; step < LEVELS; step++) expect(ditherLevelForStep(step)).toBeGreaterThan(ditherLevelForStep(step - 1));
+    const levels = Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s));
+    expect(levels).toEqual([0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12]);
+    // Any busy step has dots, only a full slot has the full pattern, and levels never go down.
+    expect(levels.slice(1).every((l) => l >= 1)).toBe(true);
+    expect(levels.slice(0, -1).every((l) => l < DITHER_MAX_LEVEL)).toBe(true);
+    for (let step = 1; step < LEVELS; step++) expect(levels[step]).toBeGreaterThanOrEqual(levels[step - 1]!);
   });
 
   it("a fully busy cell is at DITHER_MAX_LEVEL and never solid", () => {
@@ -59,23 +62,23 @@ describe("dither", () => {
 });
 
 describe("levels", () => {
-  it("has 9 steps", () => expect(LEVELS).toBe(9));
+  it("has 17 steps", () => expect(LEVELS).toBe(17));
 
-  it("quantises busy fractions into steps 0, 1/8, … 1", () => {
+  it("quantises busy fractions into steps 0, 1/16, … 1", () => {
     expect(busyStep(0)).toBe(0);
-    expect(busyStep(1 / 8)).toBe(1);
-    expect(busyStep(0.5)).toBe(4);
-    expect(busyStep(0.55)).toBe(4);
-    expect(busyStep(0.57)).toBe(5);
-    expect(busyStep(7 / 8)).toBe(7);
-    expect(busyStep(1)).toBe(8);
+    expect(busyStep(1 / 16)).toBe(1);
+    expect(busyStep(0.5)).toBe(8);
+    expect(busyStep(0.52)).toBe(8);
+    expect(busyStep(0.54)).toBe(9);
+    expect(busyStep(15 / 16)).toBe(15);
+    expect(busyStep(1)).toBe(16);
     expect(busyStep(-1)).toBe(0);
-    expect(busyStep(2)).toBe(8);
+    expect(busyStep(2)).toBe(16);
   });
 
   it("never shows busy time as free, or part-free time as fully busy", () => {
     expect(busyStep(0.001)).toBe(1);
-    expect(busyStep(0.999)).toBe(7);
+    expect(busyStep(0.999)).toBe(LEVELS - 2);
   });
 
   it("colour and dither use the same step", () => {

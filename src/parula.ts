@@ -185,6 +185,9 @@ export function averagedCell(hex: string, tone: Tone, level: number): RGB {
   return hexToRgb(hex).map((c) => toGamma(toLinear(c) * (1 - cover) + dot * cover)) as RGB;
 }
 
+/** Each step's averaged cell must read at least this much busier (OKLab L) than the one before. */
+export const MIN_LIGHTNESS_STEP = 0.001;
+
 /** Dots must differ from the colour under them by at least this (WCAG ratio). */
 export const MIN_DOT_CONTRAST = 1.4;
 
@@ -259,6 +262,17 @@ function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPale
   }
   colours.push(end.hex);
   tones.push(toneN);
+  // With many steps the targets near the ends are only a few thousandths apart, about the size of
+  // one 8-bit rounding of a colour. So walk the ramp and, where a step doesn't read busier than the
+  // one before, move its lightness towards busy, a little at a time, until it does.
+  const dir = busyIsLighter ? 1 : -1;
+  const avg = (i: number) => okL(averagedCell(colours[i]!, tones[i]!, ditherLevelForStep(i)));
+  for (let i = 1; i < last; i++) {
+    const [L0, C, h] = rgbToOklch(hexToRgb(colours[i]!));
+    for (let k = 1; k <= 200 && (avg(i) - avg(i - 1)) * dir < MIN_LIGHTNESS_STEP; k++) {
+      colours[i] = rgbToHex(fitGamut([L0 + dir * k * 0.001, C, h]));
+    }
+  }
   const past = colours.map((hex) => {
     const [L, C, h] = rgbToOklch(hexToRgb(hex));
     return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
