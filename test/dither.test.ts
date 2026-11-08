@@ -2,7 +2,7 @@ import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
 import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { THEME_PALETTES, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
+import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -146,3 +146,52 @@ describe("palette", () => {
     for (let i = 1; i < ls.length; i++) expect(ls[i]!).toBeGreaterThan(ls[i - 1]!);
   });
 });
+
+describe("palette presets", () => {
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
+
+  it("offers parula first, as the default, and the map tables are 64 entries", () => {
+    expect(PALETTE_NAMES[0]).toBe("parula");
+    expect(PALETTES.parula).toBe(THEME_PALETTES);
+    for (const name of PALETTE_NAMES) expect(PALETTE_SOURCES[name].length, name).toBe(64);
+    expect(isPaletteName("viridis")).toBe(true);
+    expect(isPaletteName("jet")).toBe(false);
+    expect(isPaletteName(undefined)).toBe(false);
+  });
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s gets lighter from free to busy, inside the lightness range", (name) => {
+    const { dark, light } = PALETTES[name];
+    expect(dark.colours.length).toBe(LEVELS);
+    const ls = dark.colours.map((h) => rgbToOklch(rgb(h))[0]);
+    for (let i = 1; i < ls.length; i++) expect(ls[i]!, `step ${i}`).toBeGreaterThan(ls[i - 1]!);
+    expect(ls[0]!).toBeGreaterThanOrEqual(PALETTE_L_MIN - 0.005);
+    expect(ls[LEVELS - 1]!).toBeLessThanOrEqual(PALETTE_L_MAX + 0.005);
+    // Light mode is the same map inverted; past keeps lightness with less chroma.
+    for (let i = 0; i < LEVELS; i++) {
+      expect(light.colours[i]).toBe(dark.colours[LEVELS - 1 - i]);
+      expect(light.past[i]).toBe(dark.past[LEVELS - 1 - i]);
+      const [L, C] = rgbToOklch(rgb(dark.colours[i]!));
+      const [Lp, Cp] = rgbToOklch(rgb(dark.past[i]!));
+      expect(Lp).toBeCloseTo(L, 1);
+      expect(Cp).toBeLessThanOrEqual(C * PAST_CHROMA + 0.01);
+    }
+  });
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s has its own scoped block in calendar.css, in both themes", (name) => {
+    const css = calendarCss();
+    const esc = name.replace(/[-]/g, "\\-");
+    const darkBlock = new RegExp(`^\\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const lightBlock = new RegExp(`^:root\\[data-theme="light"\\]\\[data-palette="${esc}"\\],:root\\[data-theme="light"\\] \\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const { dark, light } = PALETTES[name];
+    for (let i = 0; i < LEVELS; i++) {
+      const level = ditherLevelForStep(i);
+      expect(darkBlock).toContain(`--cell-${i}:${dark.colours[i]};`);
+      expect(lightBlock).toContain(`--cell-${i}:${light.colours[i]};`);
+      const dots = (block: string) => new RegExp(`--dots-${i}:([^;}]*)`).exec(block)![1];
+      for (const [block, colour] of [[lightBlock, light.colours[i]!], [darkBlock, dark.colours[i]!]] as const) {
+        expect(dots(block)).toBe(level === 0 ? "none" : `url(/img/dither/${level}${toneFor(colour)}.svg)`);
+      }
+    }
+  });
+});
+

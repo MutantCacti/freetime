@@ -9,6 +9,7 @@ import { type AppError, toAppError } from "./errors";
 import { dayLong, exportSpanLabel, monthLabel, periodMonthsLabel, spanLabel } from "./format";
 import type { Interval } from "./ical";
 import type { Links } from "./links";
+import type { PaletteName } from "./parula";
 import { type Query, type ZoneState, navigation, paramsFor, periodFor, tabTargets, today } from "./state";
 import { offsetSeconds } from "./tz";
 import { ColumnGrid, DayCellGrid } from "./views/calendar";
@@ -30,7 +31,7 @@ export interface CalendarInput {
   /** Log a fatal error; returns its reference for the panel. */
   report: (err: AppError) => string;
   /** Profiles: no Download, Contact or Help, and a card above the calendar. */
-  profile?: { intro: Child; title: string };
+  profile?: { intro: Child; title: string; palette?: PaletteName };
 }
 
 export async function renderCalendar(input: CalendarInput): Promise<{ page: ReturnType<typeof CalendarPage>; status: number }> {
@@ -89,6 +90,7 @@ export async function renderCalendar(input: CalendarInput): Promise<{ page: Retu
       sticky={sticky}
       inline={inline}
       intro={input.profile?.intro}
+      palette={input.profile?.palette}
       rangeForm={period.view === "range" ? <RangeForm links={links} from={period.start} to={period.end} notices={rangeNotices} /> : null}
       body={body}
       showColourBar={showColourBar}

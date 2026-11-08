@@ -1,3 +1,4 @@
+import { PALETTE_NAMES } from "../src/parula";
 import { describe, expect, it } from "vitest";
 import { cellClasses, DITHER_MAX_LEVEL, ditherLevel } from "../src/dither";
 import { LEVELS } from "../src/levels";
@@ -287,9 +288,11 @@ describe("colour and dither", () => {
     const css = await (await app.get("/css/calendar.css")).text();
     expect(css).toContain(".p8{background-color:var(--cell-8);background-image:var(--dots-8);background-size:8px 8px}");
     expect(css).not.toContain(".p9{");
-    // Fully busy: level 12 dots in both themes (the dot tone follows the colour underneath).
-    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(2);
-    expect(css.match(/--dots-0:none/g)?.length).toBe(2);
+    // Fully busy: level 12 dots in both themes, for the default and for each
+    // preset (the dot tone follows the colour underneath).
+    const blocks = 2 * (1 + PALETTE_NAMES.length);
+    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(blocks);
+    expect(css.match(/--dots-0:none/g)?.length).toBe(blocks);
     expect(css).not.toContain("prefers-color-scheme");
     const svg = await app.get(`/img/dither/${DITHER_MAX_LEVEL}k.svg`);
     expect(svg.headers.get("content-type")).toBe("image/svg+xml");

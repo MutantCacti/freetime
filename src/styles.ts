@@ -5,7 +5,7 @@ import { RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
-import { THEME_PALETTES, type Theme, toneFor } from "./parula";
+import { PALETTES, PALETTE_NAMES, type PaletteName, type Theme, toneFor } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -26,8 +26,8 @@ export function calendarCss(): string {
   if (css) return css;
   const out: string[] = [];
   // Per-theme variables for each step: its colour, its past colour, and its dots.
-  const vars = (theme: Theme) => {
-    const { colours, past } = THEME_PALETTES[theme];
+  const vars = (name: PaletteName, theme: Theme) => {
+    const { colours, past } = PALETTES[name][theme];
     return colours
       .map((c, i) => {
         const level = ditherLevelForStep(i);
@@ -37,8 +37,17 @@ export function calendarCss(): string {
       .join(";");
   };
   // Same structure as tokens.css: dark by default, light only when chosen.
-  out.push(`:root{${vars("dark")}}`);
-  out.push(`:root[data-theme="light"]{${vars("light")}}`);
+  // Parula is the default map.
+  out.push(`:root{${vars("parula", "dark")}}`);
+  out.push(`:root[data-theme="light"]{${vars("parula", "light")}}`);
+  // Each preset, scoped by data-palette: on <html> for a whole profile page,
+  // or on any element (the swatches in the account form). Custom properties
+  // inherit, so everything inside, the colour bar included, uses that map.
+  for (const name of PALETTE_NAMES) {
+    const sel = `[data-palette="${name}"]`;
+    out.push(`${sel}{${vars(name, "dark")}}`);
+    out.push(`:root[data-theme="light"]${sel},:root[data-theme="light"] ${sel}{${vars(name, "light")}}`);
+  }
   const tile = DOT_PX * 4;
   for (let i = 0; i < LEVELS; i++) {
     out.push(`.p${i}{background-color:var(--cell-${i});background-image:var(--dots-${i});background-size:${tile}px ${tile}px}`);

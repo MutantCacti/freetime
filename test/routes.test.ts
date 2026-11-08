@@ -80,3 +80,11 @@ describe("routes", () => {
     expect(html).toContain('href="mailto:mutantcacti@gmail.com"');
   });
 });
+
+describe("colour map", () => {
+  it("the main site is always drawn in parula, the default map", async () => {
+    const html = await (await app.get("/?view=week&date=2026-11-02")).text();
+    expect(html).toContain('<html lang="en-GB">');
+    expect(html).not.toContain("data-palette");
+  });
+});

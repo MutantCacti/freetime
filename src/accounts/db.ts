@@ -1,5 +1,6 @@
 // The accounts database (D1). Every query is here, with bound parameters only.
 
+import type { PaletteName } from "../parula";
 import { randomId, randomToken, sha256Hex } from "./crypto";
 
 export interface User {
@@ -9,6 +10,8 @@ export interface User {
   bio: string;
   zone: string;
   visibility: "public" | "private";
+  /** The colour map their profile is drawn in. */
+  palette: PaletteName;
   email: string;
   email_verified: number;
   password_hash: string | null;
@@ -65,8 +68,11 @@ export class Db {
     await this.db.prepare("UPDATE users SET email_verified = 1 WHERE user_id = ?").bind(id).run();
   }
 
-  async updateProfile(id: number, p: { name: string; bio: string; zone: string; visibility: "public" | "private" }): Promise<void> {
-    await this.db.prepare("UPDATE users SET name = ?, bio = ?, zone = ?, visibility = ? WHERE user_id = ?").bind(p.name, p.bio, p.zone, p.visibility, id).run();
+  async updateProfile(id: number, p: { name: string; bio: string; zone: string; visibility: "public" | "private"; palette: PaletteName }): Promise<void> {
+    await this.db
+      .prepare("UPDATE users SET name = ?, bio = ?, zone = ?, visibility = ?, palette = ? WHERE user_id = ?")
+      .bind(p.name, p.bio, p.zone, p.visibility, p.palette, id)
+      .run();
   }
 
   async setPicture(id: number, key: string | null): Promise<void> {

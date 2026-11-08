@@ -12,6 +12,9 @@ import { pictureUrl } from "./pictures";
 import { CopyButton } from "../views/panels";
 import { monthLabel } from "../format";
 import { dateAt } from "../tz";
+import { PALETTE_NAMES, type PaletteName } from "../parula";
+import { LEVELS } from "../levels";
+import { stepClasses } from "../dither";
 
 /** Limits shown in forms and checked on the server. */
 export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, email: 254, label: 40 } as const;
@@ -422,6 +425,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
               <input type="radio" name="visibility" value="public" checked={user.visibility === "public"} /> Public: also your time zone and friends.
             </label>
           </fieldset>
+          <PaletteChoice value={user.palette} error={errors.palette} />
           <div class="actions actions-start">
             <button type="submit" class="pill pill-primary">
               Save profile
@@ -521,6 +525,52 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
 }
 
 export { ZoneSelect };
+
+// PRINTED OUTPUT: account / colour map names and notes
+const PALETTE_LABELS: Record<PaletteName, { name: string; note?: string }> = {
+  parula: { name: "Parula", note: "the default" },
+  viridis: { name: "Viridis" },
+  cividis: { name: "Cividis", note: "made for colour-blind eyes" },
+  magma: { name: "Magma" },
+  plasma: { name: "Plasma" },
+};
+
+/** A strip of the map's busy steps, free to busy, drawn by calendar.css. */
+export function PaletteSwatch({ palette }: { palette: PaletteName }) {
+  return (
+    <span class="palette-swatch" data-palette={palette} aria-hidden="true">
+      {Array.from({ length: LEVELS }, (_, step) => (
+        <span class={stepClasses(step)}></span>
+      ))}
+    </span>
+  );
+}
+
+/** The colour map choice in Edit profile: one radio per preset, each with its swatch. */
+function PaletteChoice({ value, error }: { value: PaletteName; error?: string }) {
+  return (
+    <fieldset class="field choice palette-choice" aria-describedby="palette-hint" aria-invalid={error ? "true" : undefined}>
+      {/* PRINTED OUTPUT: account / colour map legend and hint */}
+      <legend>Colour map</legend>
+      <p class="field-hint" id="palette-hint">
+        Your calendar is drawn in this map, from free to busy, for everyone who sees your profile.
+      </p>
+      <div class="palette-options">
+        {PALETTE_NAMES.map((name) => (
+          <label class="palette-option">
+            <input type="radio" name="palette" value={name} checked={value === name} />
+            <span class="palette-name">
+              {PALETTE_LABELS[name].name}
+              {PALETTE_LABELS[name].note ? <span class="field-hint"> · {PALETTE_LABELS[name].note}</span> : null}
+            </span>
+            <PaletteSwatch palette={name} />
+          </label>
+        ))}
+      </div>
+      {error ? <p class="field-error">{error}</p> : null}
+    </fieldset>
+  );
+}
 
 // ---------------------------------------------------------------- profiles
 

@@ -5,6 +5,7 @@ import type { ViewParams } from "../state";
 import { ColourBar } from "./calendar";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
 import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
+import type { PaletteName } from "../parula";
 import { Document, pageTitle } from "./layout";
 import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
@@ -21,11 +22,13 @@ export interface CalendarPageProps {
   download: DownloadProps;
   /** Above the calendar: a profile's card on the accounts Worker. */
   intro?: Child;
+  /** A profile's colour map (its owner's choice). */
+  palette?: PaletteName;
 }
 
 export function CalendarPage(p: CalendarPageProps) {
   return (
-    <Document title={p.title} bodyClass="page-calendar">
+    <Document title={p.title} bodyClass="page-calendar" palette={p.palette}>
       {/* PRINTED OUTPUT: calendar / skip link */}
       <a class="skip-link" href="#main">Skip to calendar</a>
       <TopBar {...p.topbar} />

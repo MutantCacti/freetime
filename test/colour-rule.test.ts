@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import tokens from "../public/css/tokens.css?raw";
-import { PALETTE, dotTone } from "../src/parula";
+import { PALETTE, PALETTES, PALETTE_NAMES, dotTone, toneFor } from "../src/parula";
 
 const ALLOWED = new Set(["/public/css/tokens.css", "/src/parula.ts"]);
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9A-Za-z_-])/g;
@@ -97,6 +97,21 @@ describe("contrast (WCAG AA) in both modes", () => {
 });
 
 describe("dither in greyscale", () => {
+  it.each(PALETTE_NAMES.flatMap((n) => [[n, "dark"], [n, "light"]] as const))("%s (%s): dots differ in lightness from the colour under them at every step", (name, theme) => {
+    const OPACITY = 0.42;
+    const { colours, past } = PALETTES[name][theme];
+    for (const [kind, ramp] of [["now", colours], ["past", past]] as const) {
+      for (let i = 0; i < ramp.length; i++) {
+        const base = ramp[i]!;
+        // Past cells use the tone chosen for the current colour of the same step.
+        const dot = toneFor(colours[i]!) === "k" ? 0 : 255;
+        const blended = [1, 3, 5].map((k) => Math.round(parseInt(base.slice(k, k + 2), 16) * (1 - OPACITY) + dot * OPACITY));
+        const hex = "#" + blended.map((v) => v.toString(16).padStart(2, "0")).join("");
+        expect(contrast(base, hex), `${kind} step ${i}`).toBeGreaterThanOrEqual(1.4);
+      }
+    }
+  });
+
   it("dots differ in lightness from the colour under them at every step of the ramp", () => {
     const OPACITY = 0.42;
     for (let i = 0; i < PALETTE.length; i++) {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { accountsEnv, decode, makeAccounts, resetDb, signedUp } from "./helpers";
+import { PALETTE_NAMES } from "../../src/parula";
 
 beforeEach(resetDb);
 
@@ -176,5 +177,65 @@ describe("profiles", () => {
     expect((await a.browser().get("/u/not-an-id")).status).toBe(404);
     await a.browser().post("/account/sign-up", { name: "Eve", email: "eve@example.com", password: "correct horse battery", zone: "Europe/London" });
     expect((await a.browser().get(await profilePath("eve@example.com"))).status).toBe(404);
+  });
+});
+
+describe("colour map", () => {
+  const map = async (email = "ada@example.com") =>
+    (await accountsEnv.DB.prepare("SELECT palette FROM users WHERE email = ?").bind(email).first<{ palette: string }>())!.palette;
+  const form = { name: "Ada", bio: "", zone: "Europe/London", visibility: "private" };
+
+  it("defaults to parula, offered with the other presets in Edit profile", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    expect(await map()).toBe("parula");
+    const html = decode(await (await b.get("/account")).text());
+    expect(html).toContain("<legend>Colour map</legend>");
+    for (const name of PALETTE_NAMES) {
+      expect(html).toContain(`name="palette" value="${name}"`);
+      expect(html).toContain(`class="palette-swatch" data-palette="${name}"`);
+    }
+    expect(html).toMatch(/name="palette" value="parula" checked=""/);
+  });
+
+  it("saves a choice, and keeps it when a form leaves it out", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    const res = await b.post("/account/profile", { ...form, palette: "viridis" });
+    expect(res.headers.get("location")).toBe("/account?done=profile");
+    expect(await map()).toBe("viridis");
+    expect(decode(await (await b.get("/account")).text())).toMatch(/name="palette" value="viridis" checked=""/);
+    await b.post("/account/profile", form);
+    expect(await map()).toBe("viridis");
+  });
+
+  it.each([["jet"], [""], ["Viridis"], ["parula'); --"]])("refuses %j and keeps the current map", async (value) => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    await b.post("/account/profile", { ...form, palette: "magma" });
+    const res = await b.post("/account/profile", { ...form, name: "Changed", palette: value });
+    expect(res.status).toBe(400);
+    expect(decode(await res.text())).toContain("Choose one of the colour maps shown.");
+    expect(await map()).toBe("magma");
+  });
+
+  it("the database refuses names outside the list", async () => {
+    const a = makeAccounts();
+    await signedUp(a);
+    await expect(accountsEnv.DB.prepare("UPDATE users SET palette = 'jet'").run()).rejects.toThrow(/CHECK/);
+  });
+
+  it("a profile is drawn in its owner's map for every visitor; parula sets nothing", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    const path = (await profilePath()) + WEEK;
+    expect(await (await a.browser().get(path)).text()).toMatch(/<html lang="en-GB">/);
+    await b.post("/account/profile", { ...form, palette: "cividis" });
+    for (const viewer of [a.browser(), b]) {
+      const html = await (await viewer.get(path)).text();
+      expect(html).toContain('<html lang="en-GB" data-palette="cividis">');
+      // The colour bar is inside, so it follows the same map.
+      expect(html).toContain('class="colourbar"');
+    }
   });
 });

@@ -357,6 +357,20 @@ code { font-family: var(--font-mono); }
 .calendar-list li { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .calendar-list form { margin: 0 0 0 auto; }
 .calendar-label { font-weight: 600; }
+/* Colour map choice: one tappable row per preset, its swatch drawn by calendar.css. */
+.palette-options { display: grid; gap: var(--space-2); margin-top: var(--space-1); }
+.field.choice label.palette-option {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "radio name" "radio swatch";
+  align-items: center; gap: var(--space-1) var(--space-3); margin: 0;
+  min-height: 2.75rem; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer;
+}
+.palette-option:hover { background: var(--color-surface-2); }
+.palette-option:has(:checked) { border-color: var(--color-link); box-shadow: inset 0 0 0 1px var(--color-link); }
+.palette-option input { grid-area: radio; }
+.palette-name { grid-area: name; }
+.palette-swatch { grid-area: swatch; display: flex; height: 1rem; gap: 1px; border-radius: 3px; overflow: hidden; background: var(--color-grid); }
+.palette-swatch > span { flex: 1; background-repeat: repeat; }
 .share-link code { overflow-wrap: anywhere; }
 img.avatar { object-fit: cover; padding: 0; }
 /* A profile's card, above its calendar (/u/<id>). */

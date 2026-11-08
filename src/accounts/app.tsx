@@ -10,6 +10,7 @@ import { canonicalZone } from "../tz";
 import { StatusPage } from "../views/pages";
 import { type DayWindow, DAY_WINDOW } from "../calendar";
 import { renderCalendar } from "../calendar-page";
+import { isPaletteName } from "../parula";
 import { Links } from "../links";
 import { calendarCss, ditherAsset } from "../styles";
 import { resolveZone } from "../state";
@@ -78,6 +79,8 @@ const MSG = {
   nameRequired: "Enter your name.",
   nameLong: `Use ${LIMITS.name} characters or fewer.`,
   bioLong: `Use ${LIMITS.bio} characters or fewer.`,
+  // PRINTED OUTPUT: account / unknown colour map
+  paletteUnknown: "Choose one of the colour maps shown.",
   emailInvalid: "Enter an email address, like name@example.com.",
   emailTaken: "An account already uses this email. Sign in, or reset its password.",
   passwordShort: `Use at least ${LIMITS.passwordMin} characters.`,
@@ -458,12 +461,15 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const bio = clean(f.bio).replace(/\r\n/g, "\n");
     const zone = canonicalZone(clean(f.zone)) ?? user.zone;
     const visibility = f.visibility === "public" ? "public" : "private";
+    // Missing (an older form): keep the current map. Unknown: refuse.
+    const palette = f.palette === undefined ? user.palette : isPaletteName(f.palette) ? f.palette : null;
     const errors: Errors = {};
+    if (!palette) errors.palette = MSG.paletteUnknown;
     if (!name) errors.name = MSG.nameRequired;
     else if (name.length > LIMITS.name) errors.name = MSG.nameLong;
     if (bio.length > LIMITS.bio) errors.bio = MSG.bioLong;
     if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors, draft: { name, bio } }, 400);
-    await db(c).updateProfile(user.user_id, { name, bio, zone, visibility });
+    await db(c).updateProfile(user.user_id, { name, bio, zone, visibility, palette: palette! });
     return c.redirect("/account?done=profile", 303);
   });
 
@@ -624,7 +630,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       window,
       loadBusy: (from, to) => busyOf(calendars, from, to, sources(c)),
       report: (err) => reportFatal(c, err),
-      profile: { title: owner.name, intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
+      profile: { title: owner.name, palette: owner.palette, intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
     });
     return page(c, body, status);
   });

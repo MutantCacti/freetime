@@ -1,19 +1,22 @@
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import { SITE_HOST } from "../config";
+import { DEFAULT_PALETTE, type PaletteName } from "../parula";
 
 export interface DocumentProps {
   title: string;
   bodyClass?: string;
+  /** The calendar's colour map, for a profile drawn in its owner's map; parula when omitted. */
+  palette?: PaletteName;
   children: Child;
 }
 
 /** The HTML shell shared by every page. */
-export function Document({ title, bodyClass, children }: DocumentProps) {
+export function Document({ title, bodyClass, palette, children }: DocumentProps) {
   return (
     <>
       {raw("<!doctype html>")}
-      <html lang="en-GB">
+      <html lang="en-GB" data-palette={palette && palette !== DEFAULT_PALETTE ? palette : undefined}>
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
