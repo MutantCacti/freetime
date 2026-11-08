@@ -35,13 +35,17 @@ describe("profile pictures", () => {
     const { public_id, picture_key } = (await row())!;
     expect(picture_key).toMatch(/^p\/[a-z0-9]{24}$/);
     const src = `/u/${public_id}/picture?v=${picture_key!.slice(-8)}`;
-    // Shown once per page, to its owner: in the account page's header and the profile's top bar.
+    // One picture per page: in the account page's header for its owner, and in a profile's top bar
+    // (before the period label) for every visitor, with the owner's name as its text.
     expect(await (await b.get("/account")).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
-    expect(await (await b.get(`/u/${public_id}`)).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
-    // A visitor sees the owner's accent circle and name instead.
-    const visitor = await (await a.browser().get(`/u/${public_id}`)).text();
-    expect(visitor).not.toContain(src);
-    expect(visitor).toContain('<span class="identity identity-initials" aria-hidden="true">');
+    for (const viewer of [a.browser(), b]) {
+      const html = decode(await (await viewer.get(`/u/${public_id}`)).text());
+      expect(html).toContain(`<img class="tb-owner" data-tb="owner" src="${src}" alt="Ada Lovelace"`);
+      expect(html.split(src).length - 1).toBe(1);
+      // The account button is the icon for everyone; the card shows the initials circle.
+      expect(html).toMatch(/class="pill round tb-account"[^>]*><svg[^>]*class="icon icon-user"/);
+      expect(html).toContain('<span class="identity identity-initials" aria-hidden="true">AL</span>');
+    }
     const pic = await a.browser().get(src);
     expect(pic.status).toBe(200);
     expect(pic.headers.get("content-type")).toBe("image/png");
@@ -160,7 +164,9 @@ describe("accent", () => {
     const b = await signedUp(a);
     const { public_id } = (await row())!;
     expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
-    expect(sheets(await (await a.browser().get(`/u/${public_id}`)).text())).toEqual(SHARED);
+    const bare = await (await a.browser().get(`/u/${public_id}`)).text();
+    expect(sheets(bare)).toEqual(SHARED);
+    expect(bare).not.toContain("tb-owner");
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     await b.post("/account/picture/remove", {});
     expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);

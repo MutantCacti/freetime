@@ -650,7 +650,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
         title: owner.name,
         palette: owner.palette,
         accentSheet: isAccent(owner.accent) ? accentSheetUrl(owner.public_id, owner.accent) : undefined,
-        accountPicture: viewer?.picture_key ? pictureUrl(viewer.public_id, viewer.picture_key) : undefined,
+        owner: owner.picture_key ? { picture: pictureUrl(owner.public_id, owner.picture_key), name: owner.name } : undefined,
         intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
     });
     return page(c, body, status);

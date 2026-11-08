@@ -52,8 +52,8 @@ export interface TopBarProps {
   exportParams: Record<string, string>;
   /** Maxence's pages (Download .ics, Contact me, Help). Off on profiles, which aren't Maxence's calendar. */
   pages?: boolean;
-  /** The signed-in viewer's picture, for the account button (accounts Worker only; the main site never knows who's signed in). */
-  accountPicture?: string;
+  /** On a profile: its owner's picture, shown before the period label to say whose calendar this is. */
+  owner?: { picture: string; name: string };
 }
 
 export function TopBar(p: TopBarProps) {
@@ -83,6 +83,8 @@ export function TopBar(p: TopBarProps) {
       </a>
       </div>
       <div class="tb-centre">
+      {/* The profile owner's picture; its alt text is their name. */}
+      {p.owner ? <img class="tb-owner" data-tb="owner" src={p.owner.picture} alt={p.owner.name} width={36} height={36} /> : null}
       <h1 class="period-label" data-tb="period">
         <span aria-hidden="true">{p.periodLabel}</span>
         <span class="sr-only">{p.periodFull}</span>
@@ -108,8 +110,8 @@ export function TopBar(p: TopBarProps) {
       </button>
       {/* The accounts Worker's page (ACCOUNTS-SPEC.md §1). The same signed in or out: this Worker never reads the cookie. */}
       {/* PRINTED OUTPUT: topbar / account button accessible name */}
-      <a class={p.accountPicture ? "pill round tb-account has-picture" : "pill round tb-account"} data-tb="account" href={p.links.href("/account")} aria-label="Account">
-        {p.accountPicture ? <img class="tb-avatar" src={p.accountPicture} alt="" width={36} height={36} /> : <UserIcon />}
+      <a class="pill round tb-account" data-tb="account" href={p.links.href("/account")} aria-label="Account">
+        <UserIcon />
       </a>
       {p.pages === false ? null : (
         <>
