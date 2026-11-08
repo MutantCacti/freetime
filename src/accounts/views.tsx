@@ -10,6 +10,7 @@ import { formatOffset, offsetSeconds, allZones } from "../tz";
 import type { User } from "./db";
 import { pictureUrl } from "./pictures";
 import { CopyButton } from "../views/panels";
+import { CheckIcon, UserPlusIcon } from "../views/icons";
 import { monthLabel } from "../format";
 import { dateAt } from "../tz";
 import { PALETTE_NAMES, type PaletteName } from "../parula";
@@ -576,6 +577,8 @@ function PaletteChoice({ value, error }: { value: PaletteName; error?: string })
 
 export interface ProfileCardProps {
   user: User;
+  /** Phase 3 wires this up; until then nothing passes it and no friend control is shown. */
+  friend?: FriendButtonProps;
   /** Time zone, friends and member since: public profiles, friends (phase 3) and the owner. */
   showPublic: boolean;
   isOwner: boolean;
@@ -583,7 +586,7 @@ export interface ProfileCardProps {
 }
 
 /** Above the calendar on /u/<id> (ACCOUNTS-SPEC.md §3). Never shows the email. */
-export function ProfileCard({ user, showPublic, isOwner, shareLink }: ProfileCardProps) {
+export function ProfileCard({ user, showPublic, isOwner, shareLink, friend }: ProfileCardProps) {
   const since = monthLabel(dateAt(user.created_at, user.zone));
   return (
     <section class="profile-card profile-strip" aria-labelledby="profile-name">
@@ -606,7 +609,93 @@ export function ProfileCard({ user, showPublic, isOwner, shareLink }: ProfileCar
             <CopyButton value={shareLink} what="share link" />
           </div>
         ) : null}
+        {friend && !isOwner ? <FriendButton {...friend} /> : null}
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------- friends (look only; phase 3 wires it)
+
+/**
+ * Where a visitor stands with a profile's owner (ACCOUNTS-SPEC.md §4):
+ * - "add": signed in, not friends, no request either way;
+ * - "invite": as "add", opened from the owner's share link, so one tap makes you friends;
+ * - "accept": the owner already asked you;
+ * - "sent": you asked, they haven't answered;
+ * - "friends": you are friends;
+ * - "signed-out": not signed in.
+ */
+export type FriendState = "add" | "invite" | "accept" | "sent" | "friends" | "signed-out";
+
+export interface FriendButtonProps {
+  state: FriendState;
+  /** POST target that adds, accepts or requests (states add, invite, accept). */
+  action?: string;
+  /** POST target for Unfriend (state friends). */
+  unfriendAction?: string;
+  /** Sign-up link that comes back to this profile (state signed-out). */
+  signUpHref?: string;
+  /** Hidden fields for the form, such as the share link's `f` code. */
+  fields?: Record<string, string>;
+}
+
+/**
+ * The one-tap friend control on a profile card. The states that ask for a tap
+ * (add, invite, accept, signed-out) are a primary pill; on narrow screens it
+ * sits at the bottom of the screen, in thumb reach. "Request sent" and
+ * "Friends" are quiet status lines in the card.
+ */
+export function FriendButton({ state, action = "", unfriendAction, signUpHref = "/account/sign-up", fields = {} }: FriendButtonProps) {
+  // PRINTED OUTPUT: profile / friend control labels and notes
+  const label = { add: "Add friend", invite: "Add friend", accept: "Accept friend request", "signed-out": "Sign up to add friend" } as const;
+  const note = { invite: "You'll be friends at once.", accept: "They asked to be your friend." } as const;
+  if (state === "sent" || state === "friends") {
+    return (
+      <div class="friend-action friend-status" data-state={state}>
+        <span class="friend-badge">
+          <CheckIcon /> {state === "sent" ? "Request sent" : "Friends"}
+        </span>
+        {state === "friends" && unfriendAction ? (
+          <form method="post" action={unfriendAction}>
+            <button type="submit" class="pill pill-quiet">
+              Unfriend
+            </button>
+          </form>
+        ) : null}
+      </div>
+    );
+  }
+  const n = state === "invite" || state === "accept" ? note[state] : null;
+  return (
+    <div class="friend-action friend-cta" data-state={state}>
+      {state === "signed-out" ? (
+        <a class="pill pill-primary friend-pill" href={signUpHref}>
+          <UserPlusIcon /> {label[state]}
+        </a>
+      ) : (
+        <form method="post" action={action}>
+          {Object.entries(fields).map(([k, v]) => (
+            <input type="hidden" name={k} value={v} />
+          ))}
+          <button type="submit" class="pill pill-primary friend-pill">
+            <UserPlusIcon /> {label[state]}
+          </button>
+        </form>
+      )}
+      {n ? <p class="field-hint friend-note">{n}</p> : null}
+    </div>
+  );
+}
+
+/** On the account page: friend requests waiting, linking to the Friends section (phase 3). */
+export function FriendRequestsBadge({ count, href = "#friends" }: { count: number; href?: string }) {
+  if (count <= 0) return null;
+  return (
+    <a class="request-badge" href={href}>
+      <span class="request-count">{count > 99 ? "99+" : String(count)}</span>
+      {/* PRINTED OUTPUT: account / friend requests waiting */}
+      {count === 1 ? "friend request" : "friend requests"}
+    </a>
   );
 }

@@ -156,6 +156,8 @@ describe("profiles", () => {
     const html = await (await a.browser().get((await profilePath()) + WEEK)).text();
     for (const tb of ["tabs", "today", "prev", "next", "period", "tz", "account", "theme"]) expect(html).toContain(`data-tb="${tb}"`);
     for (const tb of ["download", "contact", "help"]) expect(html).not.toContain(`data-tb="${tb}"`);
+    // The Add friend control is drawn (FriendButton) but wired up in phase 3.
+    expect(html).not.toContain("friend-action");
     expect(html).not.toContain('id="dlg-download"');
   });
 

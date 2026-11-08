@@ -103,3 +103,10 @@ export const UserIcon = () => (
     <path d="M2.75 14a5.25 5.25 0 0 1 10.5 0" />
   </svg>
 );
+
+export const UserPlusIcon = () => (
+  <svg {...base} class="icon icon-user-plus">
+    <circle cx="6.5" cy="5.5" r="2.75" />
+    <path d="M1.25 14a5.25 5.25 0 0 1 10.5 0M13 4.5v4M11 6.5h4" />
+  </svg>
+);
