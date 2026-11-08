@@ -17,6 +17,8 @@ export interface User {
   password_hash: string | null;
   invite_code: string;
   picture_key: string | null;
+  /** From the picture (accent.ts): #rrggbb, or null. */
+  accent: string | null;
   created_at: number;
 }
 
@@ -75,8 +77,8 @@ export class Db {
       .run();
   }
 
-  async setPicture(id: number, key: string | null): Promise<void> {
-    await this.db.prepare("UPDATE users SET picture_key = ? WHERE user_id = ?").bind(key, id).run();
+  async setPicture(id: number, key: string | null, accent: string | null = null): Promise<void> {
+    await this.db.prepare("UPDATE users SET picture_key = ?, accent = ? WHERE user_id = ?").bind(key, accent, id).run();
   }
 
   async setPassword(id: number, passwordHash: string): Promise<void> {

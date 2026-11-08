@@ -16,7 +16,7 @@ import { calendarCss, ditherAsset } from "../styles";
 import { resolveZone } from "../state";
 import { type FetchCalendar, busyOf, calendarAddress, fetchCalendarUrl, loadCalendar } from "./busy";
 import { checkPassword, dummyPasswordHash, hashPassword, randomId, sha256Hex } from "./crypto";
-import { PICTURE_MAX_BYTES, sniffPicture } from "./pictures";
+import { PICTURE_MAX_BYTES, processPicture, sniffPicture } from "./pictures";
 import { seal } from "./secret-box";
 import { Db, SESSION_SECONDS, type User } from "./db";
 import { type SendEmail, confirmEmail, resendSender, resetEmail } from "./email";
@@ -95,7 +95,8 @@ const MSG = {
   calendarAdded: "Calendar added.",
   pictureSaved: "Picture updated.",
   pictureRemoved: "Picture removed.",
-  pictureType: "Choose a PNG, JPEG or WebP picture.",
+  pictureType: "Choose a PNG or JPEG picture.",
+  pictureUnreadable: "We couldn't read that picture. Try saving it again as PNG or JPEG.",
   pictureLarge: "That picture is over 2 MB. Choose a smaller one.",
   calendarRemoved: "Calendar removed.",
   labelRequired: "Name this calendar.",
@@ -576,9 +577,12 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const type = sniffPicture(bytes);
     if (!type) return accountPage(c, user, { errors: { picture: MSG.pictureType } }, 400);
+    // Only the resized copy is stored, never the upload.
+    const processed = await processPicture(bytes, type);
+    if (!processed) return accountPage(c, user, { errors: { picture: MSG.pictureUnreadable } }, 400);
     const key = `p/${randomId(24)}`;
-    await bucket.put(key, bytes, { httpMetadata: { contentType: type } });
-    await db(c).setPicture(user.user_id, key);
+    await bucket.put(key, processed.png, { httpMetadata: { contentType: "image/png" } });
+    await db(c).setPicture(user.user_id, key, processed.accent);
     if (user.picture_key) await bucket.delete(user.picture_key);
     return c.redirect("/account?done=picture", 303);
   });
