@@ -97,7 +97,7 @@ describe("settings modal geometry", () => {
   const js = allCss["/public/js/app.js"]!;
   const px = (re: RegExp) => Number(re.exec(css)?.[1]);
 
-  // The Close lands exactly on the cog (checked in a browser at 360, 400 and 430 px on both Workers):
+  // On phones the Close lands exactly on the cog (checked in a browser at 360, 400 and 430 px on both Workers):
   // the dialog sits (head padding + border) above and right of the cog's box, and Close is drawn at the cog's size.
   it("puts Close on the cog: offsets equal the head's padding plus the border", () => {
     const [top, right, bottom, left] = /\.settings-head \{[^}]*padding: (\d+)px (\d+)px (\d+)px (\d+)px;/.exec(css)!.slice(1).map(Number);
@@ -163,13 +163,15 @@ describe("motion", () => {
   it("dialogs and toasts grow from the top right, where their buttons are", () => {
     expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
     expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
-    // The settings modal, on open only: on desktop a short grow from its top right (where the cog is);
+    // Desktop: centred on the screen.
+    expect(css).toMatch(/\.settings \{[^}]*position: fixed; inset: 0; margin: auto;[^}]*height: fit-content;/);
+    // The settings modal, on open only: on desktop a short grow from its top right (where Close is);
     // on phones, where it covers the screen, out of the cog's centre (its Close lands on the cog).
     expect(css).toMatch(/\.settings \{[^}]*transform-origin: top right;/);
     expect(css).toContain(".settings[open] { animation: settings-grow var(--motion-settings); }");
     expect(css).toContain("@keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }");
     const phone = css.slice(css.indexOf("@media (max-width: 640px) {\n  .settings {"));
-    expect(phone).toMatch(/^@media \(max-width: 640px\) \{\n  \.settings \{ transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\); \}/);
+    expect(phone).toMatch(/^@media \(max-width: 640px\) \{\n  \.settings \{[^}]*transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\);/);
     expect(phone).toContain(".settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }");
     expect(css).not.toMatch(/\.settings[^{]*is-closing/);
     expect(tokens).toMatch(/--motion-settings: 160ms/);

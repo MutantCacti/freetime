@@ -448,28 +448,36 @@ img.avatar { object-fit: cover; padding: 0; }
 /* ---------------------------------------------------------------- settings (the cog) */
 /*
  * The cog is the top bar's only menu. Its modal sits over the page blurred
- * under a strong tint, and its Close lands exactly on the cog: app.js gives
- * the cog's top and right edge (--cog-top, --cog-right), and the head's
- * padding plus the 1px border make up the rest (13 + 1 down, 11 + 1 in).
+ * under a strong tint: centred on desktop, over the cog on phones (below).
  */
 .settings {
-  position: fixed; inset: auto; margin: 0; padding: 0;
-  top: calc(var(--cog-top, 18px) - 14px); right: calc(var(--cog-right, 16px) - 12px);
-  width: min(26rem, calc(100vw - 2 * (var(--cog-right, 16px) - 12px)));
+  /* Desktop: centred on the screen. */
+  position: fixed; inset: 0; margin: auto; padding: 0; height: fit-content;
+  width: min(26rem, calc(100vw - 32px));
   max-width: none; /* the browser's dialog default (100% - 6px - 2em) left a 30px gap on phones */
-  max-height: calc(100dvh - var(--cog-top, 18px) + 14px - 4px);
+  max-height: calc(100dvh - 64px);
   overflow: auto; overscroll-behavior: contain;
   background: var(--color-bg); color: var(--color-text);
   border: 1px solid var(--color-divider); border-radius: 12px; box-shadow: 0 12px 36px var(--color-shadow);
   font-size: 14px;
-  /* Desktop: a short grow from its top-right corner, by the cog. On open only: closing is instant. */
+  /* A short grow from its top-right corner, where Close is. On open only: closing is instant. */
   transform-origin: top right;
 }
 .settings[open] { animation: settings-grow var(--motion-settings); }
 @keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }
-/* Phones: the modal covers the screen, so it grows out of the cog's centre instead. */
+/*
+ * Phones: the modal covers the screen and its Close lands exactly on the cog: app.js gives
+ * the cog's top and right edge (--cog-top, --cog-right), and the head's padding plus the 1px
+ * border make up the rest (13 + 1 down, 11 + 1 in). It grows out of the cog's centre.
+ */
 @media (max-width: 640px) {
-  .settings { transform-origin: calc(100% - 12px - 1.125rem) calc(14px + 1.125rem); }
+  .settings {
+    inset: auto; margin: 0; height: auto;
+    top: calc(var(--cog-top, 18px) - 14px); right: calc(var(--cog-right, 16px) - 12px);
+    width: calc(100vw - 2 * (var(--cog-right, 16px) - 12px));
+    max-height: calc(100dvh - var(--cog-top, 18px) + 14px - 4px);
+    transform-origin: calc(100% - 12px - 1.125rem) calc(14px + 1.125rem);
+  }
   .settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }
 }
 @keyframes settings-grow-phone { from { opacity: 0; scale: 0.08; } 40% { opacity: 1; } }
