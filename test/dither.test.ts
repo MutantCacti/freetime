@@ -2,7 +2,7 @@ import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
 import { BAYER_4X4, DITHER_LAYERS, DITHER_MAX_LEVEL, assertDitherLayers, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, fineLevelForStep, stepPosition } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch, toneTable, DOT_TONES } from "../src/parula";
+import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch, toneTable, DOT_TONES, DARK_FLOOR_L } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -201,16 +201,18 @@ describe("palette presets", () => {
     for (const theme of ["dark", "light"] as const) {
       const ramp = PALETTES[name][theme];
       expect(ramp.tones.join(""), theme).toBe(DOT_TONES[name][theme]);
-      expect(ramp.issues?.filter((i) => i.rule !== "target"), theme).toEqual([]);
+      expect(ramp.issues, theme).toEqual([]);
     }
   });
 
-  it("only the dark theme's step 1 misses its curve target, by under 0.01 (its colour is at black)", () => {
+  it("fits every step to its target, with nothing left over", () => {
+    for (const name of PALETTE_NAMES) for (const theme of ["dark", "light"] as const) expect(PALETTES[name][theme].issues, `${name} ${theme}`).toEqual([]);
+  });
+
+  it("dark-theme cell colours stay at or above the lightness floor, so every cell keeps its hue", () => {
     for (const name of PALETTE_NAMES) {
-      expect(PALETTES[name].light.issues).toEqual([]);
-      const misses = PALETTES[name].dark.issues!.filter((i) => i.rule === "target");
-      expect(misses.map((i) => i.step), name).toEqual([1]);
-      expect(misses[0]!.short).toBeLessThan(0.01);
+      const { colours } = PALETTES[name].dark;
+      for (let i = 1; i < LEVELS; i++) expect(rgbToOklch(rgb(colours[i]!))[0], `${name} step ${i}`).toBeGreaterThanOrEqual(DARK_FLOOR_L - 0.005);
     }
   });
 

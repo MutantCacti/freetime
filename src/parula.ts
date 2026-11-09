@@ -217,6 +217,14 @@ export const DOT_TONES: Record<PaletteName, Record<Theme, string>> = {
   plasma: { dark: "wwwwwwwwwwkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
 };
 
+/**
+ * The lowest OKLCH lightness a dark-theme cell colour may have. Light dots on
+ * the early dark-theme steps lift the cell, so to stay on the curve their
+ * colours would have to go to black (round 6); at this floor they keep their
+ * hue, and the curve starts from step 1 at the floor instead.
+ */
+export const DARK_FLOOR_L = 0.25;
+
 /** A step the solve couldn't fit to the rules: what failed and by how much. */
 export interface RampIssue {
   step: number;
@@ -236,7 +244,7 @@ export interface RampIssue {
  * anything the solve can't fit is reported in `issues` (the tests require
  * none), never fixed by changing the pattern.
  */
-function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: boolean): StepPalette & { issues: RampIssue[] } {
+function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: boolean, floorL = 0): StepPalette & { issues: RampIssue[] } {
   const last = LEVELS - 1;
   const okL = (rgb: RGB) => rgbToOklch(rgb)[0];
   const toneOf = (i: number) => toneSpec[i] as Tone;
@@ -246,7 +254,7 @@ function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: 
     const level = ditherLevelForStep(i);
     const tone = toneOf(i);
     const [, C, h] = rgbToOklch(hexToRgb(sampled[i]!));
-    let lo = 0, hi = 1;
+    let lo = floorL, hi = 1;
     for (let k = 0; k < 32; k++) {
       const mid = (lo + hi) / 2;
       if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
@@ -285,9 +293,22 @@ function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: 
       to = okL(averagedCell(endHex, toneN, levelN));
     }
   }
+  // With a lightness floor, step 1 may not get down to its place on the curve: its dots alone
+  // lift it past the target. Then the curve starts from step 1 at the floor instead, easing
+  // from there to fully busy along the same smoothstep, so every step still reads busier than
+  // the one before and keeps its hue.
+  let target = (i: number) => from + (to - from) * stepPosition(i);
+  if (floorL > 0) {
+    const [, C1, h1] = rgbToOklch(hexToRgb(sampled[1]!));
+    const start = okL(averagedCell(rgbToHex(fitGamut([floorL, C1, h1])), toneOf(1), ditherLevelForStep(1)));
+    if ((start - target(1)) * (busyIsLighter ? 1 : -1) > 0) {
+      const p1 = stepPosition(1);
+      target = (i: number) => start + (to - start) * ((stepPosition(i) - p1) / (1 - p1));
+    }
+  }
   const colours: string[] = [sampled[0]!];
   for (let i = 1; i < last; i++) {
-    const r = solveStep(i, from + (to - from) * stepPosition(i));
+    const r = solveStep(i, target(i));
     if (r.miss > 0.004) issues.push({ step: i, rule: "target", short: r.miss });
     colours.push(r.hex);
   }
@@ -326,7 +347,7 @@ function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: 
 export function themePalettesFor(source: readonly string[], tones: Record<Theme, string>, chroma = PALETTE_CHROMA): ThemePalettes {
   const toned = toneTable(source, chroma);
   const sampled = Array.from({ length: LEVELS }, (_, step) => toned[Math.round(stepPosition(step) * (toned.length - 1))]!);
-  return { dark: solveRamp(sampled, tones.dark, true), light: solveRamp([...sampled].reverse(), tones.light, false) };
+  return { dark: solveRamp(sampled, tones.dark, true, DARK_FLOOR_L), light: solveRamp([...sampled].reverse(), tones.light, false) };
 }
 
 /** Parula's ramps: the main site's, and the default. */

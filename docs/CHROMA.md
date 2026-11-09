@@ -156,34 +156,41 @@ Then each step's colour lightness is solved for that exact pattern, as in rounds
 - Averaged lightness moves towards busy at every step, for every map, both themes, current and past: holds.
 - Dots at least 1.4:1 against their colour at every step: holds (lowest 1.40:1).
 - **Bent: "only a full slot gets the full pattern".** Steps 13–15 share the 12-dot pattern with a fully busy slot, as in the sketch; colour alone tells them apart. A busy cell is still never solid (12 of 16). SPEC.md §6 is updated.
-- **Missed target, dark theme step 1, every map.** Two light dots lift any colour: even on black, a step-1 cell averages 0.374, and its target on the curve is 0.365. So step 1 lands 0.009 above its target, with its colour at black, and step 2's colour is nearly black too (L 0.14). Both rules still hold (step 1 still reads between free and step 2), but those two cells have no hue: black or near-black with white dots. The solve reports this (`issues` on each ramp) and a test pins it to exactly this cell.
-  The smallest ways out, none taken without a decision:
-  - give the dark theme's early colours a lightness floor of about 0.25 (enough for the hue to show): steps 1–3 then average at least 0.407, so the curve's start jumps from 0.36 to about 0.41 at step 1 and is flat-ish to step 3, instead of easing in;
-  - or use 1 dot instead of 2 at dark-theme step 1 (a seventh pattern): step 1 keeps a navy colour (L about 0.28), but step 2 is still near-black;
-  - or accept it: from arm's length step 1 reads as dark with sparse white dots, as in the sketch, whose step 1 colour was navy but which didn't re-solve lightness.
+- **Dark-theme lightness floor (Maxence's choice).** Two light dots lift any colour: even on black, a step-1 cell averages 0.374, above its place on the curve (0.365). Solved to the curve, step 1's colour went to black and step 2's to near-black (L 0.14): no hue, just black with white dots. So dark-theme cell colours now have a floor, `DARK_FLOOR_L` = 0.25 OKLCH lightness, low enough to keep the early steps dark and high enough that each keeps its hue (chroma 0.03–0.16 at steps 1–2, as much as the map has there). With the floor, step 1 can't come down past 0.407, so the dark theme's curve starts from there: steps 1–16 ease from 0.407 to the fully busy cell along the same smoothstep (rescaled from step 1 instead of step 0). Free (0.36) to step 1 is now the biggest step at the free end (+0.047), so "a little busy" reads clearly apart from free. The light theme needs no floor and is unchanged.
+  Every step now reaches its target, both rules hold, and the tests check the floor for every map. Steps 1 and 2 per map (colour, OKLCH L and C):
+
+  | Map | Step 1 | Step 2 |
+  |---|---|---|
+  | parula | `#1a0c5f` L 0.25 C 0.134 | `#191672` L 0.29 C 0.149 |
+  | viridis | `#360346` L 0.25 C 0.117 | `#3b1154` L 0.28 C 0.116 |
+  | cividis | `#032047` L 0.25 C 0.081 | `#052856` L 0.28 C 0.092 |
+  | magma | `#21202e` L 0.25 C 0.026 | `#27283e` L 0.29 C 0.040 |
+  | plasma | `#11006d` L 0.25 C 0.162 | `#220879` L 0.29 C 0.166 |
+
+  (Magma's early steps have little chroma in the map itself; they are its own blue-grey, not black.)
 
 Averaged lightness at chroma 0.85, the sketch's pattern:
 
 | Map | Theme | Kind | Averaged lightness, steps 0 → 16 |
 |---|---|---|---|
-| parula | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
-| parula | dark | past | 0.27 0.28 0.29 0.30 0.31 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| parula | dark | current | 0.36 0.41 0.42 0.44 0.47 0.50 0.54 0.58 0.63 0.67 0.71 0.74 0.78 0.80 0.83 0.84 0.85 |
+| parula | dark | past | 0.27 0.30 0.31 0.32 0.33 0.35 0.37 0.40 0.42 0.44 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
 | parula | light | current | 0.90 0.89 0.88 0.85 0.81 0.76 0.72 0.67 0.61 0.56 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | parula | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
-| viridis | dark | current | 0.36 0.37 0.38 0.41 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
-| viridis | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| viridis | dark | current | 0.36 0.41 0.42 0.44 0.47 0.51 0.54 0.58 0.63 0.66 0.71 0.74 0.78 0.81 0.83 0.84 0.85 |
+| viridis | dark | past | 0.27 0.30 0.31 0.32 0.33 0.35 0.37 0.40 0.42 0.44 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
 | viridis | light | current | 0.90 0.89 0.87 0.85 0.81 0.76 0.71 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | viridis | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
-| cividis | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
-| cividis | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| cividis | dark | current | 0.36 0.41 0.42 0.44 0.47 0.50 0.54 0.58 0.62 0.66 0.70 0.74 0.78 0.81 0.83 0.84 0.85 |
+| cividis | dark | past | 0.27 0.30 0.31 0.32 0.34 0.35 0.37 0.40 0.42 0.44 0.46 0.49 0.50 0.52 0.53 0.54 0.54 |
 | cividis | light | current | 0.90 0.89 0.87 0.85 0.81 0.76 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | cividis | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
-| magma | dark | current | 0.36 0.37 0.38 0.41 0.44 0.47 0.52 0.56 0.61 0.65 0.70 0.74 0.78 0.81 0.83 0.85 0.85 |
-| magma | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.55 |
+| magma | dark | current | 0.36 0.41 0.42 0.44 0.47 0.51 0.55 0.58 0.63 0.67 0.71 0.75 0.78 0.81 0.83 0.85 0.85 |
+| magma | dark | past | 0.27 0.30 0.31 0.32 0.34 0.35 0.37 0.40 0.42 0.44 0.47 0.49 0.51 0.52 0.54 0.54 0.55 |
 | magma | light | current | 0.90 0.89 0.87 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | magma | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
-| plasma | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.82 0.84 0.84 |
-| plasma | dark | past | 0.27 0.28 0.29 0.30 0.31 0.33 0.36 0.38 0.41 0.43 0.45 0.48 0.50 0.52 0.53 0.54 0.54 |
+| plasma | dark | current | 0.36 0.41 0.42 0.44 0.47 0.51 0.54 0.58 0.62 0.66 0.70 0.74 0.77 0.80 0.82 0.84 0.84 |
+| plasma | dark | past | 0.27 0.30 0.31 0.32 0.33 0.35 0.37 0.39 0.42 0.44 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
 | plasma | light | current | 0.90 0.90 0.88 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
 
