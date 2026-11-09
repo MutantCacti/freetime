@@ -54,7 +54,7 @@ The raw commands still work: `npm run dev` (site, :8787), `npm run dev:live`, `n
 | `src/levels.ts` | `LEVELS` (9) and the busy fraction → step mapping |
 | `src/parula.ts`, `src/dither.ts`, `src/styles.ts` | Source parula table, the toned palette derived from it, Bayer dither, and the generated `/css/calendar.css` |
 | `src/export-ics.ts` | The busy-only `.ics` file |
-| `src/views/` | JSX for the top bar, calendar, notices, panels and pages |
+| `src/views/` | JSX for the top bar, calendar, notices, panels, pages and the settings modal (`settings.tsx`, the cog's rows, shared by both Workers) |
 | `src/headers.ts` | Security headers, shared by both Workers |
 | `src/accounts/` | The accounts Worker (`ACCOUNTS-SPEC.md`): routes, D1 queries, passwords and tokens, Resend email, pages. Never imported by the main Worker |
 | `migrations/` | D1 migrations for the accounts database |
@@ -65,7 +65,7 @@ The raw commands still work: `npm run dev` (site, :8787), `npm run dev:live`, `n
 | `public/favicon.svg`, `public/apple-touch-icon.png` | The site icon, and a 180 px export of it |
 | `public/css/app.css` | Component styles (tokens only) |
 | `public/js/head.js` | Runs before first paint: applies the theme, corrects `dtz` |
-| `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
+| `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, the settings modal and its rows, the theme switch, Copy, current-time line, scroll |
 | `test/` | Vitest suites, `.ics` fixtures and scrubbed when2meet pages (`test/fixtures/w2m/`) |
 | `ft`, `scripts/` | The developer command (`DEV-SPEC.md`): `scripts/ft.mjs` and its modules in `scripts/ft/` |
 | `.secrets.example` | The template for `.secrets`, the gitignored file of production secrets `./ft deploy` sends |

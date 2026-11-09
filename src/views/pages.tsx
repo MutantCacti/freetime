@@ -255,9 +255,9 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           <ul>
             <li>Change your view with the view buttons in the top left.</li>
             <li>Navigate with the 'Today' button and the arrows.</li>
-            <li>Download a precise .ics file of my busy times.</li>
+            <li>Download a precise .ics file of my busy times, from Settings.</li>
             <li>See my public contact details are shown under 'Contact me'.</li>
-            <li>Change the theme in the top right.</li>
+            <li>Change the theme in Settings: the cog in the top right.</li>
           </ul>
         </section>
 
