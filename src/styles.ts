@@ -2,7 +2,7 @@
 // Generating it keeps the colour table and the dither levels in one place.
 
 import { RANGE_COLUMN_MAX_DAYS } from "./config";
-import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
+import { DITHER_LAYERS, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
 import { PALETTES, PALETTE_NAMES, type PaletteName, type Theme } from "./parula";
@@ -11,12 +11,12 @@ export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
 }
 
-/** The SVG for "/img/dither/<level><tone>.svg", or null if there is no such level. */
+/** The SVG for "/img/dither/<level><tone>.svg", or null if that level isn't one of the dotted layers. */
 export function ditherAsset(name: string): string | null {
   const m = /^(\d{1,2})([kw])\.svg$/.exec(name);
   if (!m) return null;
   const level = Number(m[1]);
-  if (level <= DITHER_MIN_LEVEL || level > DITHER_MAX_LEVEL) return null;
+  if (level === DITHER_MIN_LEVEL || !DITHER_LAYERS.includes(level)) return null;
   return ditherSvg(level, m[2] as "k" | "w");
 }
 

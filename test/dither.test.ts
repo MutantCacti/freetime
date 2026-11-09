@@ -1,8 +1,8 @@
 import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
-import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, stepPosition } from "../src/dither";
+import { BAYER_4X4, DITHER_LAYERS, DITHER_MAX_LEVEL, assertDitherLayers, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, stepPosition } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
+import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch, toneTable } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -19,12 +19,24 @@ describe("dither", () => {
       expect(stepPosition(step)).toBeCloseTo(t * t * (3 - 2 * t), 12);
     }
     const levels = Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s));
-    expect(levels).toEqual([0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12]);
+    expect(levels).toEqual([0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 9, 9, 9, 12]);
     // Any busy step has dots, only a full slot has the full pattern, and levels never go down.
     expect(levels.slice(1).every((l) => l >= 1)).toBe(true);
     expect(levels.slice(0, -1).every((l) => l < DITHER_MAX_LEVEL)).toBe(true);
     for (let step = 1; step < LEVELS; step++) expect(levels[step]).toBeGreaterThanOrEqual(levels[step - 1]!);
   });
+
+  it("has six dot layers, none included, and every one is used", () => {
+    expect(DITHER_LAYERS).toEqual([0, 2, 4, 6, 9, 12]);
+    const used = new Set(Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s)));
+    expect([...used].sort((a, b) => a - b)).toEqual([...DITHER_LAYERS]);
+  });
+
+  it.each([[[1, 2, 12]], [[0, 4, 2, 12]], [[0, 2, 11]], [[0, 12]], [[0, 2.5, 12]]])("rejects invalid layers %j", (layers) => {
+    expect(() => assertDitherLayers(layers, 0, 12)).toThrow(/Invalid dither layers/);
+  });
+
+  it("accepts valid layers", () => expect(() => assertDitherLayers([0, 2, 12], 0, 12)).not.toThrow());
 
   it("a fully busy cell is at DITHER_MAX_LEVEL and never solid", () => {
     expect(ditherLevel(1)).toBe(DITHER_MAX_LEVEL);
@@ -179,6 +191,22 @@ describe("palette presets", () => {
         const [Lp, Cp] = rgbToOklch(rgb(ramp.past[i]!));
         expect(Lp).toBeCloseTo(L, 1);
         expect(Cp).toBeLessThanOrEqual(C * PAST_CHROMA + 0.01);
+      }
+    }
+  });
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s: steps short of full share one dot tone and keep the map's hue and chroma", (name) => {
+    const toned = toneTable(PALETTE_SOURCES[name]);
+    const sampled = Array.from({ length: LEVELS }, (_, s) => toned[Math.round(stepPosition(s) * (toned.length - 1))]!);
+    for (const [theme, ramp] of Object.entries(PALETTES[name])) {
+      // No lone cell whose dots flip tone in the middle of the ramp.
+      expect(new Set(ramp.tones.slice(1, -1)).size, theme).toBe(1);
+      const src = theme === "dark" ? sampled : [...sampled].reverse();
+      for (let i = 1; i < LEVELS - 1; i++) {
+        const [, C0] = rgbToOklch(rgb(src[i]!));
+        if (C0 < 0.04) continue; // near-grey: hue doesn't show
+        // Solving lightness for the dots doesn't push the colour so far that sRGB cuts its chroma much.
+        expect(rgbToOklch(rgb(ramp.colours[i]!))[1] / C0, `${theme} step ${i}`).toBeGreaterThan(0.9);
       }
     }
   });

@@ -36,19 +36,42 @@ export function stepPosition(step: number): number {
 }
 
 /**
- * Dither level for a step: round(MIN + stepPosition(step) × (MAX − MIN)),
- * at least MIN + 1 for any busy step (busy time always has dots) and at most
- * MAX − 1 short of fully busy (only a full slot gets the full pattern).
- * There are more steps (17) than levels (13), so some neighbouring steps
- * share a level and differ by colour alone; levels never go down.
- * With 0 and 12: 0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12.
+ * The dot patterns a cell can have: none, then five Bayer levels. Fewer
+ * patterns than steps (17) on purpose: six are easy to tell apart, and the
+ * colour carries the finer steps between them. The gaps grow towards busy
+ * (2, 2, 2, 3, 3) so the patterns follow a gentle curve. Each must be a
+ * valid level (0 … DITHER_MAX_LEVEL), rising, starting at DITHER_MIN_LEVEL
+ * and ending at DITHER_MAX_LEVEL.
+ */
+export const DITHER_LAYERS: readonly number[] = [0, 2, 4, 6, 9, 12];
+
+export function assertDitherLayers(layers: readonly number[], min: number, max: number): void {
+  const ok =
+    layers.length >= 3 &&
+    layers[0] === min &&
+    layers[layers.length - 1] === max &&
+    layers.every((l, i) => Number.isInteger(l) && (i === 0 || l > layers[i - 1]!));
+  if (!ok) throw new Error(`Invalid dither layers: need rising integers from ${min} to ${max}, got ${layers.join(", ")}`);
+}
+
+assertDitherLayers(DITHER_LAYERS, DITHER_MIN_LEVEL, DITHER_MAX_LEVEL);
+
+/**
+ * Dither level for a step: the layer nearest MIN + stepPosition(step) × (MAX − MIN)
+ * (ties go to the lower layer), at least the first dotted layer for any busy
+ * step (busy time always has dots) and at most the one below MAX short of
+ * fully busy (only a full slot gets the full pattern). Neighbouring steps
+ * share a layer and differ by colour alone; levels never go down.
+ * With [0, 2, 4, 6, 9, 12]: 0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 9, 9, 9, 12.
  */
 export function ditherLevelForStep(step: number): number {
   const last = LEVELS - 1;
-  const level = Math.round(DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
   if (step <= 0) return DITHER_MIN_LEVEL;
   if (step >= last) return DITHER_MAX_LEVEL;
-  return Math.min(DITHER_MAX_LEVEL - 1, Math.max(DITHER_MIN_LEVEL + 1, level));
+  const ideal = DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL);
+  let best = DITHER_LAYERS[1]!;
+  for (const l of DITHER_LAYERS.slice(1, -1)) if (Math.abs(l - ideal) < Math.abs(best - ideal) - 1e-9) best = l;
+  return best;
 }
 
 /** Dither level for a busy fraction, through its step. */
