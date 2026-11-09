@@ -3,6 +3,7 @@ import { decodePng } from "../../src/accounts/image-decode";
 import baselineUrl from "../fixtures/pic-baseline-420.jpg?inline";
 import { accountsEnv, decode, makeAccounts, resetDb, signedUp } from "./helpers";
 import { accentCss } from "../../src/accounts/pictures";
+import { APP_VERSION } from "../../src/config";
 import { snapAccent } from "../../src/accounts/accent";
 import type { PaletteName } from "../../src/parula";
 import { buildPng, inlineBytes } from "./png-builder";
@@ -143,7 +144,7 @@ describe("profile pictures", () => {
 
 describe("accent", () => {
   const sheets = (html: string) => [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
-  const SHARED = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css"];
+  const SHARED = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css"].map((p) => `${p}?v=${APP_VERSION}`);
 
   const sheetText = (id: string, accent: string | null, palette: PaletteName) => accentCss(id, accent, palette);
 

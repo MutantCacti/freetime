@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import accountsConfig from "../wrangler.accounts.toml?raw";
 import { makeApp } from "./helpers";
+import { APP_VERSION } from "../src/config";
+import pkg from "../package.json";
 
 // The two Workers (ACCOUNTS-SPEC.md §1): the read-only site never depends on
 // accounts, never claims an accounts path, and looks the same with a session cookie.
@@ -12,7 +14,7 @@ export function assetsOf(html: string): string[] {
   return [...html.matchAll(/<(?:link rel="stylesheet"|script) (?:href|src)="([^"]+)"/g)].map((m) => m[1]!);
 }
 
-export const SHARED_ASSETS = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css", "/js/head.js", "/js/app.js"];
+export const SHARED_ASSETS = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css", "/js/head.js", "/js/app.js"].map((p) => `${p}?v=${APP_VERSION}`);
 
 describe("the two Workers", () => {
   it("the main Worker never imports the accounts Worker's code", () => {
@@ -53,5 +55,9 @@ describe("the two Workers", () => {
   it("there is one stylesheet set, and the main site loads all of it", async () => {
     expect(Object.keys(css).sort()).toEqual(["/public/css/app.css", "/public/css/fonts.css", "/public/css/tokens.css"]);
     expect(assetsOf(await makeApp().html("/help"))).toEqual(SHARED_ASSETS);
+  });
+
+  it("the release in the asset addresses is package.json's version", () => {
+    expect(APP_VERSION).toBe(pkg.version);
   });
 });

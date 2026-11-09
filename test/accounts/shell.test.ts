@@ -1,11 +1,11 @@
 import { beforeEach, expect, it } from "vitest";
-import { SITE_HOST } from "../../src/config";
+import { APP_VERSION, SITE_HOST } from "../../src/config";
 import { makeAccounts, resetDb, signedUp } from "./helpers";
 
 beforeEach(resetDb);
 
 // The same list the main site's test checks (test/workers.test.ts): one shell, one stylesheet set.
-const SHARED_ASSETS = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css", "/js/head.js", "/js/app.js"];
+const SHARED_ASSETS = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css", "/js/head.js", "/js/app.js"].map((p) => `${p}?v=${APP_VERSION}`);
 const assetsOf = (html: string) => [...html.matchAll(/<(?:link rel="stylesheet"|script) (?:href|src)="([^"]+)"/g)].map((m) => m[1]);
 
 it.each(["/account", "/account/sign-in", "/account/sign-up", "/account/reset", "/nope"])("%s loads exactly the main site's stylesheets and scripts", async (path) => {

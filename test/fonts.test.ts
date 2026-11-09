@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fontsCss from "../public/css/fonts.css?raw";
 import tokens from "../public/css/tokens.css?raw";
 import { makeApp } from "./helpers";
+import { APP_VERSION } from "../src/config";
 
 const app = makeApp();
 const FILES = [
@@ -43,7 +44,7 @@ describe("fonts", () => {
     const html = await app.html("/");
     const preloads = [...html.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin="anonymous"\/>/g)].map((m) => m[1]);
     expect(preloads).toEqual(["/fonts/figtree-latin-wght-normal.woff2", "/fonts/fragment-mono-latin-400-normal.woff2"]);
-    expect(html).toContain('<link rel="stylesheet" href="/css/fonts.css"/>');
+    expect(html).toContain(`<link rel="stylesheet" href="/css/fonts.css?v=${APP_VERSION}"/>`);
   });
 
   it("the CSP still allows no external origins", async () => {
