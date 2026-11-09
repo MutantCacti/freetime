@@ -29,7 +29,7 @@ export function pictureUrl(publicId: string, key: string): string {
  * Bumped when the way the accent is drawn from the stored colour changes, so
  * stylesheets cached for good under the old rule are fetched again.
  */
-export const ACCENT_SHEET_VERSION = 2;
+export const ACCENT_SHEET_VERSION = 3;
 
 /**
  * A user's accent stylesheet. Everything it depends on (the rule, the map and

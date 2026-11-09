@@ -152,10 +152,10 @@ describe("accent", () => {
     const a = makeAccounts();
     const b = await signedUp(a);
     const { public_id: id0 } = (await row())!;
-    expect(sheets(await (await b.get("/account")).text())).toEqual([...SHARED, `/u/${id0}/accent.css?v=2-parula-none`]);
+    expect(sheets(await (await b.get("/account")).text())).toEqual([...SHARED, `/u/${id0}/accent.css?v=3-parula-none`]);
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     const { public_id, accent } = (await row())!;
-    const href = `/u/${public_id}/accent.css?v=2-parula-${accent!.slice(1)}`;
+    const href = `/u/${public_id}/accent.css?v=3-parula-${accent!.slice(1)}`;
     for (const html of [await (await b.get("/account")).text(), await (await a.browser().get("/@ada")).text()]) {
       expect(sheets(html)).toEqual([...SHARED, href]);
       expect(html).toContain(`data-accent-user="${public_id}"`);
@@ -177,19 +177,19 @@ describe("accent", () => {
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     await accountsEnv.DB.prepare("UPDATE users SET palette = 'magma'").run();
     const { public_id, accent } = (await row())!;
-    const href = `/u/${public_id}/accent.css?v=2-magma-${accent!.slice(1)}`;
+    const href = `/u/${public_id}/accent.css?v=3-magma-${accent!.slice(1)}`;
     expect(sheets(await (await a.browser().get("/@ada")).text())).toEqual([...SHARED, href]);
     const res = await a.browser().get(href);
     expect(res.headers.get("cache-control")).toContain("immutable");
     expect(await res.text()).toBe(sheetText(public_id, accent, "magma"));
-    expect((await a.browser().get(`/u/${public_id}/accent.css?v=2-parula-${accent!.slice(1)}`)).headers.get("cache-control")).toBe("no-cache");
+    expect((await a.browser().get(`/u/${public_id}/accent.css?v=3-parula-${accent!.slice(1)}`)).headers.get("cache-control")).toBe("no-cache");
   });
 
   it("no picture: the sheet still exists, with the map's middle step", async () => {
     const a = makeAccounts();
     const b = await signedUp(a);
     const { public_id } = (await row())!;
-    const href = `/u/${public_id}/accent.css?v=2-parula-none`;
+    const href = `/u/${public_id}/accent.css?v=3-parula-none`;
     const bare = await (await a.browser().get("/@ada")).text();
     expect(sheets(bare)).toEqual([...SHARED, href]);
     expect(bare).not.toContain("tb-owner");

@@ -204,17 +204,21 @@ export function dotContrast(hex: string, tone: Tone): number {
 
 /**
  * Each step's dot tone, per map and theme, free to busy: "k" dark dots, "w"
- * light dots (step 0 has no dots; its letter is unused). These are the tones
- * of round 4 (whichever gave the clearer dots then), kept as they were when
- * the dots went to six layers, as in the approved sketch: light dots on the
- * dark theme's early steps, so a few dots show on a dark colour.
+ * light dots (step 0 has no dots; its letter is unused). Each step keeps the
+ * tone its layer had in the approved sketch (docs/CHROMA.md, rounds 6–7):
+ * light dots on the dark theme's early steps, so a few dots show on a dark
+ * colour. Where a layer had both tones in the sketch, the one the lightness
+ * solve prefers: dark-theme step 3 (6 dots) dark, as it moves the colour
+ * least; fully busy dark-theme step 5 light, as it leaves the cell furthest
+ * towards busy (the sketch's fully busy tone); light-theme step 3 dark, as
+ * light dots there can't reach the step's lightness.
  */
 export const DOT_TONES: Record<PaletteName, Record<Theme, string>> = {
-  parula: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
-  viridis: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
-  cividis: { dark: "wwwwwwwwwwkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
-  magma: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
-  plasma: { dark: "wwwwwwwwwwkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+  parula: { dark: "wwwkkw", light: "kkkkkk" },
+  viridis: { dark: "wwwkkw", light: "kkkkkk" },
+  cividis: { dark: "wwwwkw", light: "kkkkkk" },
+  magma: { dark: "wwwkkw", light: "kkkkkk" },
+  plasma: { dark: "wwwwkw", light: "kkkkkk" },
 };
 
 /**

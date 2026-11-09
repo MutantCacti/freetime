@@ -19,7 +19,7 @@ it("the signed-in account page does too, with the site's sub-page header and the
   const html = await (await b.get("/account")).text();
   // Plus the owner's accent sheet (every verified profile has one), right after the shared stylesheets.
   const accent = assetsOf(html).find((h) => h!.endsWith("/accent.css") || h!.includes("/accent.css?"));
-  expect(accent).toMatch(/^\/u\/[a-z0-9]{10}\/accent\.css\?v=2-parula-none$/);
+  expect(accent).toMatch(/^\/u\/[a-z0-9]{10}\/accent\.css\?v=3-parula-none$/);
   expect(assetsOf(html).filter((h) => h !== accent)).toEqual(SHARED_ASSETS);
   expect(html).toContain('class="subheader"');
   // The theme is in its row here, not in the header.

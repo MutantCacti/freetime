@@ -308,24 +308,24 @@ Non-fatal messages appear as **toasts** in the floating notice layer (§5.0): to
 
 ## 6. Colour, dither and colour bar
 
-- **Levels:** the busy fraction is quantised into **`LEVELS = 17` steps** (0, 1/16, …, 1), set in one constant (9 before; see docs/CHROMA.md). Colour and dither both use the same step. Cell labels still state the real percentage.
+- **Levels:** the busy fraction is quantised into **`LEVELS = 6` steps**, set in one constant (9, then 17 before; see docs/CHROMA.md): free (step 0), four in between, and fully busy (step 5). Any busy time is at least step 1, only a fully busy slot is step 5, and anything else rounds across steps 1–4 (`round(5 × fraction)`: under 0.3 → 1, under 0.5 → 2, under 0.7 → 3, under 1 → 4). Each step has one colour and one dot layer. Cell labels still state the real percentage.
 - **Colour:** MATLAB's **parula** colormap, toned down slightly. **In dark mode, free is the low (dark purple) end and busy the high (yellow) end; in light mode the map is inverted**, so free is yellow and busy is dark purple. Only the colours change between themes; each step's dither level is the same, and the dot colour (black or white) follows the colour underneath. `src/parula.ts` keeps the original 64-entry table for reference and derives the toned table from it at start-up, through OKLCH:
   - same hue path;
   - chroma scaled by `PALETTE_CHROMA = 0.85`;
   - lightness compressed into `PALETTE_L_MIN = 0.36` … `PALETTE_L_MAX = 0.90`.
-  - The calendar's palette is the toned table sampled at the 17 steps, eased along a smoothstep curve, with each step's lightness solved for its dots so cells read steadily busier (docs/CHROMA.md).
+  - The calendar's palette is the toned table sampled at the 6 steps, eased along a smoothstep curve, with each step's lightness solved for its dots so cells read steadily busier (docs/CHROMA.md).
 - **Dither:**
   - the same step drives an **ordered (Bayer 4×4) dither**, layered over the colour;
   - **the dither never reaches solid.** Even a fully busy cell keeps a visible pattern. Two constants in one place (`src/dither.ts`) set the range:
     - `DITHER_MIN_LEVEL = 0`: a free cell (step 0) has no dots;
     - `DITHER_MAX_LEVEL = 12`: a fully busy cell (the last step, 16) has 12 of the 16 Bayer cells filled, which is 75% coverage.
-  - map the step onto that range along the same smoothstep curve, `fine = round(DITHER_MIN_LEVEL + smoothstep(step / (LEVELS − 1)) × (DITHER_MAX_LEVEL − DITHER_MIN_LEVEL))`, at least 1 for any busy step and at most MAX − 1 short of fully busy, then snap it to the nearest of six layers (`DITHER_LAYERS`: 0, 2, 4, 6, 9, 12; ties to the lower; never 0 for a busy step), giving 0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 12, 12, 12, 12. Steps 13–15 share the full pattern with a fully busy cell and differ from it by colour. Each layer is a small repeating SVG pattern; the dot tone per step is fixed per map and theme (`DOT_TONES`, docs/CHROMA.md round 6);
+  - each step has its own layer, one to one (`DITHER_LAYERS`: 0, 2, 4, 6, 9, 12 for steps 0–5), so free has no dots and only a fully busy cell has the full pattern. Each layer is a small repeating SVG pattern; the dot tone per step is fixed per map and theme (`DOT_TONES`, docs/CHROMA.md round 7);
   - the constants are validated at start-up (`0 ≤ MIN < MAX ≤ 15`), so a later change can't make busy cells solid by accident;
   - Use Bayer rather than Floyd–Steinberg because each cell's pattern depends only on its own value. Error diffusion would spread across neighbouring cells, so a pattern would change whenever a neighbour changed.
   - The dither must stay visible in greyscale, so colour is never the only signal; the dot colour (black or white) must contrast with the colour under it at every step.
 - **Accessible labels:** every cell has one, for example "Tue 3 Nov, 14:00–14:30, 50% busy". Cells can be focused with the keyboard and have a visible focus ring.
 - **Colour bar:**
-  - a vertical bar on the right, showing the same 17 steps as the cells as 17 separate bands (not a smooth ramp), each with its dither;
+  - a vertical bar on the right, showing the same 6 steps as the cells as 6 separate bands (not a smooth ramp), each with its dither;
   - "Busy" at the top and "Free" at the bottom, with no other legend;
   - on narrow screens, it moves to a thin horizontal bar under the top bar, reading "Free" on the left and "Busy" on the right.
 
@@ -447,7 +447,7 @@ None at present. If something comes up that this spec doesn't settle, choose the
   - **Top bar:** the HTML order matches §5.0.1; the notice indicator appears only while a sticky toast is minimised; the rendered tab widths don't depend on which tab is active (no weight or size change on the active tab).
   - **Period label:** one month, two months and across a year, in each view.
   - **Past:** days before today are greyed in Day, Week, Month and Range; the slot holding now is split.
-  - **Levels:** busy fractions map to 17 steps, and colour and dither use the same step; the colour bar shows the same 17 bands.
+  - **Levels:** busy fractions map to 6 steps, and colour and dither use the same step; the colour bar shows the same 6 bands.
   - **Dialogs:** each one has a top-right Close, and each page's Close link keeps the view state.
   - **Contact:** in the order above, each with its icon; every link has its own Copy button, right-aligned, and there's no text above the list.
   - **Theme colours:** light mode inverts the colour map (free is the yellow end), dark mode doesn't, and each step's dither level is the same in both.

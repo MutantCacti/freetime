@@ -1,6 +1,6 @@
 import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
-import { BAYER_4X4, DITHER_LAYERS, DITHER_MAX_LEVEL, assertDitherLayers, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, fineLevelForStep, stepPosition } from "../src/dither";
+import { BAYER_4X4, DITHER_LAYERS, DITHER_MAX_LEVEL, assertDitherLayers, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, stepPosition } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
 import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch, toneTable, DOT_TONES, DARK_FLOOR_L } from "../src/parula";
 
@@ -10,7 +10,7 @@ describe("dither", () => {
     expect(DITHER_MAX_LEVEL).toBe(12);
   });
 
-  it("maps each step onto the level range along an S-curve, so more steps sit near the ends", () => {
+  it("gives each of the six steps its own layer, one to one", () => {
     expect(ditherLevel(0)).toBe(0);
     expect(ditherLevel(0.5)).toBe(6);
     expect(ditherLevel(1)).toBe(12);
@@ -19,13 +19,9 @@ describe("dither", () => {
       expect(stepPosition(step)).toBeCloseTo(t * t * (3 - 2 * t), 12);
     }
     const levels = Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s));
-    // The approved sketch: round 4's fine levels snapped to the nearest layer, ties down, never 0 when busy.
-    expect(Array.from({ length: LEVELS }, (_, s) => fineLevelForStep(s))).toEqual([0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12]);
-    expect(levels).toEqual([0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 12, 12, 12, 12]);
-    // Any busy step has dots, and levels never go down. (Steps 13–15 share the full pattern with
-    // a fully busy slot: the sketch's choice; colour tells them apart.)
-    expect(levels.slice(1).every((l) => l >= 1)).toBe(true);
-    for (let step = 1; step < LEVELS; step++) expect(levels[step]).toBeGreaterThanOrEqual(levels[step - 1]!);
+    expect(levels).toEqual([0, 2, 4, 6, 9, 12]);
+    // Free has none, any busy step has dots, and every step has more than the one before.
+    for (let step = 1; step < LEVELS; step++) expect(levels[step]).toBeGreaterThan(levels[step - 1]!);
   });
 
   it("has six dot layers, none included, and every one is used", () => {
@@ -76,18 +72,21 @@ describe("dither", () => {
 });
 
 describe("levels", () => {
-  it("has 17 steps", () => expect(LEVELS).toBe(17));
+  it("has 6 steps: free and five busy", () => expect(LEVELS).toBe(6));
 
-  it("quantises busy fractions into steps 0, 1/16, … 1", () => {
+  it("quantises busy fractions into six steps: free, four in between, fully busy", () => {
     expect(busyStep(0)).toBe(0);
-    expect(busyStep(1 / 16)).toBe(1);
-    expect(busyStep(0.5)).toBe(8);
-    expect(busyStep(0.52)).toBe(8);
-    expect(busyStep(0.54)).toBe(9);
-    expect(busyStep(15 / 16)).toBe(15);
-    expect(busyStep(1)).toBe(16);
+    expect(busyStep(0.001)).toBe(1);
+    expect(busyStep(0.29)).toBe(1);
+    expect(busyStep(0.3)).toBe(2);
+    expect(busyStep(0.49)).toBe(2);
+    expect(busyStep(0.5)).toBe(3);
+    expect(busyStep(0.69)).toBe(3);
+    expect(busyStep(0.7)).toBe(4);
+    expect(busyStep(0.999)).toBe(4);
+    expect(busyStep(1)).toBe(5);
     expect(busyStep(-1)).toBe(0);
-    expect(busyStep(2)).toBe(16);
+    expect(busyStep(2)).toBe(5);
   });
 
   it("never shows busy time as free, or part-free time as fully busy", () => {
@@ -216,10 +215,15 @@ describe("palette presets", () => {
     }
   });
 
-  it("the tones are round 4's: light dots on the dark theme's early steps", () => {
-    expect(DOT_TONES.parula).toEqual({ dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" });
-    for (const name of PALETTE_NAMES) expect(DOT_TONES[name].dark.slice(1, 9)).toBe("wwwwwwww");
+  it("each step keeps its layer's sketch tone: light dots on the dark theme's early steps", () => {
+    expect(DOT_TONES.parula).toEqual({ dark: "wwwkkw", light: "kkkkkk" });
+    for (const name of PALETTE_NAMES) {
+      expect(DOT_TONES[name].dark.slice(1, 3), name).toBe("ww");
+      expect(DOT_TONES[name].dark[5], name).toBe("w");
+      expect(DOT_TONES[name].light, name).toBe("kkkkkk");
+    }
   });
+
 
   it.each(PALETTE_NAMES.map((n) => [n]))("%s: its free colour in both themes is in calendar.css for the theme switch, outside the theme blocks", (name) => {
     const css = calendarCss();

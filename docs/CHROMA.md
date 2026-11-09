@@ -194,6 +194,50 @@ Averaged lightness at chroma 0.85, the sketch's pattern:
 | plasma | light | current | 0.90 0.90 0.88 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
 
+## Round 7: six levels in all
+
+Maxence: "There are still 17 levels to the dither/colormap when there should be 6." Rounds 5–6 kept 17 colour steps over six dot patterns; the calendar now has **six steps**, each with one colour and one dot layer.
+
+- **Steps.** `LEVELS = 6`: free (0), four in between (1–4), fully busy (5). A busy fraction rounds to `round(5 × f)`, with any busy time at least step 1 and only a fully busy slot at step 5: 0 → 0; under 0.3 → 1; 0.3 to under 0.5 → 2; 0.5 to under 0.7 → 3; 0.7 to under 1 → 4; 1 → 5.
+- **Layers, one to one.** Step n has `DITHER_LAYERS[n]`: 0, 2, 4, 6, 9, 12. Only a fully busy cell has the full pattern again (round 6's steps 13–15 sharing it are gone). The layers must match `LEVELS`, checked at start-up.
+- **Tones.** Each step keeps the tone its layer had in the sketch (round 6). Where a layer had both, the solve's preference:
+  - dark theme, step 3 (6 dots; sketch steps 8–9 were light then dark for parula, viridis and magma): **dark dots**. Both fit the rules; dark dots move the colour least from the map's own (0.00–0.04 against 0.14–0.22 of lightness), where light dots need an olive or brown under them. Cividis and plasma had light dots on both, and keep them.
+  - dark theme, step 5 (12 dots; sketch steps 13–15 dark, 16 light): **light dots**, the sketch's fully busy tone. It leaves the cell furthest towards busy (0.85 against 0.79 with dark dots), the same rule as rounds 3–6.
+  - light theme, step 3 (sketch steps 8–9 light then dark): **dark dots**. Light dots there can't reach the step's lightness even on black (0.018 short), so they'd turn the cell black.
+
+  So: dark theme `wwwkkw` (parula, viridis, magma) or `wwwwkw` (cividis, plasma); light theme `kkkkkk` for every map (step 0's letter unused).
+- **Colours.** Each map sampled at the six steps along the same smoothstep, each step's lightness solved for its dots as before. The dark-theme floor (0.25) stays: step 1 lands at 0.41 averaged, above its place on the curve, so the dark curve eases from step 1 as in round 6. Every step reaches its target; averaged lightness moves towards busy at every step (current time: by 0.05–0.18 a step, against 0.001–0.05 at 17), and dots are at least 1.40:1, for every map, both themes, current and past.
+- **Accent.** No longer snapped to the calendar's cells: with five busy colours, most pictures would land on the same few. It snaps to the map itself, its 64-colour toned table, skipping the free end (everything short of busy step 1's place on the ramp, smoothstep(1/5) ≈ 0.10), then the same per-theme 3:1 lightness clamp. Grey or no picture: the hued colour nearest the middle of the map. The sheet's URL version is now 3.
+- **Theme switch.** `--map-free-*` are still step 0.
+
+Dark parula, step 0 → 5 (colour, layer and tone, averaged lightness): `#352f7c` none 0.360; `#001d58` 2w 0.410; `#00465b` 4w 0.531; `#92ae6d` 6k 0.674; `#f7d05a` 9k 0.795; `#b5b600` 12w 0.846.
+Light parula: `#e5e843` none 0.901; `#f2cc54` 2k 0.841; `#94b16f` 4k 0.696; `#007ea2` 6k 0.522; `#0140aa` 9k 0.378; `#352f7c` 12k 0.317.
+
+Averaged lightness at chroma 0.85, six steps:
+
+| Map | Theme | Kind | Averaged lightness, steps 0 → 5 |
+|---|---|---|---|
+| parula | dark | current | 0.36 0.41 0.53 0.67 0.79 0.85 |
+| parula | dark | past | 0.27 0.30 0.37 0.45 0.51 0.54 |
+| parula | light | current | 0.90 0.84 0.70 0.52 0.38 0.32 |
+| parula | light | past | 0.95 0.92 0.85 0.77 0.70 0.68 |
+| viridis | dark | current | 0.36 0.41 0.53 0.67 0.80 0.85 |
+| viridis | dark | past | 0.27 0.30 0.37 0.45 0.51 0.54 |
+| viridis | light | current | 0.90 0.84 0.69 0.52 0.38 0.32 |
+| viridis | light | past | 0.95 0.92 0.85 0.77 0.71 0.68 |
+| cividis | dark | current | 0.36 0.41 0.53 0.68 0.80 0.85 |
+| cividis | dark | past | 0.27 0.30 0.37 0.45 0.51 0.54 |
+| cividis | light | current | 0.90 0.84 0.69 0.52 0.38 0.32 |
+| cividis | light | past | 0.95 0.92 0.85 0.77 0.71 0.68 |
+| magma | dark | current | 0.36 0.41 0.53 0.68 0.80 0.85 |
+| magma | dark | past | 0.27 0.30 0.37 0.45 0.52 0.55 |
+| magma | light | current | 0.90 0.84 0.69 0.52 0.38 0.32 |
+| magma | light | past | 0.95 0.92 0.85 0.77 0.71 0.68 |
+| plasma | dark | current | 0.36 0.41 0.53 0.67 0.79 0.84 |
+| plasma | dark | past | 0.27 0.30 0.37 0.44 0.51 0.54 |
+| plasma | light | current | 0.90 0.84 0.69 0.52 0.38 0.32 |
+| plasma | light | past | 0.95 0.92 0.85 0.77 0.70 0.68 |
+
 ## What was measured
 
 - **Averaged colour.** From arm's length a cell is its colour with its dots blended in: dots cover `level / 16` of the cell at 42% opacity, blended in linear light. Every number below is for that averaged colour, because that's what the eye compares.

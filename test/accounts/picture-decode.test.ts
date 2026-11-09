@@ -1,7 +1,8 @@
 // Decoding, resizing and the accent colour (image-decode.ts, accent.ts, pictures.ts).
 import { describe, expect, it } from "vitest";
 import tokens from "../../public/css/tokens.css?raw";
-import { ACCENT_LUMINANCE, CHROMA_PREFERENCE, MAP_HUE_MIN_CHROMA, MID_STEP, KAWASE_WEIGHTS, snapAccent, snapStep, SATURATION_BOOST, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour, saturate } from "../../src/accounts/accent";
+import { ACCENT_LUMINANCE, CHROMA_PREFERENCE, FREE_END, MAP_HUE_MIN_CHROMA, MID_POSITION, KAWASE_WEIGHTS, mapSamples, snapAccent, snapSample, SATURATION_BOOST, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour, saturate } from "../../src/accounts/accent";
+import { stepPosition } from "../../src/dither";
 import { Grid, PICTURE_SIZE, decodeJpeg, decodePng } from "../../src/accounts/image-decode";
 import { processPicture } from "../../src/accounts/pictures";
 import { PALETTES, PALETTE_NAMES, hexToRgb, luminance, rgbToOklch } from "../../src/parula";
@@ -251,64 +252,68 @@ describe("accent snapped to the colour map", () => {
     for (const bg of pages(theme)) expect(contrast(hex, bg), `on ${bg}`).toBeGreaterThanOrEqual(3);
     const text = accentText(hex) === "dark" ? raw["--raw-black"]! : raw["--raw-white"]!;
     expect(contrast(hex, text)).toBeGreaterThanOrEqual(4.5);
-    // The colour is the chosen step's, with only its lightness moved.
-    const cell = PALETTES[map][theme].colours[snapStep(accent, map, theme)]!;
+    // The colour is the chosen map colour's, with only its lightness moved.
+    const cell = snapSample(accent, map, theme).hex;
     const [, Cc, hc] = rgbToOklch(hexToRgb(cell));
     const [, C, h] = rgbToOklch(hexToRgb(hex));
     if (Cc > 0.03 && C > 0.03) expect(hueGap(h, hc)).toBeLessThan(0.1);
     if (hex !== cell) expect(theme === "dark" ? luminance(hex) > luminance(cell) : luminance(hex) < luminance(cell)).toBe(true);
   });
 
-  it.each(cases)("%s, %s theme, %s: the step nearest the picture's hue, or the middle step for grey", (map, theme, _n, accent) => {
-    const step = snapStep(accent, map, theme);
+  it.each(cases)("%s, %s theme, %s: the map colour nearest the picture's hue, or the middle for grey, never the free end", (map, theme, _n, accent) => {
+    const pick = snapSample(accent, map, theme);
     const source = accent ? rgbToOklch(hexToRgb(accent)) : null;
-    const cells = PALETTES[map][theme].colours.map((c) => rgbToOklch(hexToRgb(c)));
-    // Never the free colour, and always a step with a hue.
-    expect(step).toBeGreaterThan(0);
-    expect(cells[step]![1]).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
-    const huedSteps = cells.map((c, i) => [i, c] as const).filter(([i, [, C]]) => i > 0 && C >= MAP_HUE_MIN_CHROMA);
+    const samples = mapSamples(map, theme);
+    expect(samples.length).toBeGreaterThanOrEqual(17); // finer than the old 17 steps, far finer than the 6 cells
+    expect(samples.map((s) => s.hex)).toContain(pick.hex);
+    // Never the free end, and always a colour with a hue.
+    expect(pick.t).toBeGreaterThanOrEqual(FREE_END - 1e-9);
+    expect(pick.C).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
+    const hued = samples.filter((s) => s.t >= FREE_END - 1e-9 && s.C >= MAP_HUE_MIN_CHROMA);
     if (!source || source[1] < 0.03) {
-      // The hued step nearest the middle one.
-      const nearestMid = Math.min(...huedSteps.map(([i]) => Math.abs(i - MID_STEP)));
-      return expect(Math.abs(step - MID_STEP)).toBe(nearestMid);
+      const nearestMid = Math.min(...hued.map((s) => Math.abs(s.t - MID_POSITION)));
+      return expect(Math.abs(pick.t - MID_POSITION)).toBeCloseTo(nearestMid, 9);
     }
-    const hued = huedSteps.map(([, c]) => c);
-    const nearest = Math.min(...hued.map(([, , h]) => hueGap(h, source[2])));
-    const maxC = Math.max(...hued.map(([, C]) => C));
-    expect(cells[step]![1]).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
-    // Nearest in hue, give or take the small preference for colourful steps.
-    expect(hueGap(cells[step]![2], source[2])).toBeLessThanOrEqual(nearest + CHROMA_PREFERENCE * maxC + 1e-9);
+    const nearest = Math.min(...hued.map((s) => hueGap(s.h, source[2])));
+    const maxC = Math.max(...hued.map((s) => s.C));
+    // Nearest in hue, give or take the small preference for colourful colours.
+    expect(hueGap(pick.h, source[2])).toBeLessThanOrEqual(nearest + CHROMA_PREFERENCE * maxC + 1e-9);
   });
 
-  it("the middle step is the middle of the 17", () => expect(MID_STEP).toBe(8));
+  it("the free end is everything short of busy step 1, and grey goes to the middle", () => {
+    expect(FREE_END).toBeCloseTo(stepPosition(1), 12);
+    expect(MID_POSITION).toBe(0.5);
+    // The free end is the map's dark end in the dark theme and its light end in the light theme.
+    expect(mapSamples("parula", "dark")[0]!.hex).toBe(PALETTES.parula.dark.colours[0]);
+    expect(mapSamples("parula", "light")[0]!.hex).toBe(PALETTES.parula.light.colours[0]);
+  });
 
-  it("plum on parula's dark theme skips the free colour for the next-nearest hue", () => {
+  it("plum on parula's dark theme stays off the free end", () => {
     const plum = clampAccent([0.6, 0.42, 0.77]);
-    expect(snapStep(plum, "parula", "dark")).toBeGreaterThan(0);
+    expect(snapSample(plum, "parula", "dark").t).toBeGreaterThanOrEqual(FREE_END);
   });
 
   it("grey on cividis gives a colour, not grey", () => {
     for (const theme of ["dark", "light"] as const) {
       for (const accent of [null, clampAccent([0.54, 0.57, 0.62])]) {
-        const step = snapStep(accent, "cividis", theme);
-        expect(step).not.toBe(MID_STEP); // cividis's middle step is grey
+        expect(snapSample(accent, "cividis", theme).C).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
         expect(rgbToOklch(hexToRgb(snapAccent(accent, "cividis", theme)))[1]).toBeGreaterThanOrEqual(0.03);
       }
     }
   });
 
   it("keeps a map colour that already stands 3:1 off the page as it is", () => {
-    // Parula's busiest dark-theme colour is light enough already.
-    const cell = PALETTES.parula.dark.colours[16]!;
     const yellowish = clampAccent([0.95, 0.85, 0.1]);
-    const step = snapStep(yellowish, "parula", "dark");
+    const pick = snapSample(yellowish, "parula", "dark");
     const hex = snapAccent(yellowish, "parula", "dark");
-    if (step === 16) expect(hex).toBe(cell);
+    if (contrast(pick.hex, pages("dark")[0]!) >= 3 && contrast(pick.hex, pages("dark")[1]!) >= 3) expect(hex).toBe(pick.hex);
     expect(contrast(hex, pages("dark")[0]!)).toBeGreaterThanOrEqual(3);
   });
 
-  it("different hues land on different steps of a colourful map", () => {
-    const steps = new Set(accents.slice(0, 6).map(([, a]) => snapStep(a, "plasma", "dark")));
-    expect(steps.size).toBeGreaterThanOrEqual(3);
+  it("different hues land on different colours, more than the calendar's five busy cells would allow", () => {
+    for (const map of PALETTE_NAMES) {
+      const picks = new Set(accents.slice(0, 6).map(([, a]) => snapSample(a, map, "dark").hex));
+      expect(picks.size, map).toBeGreaterThanOrEqual(map === "cividis" ? 2 : 3);
+    }
   });
 });

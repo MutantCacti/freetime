@@ -261,7 +261,7 @@ describe("colour and dither", () => {
   it("gives a fraction the same colour and Bayer level in every view", async () => {
     const half = cellClasses(0.5);
     const full = cellClasses(1);
-    expect(half).toBe(`p${(LEVELS - 1) / 2}`);
+    expect(half).toBe("p3"); // 0.5 rounds up to step 3 of 0–5
     expect(full).toBe(`p${LEVELS - 1}`);
     // A half-busy 30-minute slot, in each column view.
     for (const path of ["/?view=day&date=2026-11-03", "/?view=week&date=2026-11-02", "/?view=range&from=2026-11-01&to=2026-11-05"]) {
