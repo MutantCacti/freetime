@@ -1,5 +1,6 @@
 // Argument parsing and dispatch for ./ft (DEV-SPEC.md §3).
 import { M } from "./messages.mjs";
+import { Interrupted, exitFor } from "./lifecycle.mjs";
 import { createOutput } from "./output.mjs";
 import { guarded } from "./run.mjs";
 
@@ -119,8 +120,10 @@ export function parse(argv) {
  * @property {() => number} now
  * @property {(host: string, type?: "TXT") => Promise<boolean>} resolves
  * @property {(port: number) => Promise<boolean>} portBusy
- * @property {(port: number, timeoutMs: number) => Promise<boolean>} waitHttp
- * @property {(handler: () => void) => () => void} onInterrupt
+ * @property {(port: number, timeoutMs: number, signal?: AbortSignal) => Promise<boolean>} waitHttp
+ * @property {(handler: import("./lifecycle.mjs").InterruptHandler) => () => void} onInterrupt  a command that stops itself on a signal (start, deploy)
+ * @property {() => NodeJS.Signals | null} [interrupted]  the signal ft was stopped by, if any
+ * @property {() => Promise<void>} [stopChildren]        stop every child ft started (lifecycle.mjs)
  * @property {number} [stopGraceMs]
  * @property {(o: { accountsPaths: string[], ports: Record<string, number> }) => import("node:http").Server} [createRouter]
  */
@@ -147,17 +150,31 @@ export async function main(argv, deps) {
     out.block(M.help[command]);
     return 0;
   }
-  const runner = guarded(deps.runner, { verbose: Boolean(flags.verbose), echo: (l) => out.text(l) });
+  const interrupted = deps.interrupted ?? (() => null);
+  const runner = guarded(deps.runner, { verbose: Boolean(flags.verbose), echo: (l) => out.text(l), interrupted });
   const ctx = { root: deps.root, out, runner, flags, positionals, deps };
+  /** @type {{ run: (ctx: Ctx) => Promise<number>, ownsInterrupt?: boolean } | null} */
+  let mod = null;
+  /** @type {number} */
+  let code;
   try {
-    const mod = await import(`./commands/${command}.mjs`);
-    return await mod.run(ctx);
+    mod = await import(`./commands/${command}.mjs`);
+    code = await /** @type {NonNullable<typeof mod>} */ (mod).run(ctx);
   } catch (e) {
-    const err = /** @type {Error} */ (e);
-    out.text(M.common.internal(err.message));
-    if (flags.verbose && err.stack) out.text(err.stack);
-    return 1;
+    if (!(e instanceof Interrupted)) {
+      const err = /** @type {Error} */ (e);
+      out.text(M.common.internal(err.message));
+      if (flags.verbose && err.stack) out.text(err.stack);
+      return 1;
+    }
+    code = exitFor(e.signal);
   }
+  // Stopped by a signal: its exit code (130, 143, 129), whatever the command reached.
+  // start and deploy say how they stopped; for the others, one line says it.
+  const sig = interrupted();
+  if (!sig) return code;
+  if (!mod?.ownsInterrupt) out.text(M.lifecycle.stopped(sig));
+  return exitFor(sig);
 }
 
 /** @typedef {{ root: string, out: import("./output.mjs").Output, runner: import("./run.mjs").Runner, flags: Record<string, any>, positionals: string[], deps: Deps }} Ctx */

@@ -91,3 +91,14 @@ export function createOutput({ write, color }) {
 }
 
 /** @typedef {ReturnType<typeof createOutput>} Output */
+
+/**
+ * The same output, silent while `quiet()` is true: what a step a signal cut short would
+ * report (a killed `wrangler whoami` reads as "not logged in") isn't news, so it isn't printed.
+ * @param {Output} out @param {() => boolean} quiet @returns {Output}
+ */
+export function mutedWhen(out, quiet) {
+  /** @template {(...a: any[]) => any} F @param {F} f @returns {F} */
+  const gate = (f) => /** @type {F} */ ((...a) => (quiet() ? undefined : f(...a)));
+  return { ...out, text: gate(out.text), block: gate(out.block), heading: gate(out.heading), check: gate(out.check), prefixed: gate(out.prefixed) };
+}

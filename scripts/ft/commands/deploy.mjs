@@ -2,8 +2,9 @@
 import { commitOfMessage, databaseIdState, depsState, host, nodeOk, parseVersionId, resendFromState, unsafeMigrations } from "../checks.mjs";
 import { readRepoFile, routePatterns } from "../config.mjs";
 import { gitInfo, isIgnored } from "../git.mjs";
+import { Interrupted, exitFor } from "../lifecycle.mjs";
 import { M } from "../messages.mjs";
-import { stripAnsi } from "../output.mjs";
+import { mutedWhen, stripAnsi } from "../output.mjs";
 import { d1Databases, remotePending, whoami } from "../remote.mjs";
 import {
   HASHES_FILE,
@@ -62,9 +63,75 @@ export function reportSmoke(out, results) {
   return failed.length === 0;
 }
 
-/** @param {import("../cli.mjs").Ctx} ctx */
+/** deploy says itself how it stopped (cli.mjs). */
+export const ownsInterrupt = true;
+
+/**
+ * @typedef {{ key: string, label: string, state: "done" | "not-started" | "unknown" | "failed", detail?: string }} Step
+ * @typedef {object} Stop  What deploy knows about a signal, shared with its handler.
+ * @property {NodeJS.Signals | null} sig       the first signal
+ * @property {Promise<NodeJS.Signals>} signalled resolves on the first signal
+ * @property {Step[]} steps                    the writes and the live checks, once the plan is accepted
+ * @property {Step | null} current             the write running now
+ * @property {string | null} during            the write that was running when the signal came
+ */
+
+/**
+ * A signal before the first write stops whatever check is running: nothing has changed.
+ * During a write (a migration or a Worker's deploy), deploy lets that write finish, so
+ * whether it went live is never a guess, then stops and lists each step as done or not.
+ * A second signal stops the write too; that step is then listed as UNKNOWN.
+ * @param {import("../cli.mjs").Ctx} ctx
+ */
 export async function run(ctx) {
+  const { out, deps } = ctx;
+  /** @type {(sig: NodeJS.Signals) => void} */
+  let resolveSignal = () => {};
+  /** @type {Stop} */
+  const st = { sig: null, signalled: new Promise((r) => (resolveSignal = r)), steps: [], current: null, during: null };
+  const off = deps.onInterrupt((signal, { forced } = { forced: false }) => {
+    const sig = signal ?? "SIGINT";
+    if (forced) {
+      // ft kills the running write and exits right after this: say what that leaves.
+      if (st.current) Object.assign(st.current, { state: "unknown", detail: M.interrupted.partWay });
+      if (st.steps.length) out.block(M.interrupted.block(st.sig ?? sig, st.during ?? st.current?.label ?? null, st.steps));
+      else out.text(M.interrupted.beforeWrites(st.sig ?? sig));
+      return;
+    }
+    st.sig = sig;
+    resolveSignal(sig);
+    if (st.current) {
+      st.during = st.current.label;
+      out.text("");
+      out.text(M.interrupted.finishing(sig, st.current.label));
+    } else void deps.stopChildren?.();
+  });
+  try {
+    // Once a signal came, only a write that's finishing still prints; the rest is cut short.
+    return await deploy({ ...ctx, out: mutedWhen(out, () => st.sig !== null && st.current === null) }, st, out);
+  } catch (e) {
+    if (!(e instanceof Interrupted)) throw e;
+    const sig = st.sig ?? /** @type {NodeJS.Signals} */ (e.signal);
+    if (st.steps.length) {
+      if (st.current) Object.assign(st.current, { state: "unknown", detail: M.interrupted.partWay });
+      out.block(M.interrupted.block(sig, st.during, st.steps));
+    } else out.text(M.interrupted.beforeWrites(sig));
+    return exitFor(sig);
+  } finally {
+    off();
+  }
+}
+
+/** @param {import("../cli.mjs").Ctx} ctx @param {Stop} st @param {import("../output.mjs").Output} say  output that's never muted */
+async function deploy(ctx, st, say) {
   const { out, runner, flags, root, deps } = ctx;
+  /** Stops before the first write if a signal came. @returns {number | null} */
+  const stoppedBeforeWrites = () => {
+    if (!st.sig) return null;
+    say.text("");
+    say.text(M.interrupted.beforeWrites(st.sig));
+    return exitFor(st.sig);
+  };
   /** @type {("site" | "accounts")[]} */
   const which = flags.only ? [flags.only] : DEPLOY_ORDER;
   const dryRun = Boolean(flags["dry-run"]);
@@ -197,6 +264,8 @@ export async function run(ctx) {
   else if (await deps.resolves(siteHost)) out.check("ok", "dns", M.dns.ok(siteHost));
   else fail("dns", M.dns.missing(siteHost), [M.dns.howTo], true);
 
+  const early = stoppedBeforeWrites();
+  if (early !== null) return early;
   if (failures || setupMissing) {
     out.text("");
     out.text(M.deploy.notDeployed);
@@ -227,14 +296,40 @@ export async function run(ctx) {
       out.text(M.common.noTerminal);
       return 1;
     }
-    const answer = (await deps.ask(M.deploy.confirm)).trim().toLowerCase();
+    const reply = await Promise.race([deps.ask(M.deploy.confirm), st.signalled.then(() => null)]);
+    if (reply === null) return /** @type {number} */ (stoppedBeforeWrites());
+    const answer = reply.trim().toLowerCase();
     if (answer !== "y" && answer !== "yes") {
       out.text(M.deploy.declined);
       return 130;
     }
   }
 
+  const halt = stoppedBeforeWrites();
+  if (halt !== null) return halt;
+
   // The writes. Stop at the first failure; never retry, never roll back.
+  // Each is a step, so an interrupted deploy can say exactly what's done (see run).
+  const writes = st.steps;
+  if (which.includes("accounts") && pending.length) writes.push({ key: "migrate", label: M.interrupted.migrations(DATABASE), state: "not-started" });
+  for (const w of which) writes.push({ key: w, label: WORKERS[w].name, state: "not-started", detail: M.interrupted.unchanged });
+  writes.push({ key: "smoke", label: M.interrupted.smoke, state: "not-started", detail: M.interrupted.notRun });
+  /** @param {string} key */
+  const step = (key) => /** @type {Step} */ (writes.find((x) => x.key === key));
+  /** @param {string} key */
+  const begin = (key) => void (st.current = step(key));
+  /** @param {string} key @param {Step["state"]} state @param {string} [detail] */
+  const end = (key, state, detail) => {
+    Object.assign(step(key), { state, detail });
+    st.current = null;
+  };
+  /** After a step: a signal that came during it stops the deploy here. @returns {number | null} */
+  const stoppedAfterStep = () => {
+    if (!st.sig) return null;
+    say.block(M.interrupted.block(st.sig, st.during, writes));
+    return exitFor(st.sig);
+  };
+
   let migrated = false;
   /** @type {Partial<Record<"site" | "accounts", string>>} */
   const deployed = {};
@@ -251,17 +346,23 @@ export async function run(ctx) {
 
   if (which.includes("accounts") && pending.length) {
     out.heading(M.deploy.migratingHeading(DATABASE));
+    begin("migrate");
     const code = await runner.stream("wrangler", REMOTE_MIGRATE, { onLine: (l) => out.prefixed("wrangler", l) });
     if (code !== 0) {
+      end("migrate", "failed");
       migrated = true; // Some may have run.
       return incomplete(M.incomplete.migration, [M.incomplete.checkMigrations]);
     }
+    end("migrate", "done", M.interrupted.applied);
     migrated = true;
+    const stop = stoppedAfterStep();
+    if (stop !== null) return stop;
   }
 
   for (const w of which) {
     out.heading(M.deploy.deployingHeading(WORKERS[w].name));
     let output = "";
+    begin(w);
     const code = await runner.stream("wrangler", deployArgs(w, { message }), {
       input: secretsJson(values[w], WORKERS[w].secrets),
       onLine: (l) => {
@@ -270,16 +371,26 @@ export async function run(ctx) {
       },
     });
     if (code !== 0) {
+      end(w, "failed");
       const next = w === "site" && deployed.accounts ? [M.incomplete.retrySite, M.incomplete.rollback(WORKERS.accounts)] : [M.incomplete.fixAndRetry];
       return incomplete(M.incomplete.deployOf(WORKERS[w].name), next);
     }
     deployed[w] = parseVersionId(output) ?? M.deploy.unknownVersion;
+    end(w, "done", M.interrupted.newVersion(deployed[w] ?? ""));
     recordDeployed(hashes, w, values[w], WORKERS[w].secrets);
     saveHashes(root, hashes);
+    const stop = stoppedAfterStep();
+    if (stop !== null) return stop;
   }
 
+  // The live checks are read-only: a signal stops them at once.
   out.heading(M.deploy.smokeHeading(`https://${siteHost}`));
-  const results = await runSmoke({ base: `https://${siteHost}`, fetch: deps.fetch, sleep: deps.sleep, now: deps.now });
+  const results = await Promise.race([runSmoke({ base: `https://${siteHost}`, fetch: deps.fetch, sleep: deps.sleep, now: deps.now }), st.signalled.then(() => null)]);
+  if (results === null) {
+    end("smoke", "not-started", M.interrupted.smokeNotFinished);
+    return /** @type {number} */ (stoppedAfterStep());
+  }
+  end("smoke", "done");
   if (!reportSmoke(out, results)) {
     const next = [M.incomplete.logs, ...which.map((w) => M.incomplete.rollback(WORKERS[w]))];
     return incomplete(M.incomplete.smoke, next);

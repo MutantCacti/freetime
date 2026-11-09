@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COMMANDS, FLAGS, parse, suggest } from "../../scripts/ft/cli.mjs";
+import { SIGNAL_EXIT, exitFor } from "../../scripts/ft/lifecycle.mjs";
 import { M } from "../../scripts/ft/messages.mjs";
 import { ROOT, ft } from "./helpers.mjs";
 
@@ -73,8 +74,9 @@ describe("spec sync (DEV-SPEC.md)", () => {
   it("has the same exit codes as the help text", () => {
     const section = spec.slice(spec.indexOf("### 2.2 Exit codes"), spec.indexOf("### 2.3"));
     const codes = [...section.matchAll(/^\| (\d+) \|/gm)].map((m) => Number(m[1]));
-    expect(codes).toEqual([0, 1, 2, 3, 4, 130]);
-    const inHelp = new Set(Object.values(M.help).flatMap((h) => [...h.matchAll(/\b(0|1|2|3|4|130) [a-z]/g)].map((m) => Number(m[1]))));
+    expect(codes).toEqual([0, 1, 2, 3, 4, 129, 130, 143]);
+    expect(codes.filter((c) => c > 128).map((c) => exitFor(Object.keys(SIGNAL_EXIT).find((k) => SIGNAL_EXIT[k] === c)))).toEqual([129, 130, 143]);
+    const inHelp = new Set(Object.values(M.help).flatMap((h) => [...h.matchAll(/\b(0|1|2|3|4|129|130|143) [a-z]/g)].map((m) => Number(m[1]))));
     for (const c of inHelp) expect(codes).toContain(c);
   });
 

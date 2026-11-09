@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { main } from "./ft/cli.mjs";
+import { HANDLED_SIGNALS, createLifecycle } from "./ft/lifecycle.mjs";
 import { childEnv, createRunner } from "./ft/run.mjs";
 import { allSecretNames } from "./ft/workers.mjs";
 
@@ -32,6 +33,56 @@ function canListen(port) {
     srv.once("error", () => done(false));
     srv.listen(port, "127.0.0.1", () => srv.close(() => done(true)));
   });
+}
+
+// Output: a closed terminal or pipe (EPIPE, EIO) must not crash ft and orphan its
+// children. Once stdout is gone, writes are dropped; SIGHUP or the reader's exit stops ft.
+let stdoutGone = false;
+process.stdout.on("error", () => void (stdoutGone = true));
+/** @param {string} s */
+const write = (s) => {
+  if (stdoutGone) return;
+  try {
+    process.stdout.write(s);
+  } catch {
+    stdoutGone = true;
+  }
+};
+
+const verbose = process.argv.includes("--verbose");
+
+// The one lifecycle (DEV-SPEC.md §2.6): every child ft starts is tracked here, and
+// every way ft can end (a signal, an error nothing caught, the process exiting)
+// stops them first.
+const life = createLifecycle({
+  kill: (pid, sig) => process.kill(pid, sig),
+  exit: (code) => {
+    restoreTerminal();
+    process.exitCode = code;
+    // Let what's printed reach the terminal or pipe first, but never wait on a stuck reader.
+    if (stdoutGone) process.exit(code);
+    process.stdout.write("", () => process.exit(code));
+    setTimeout(() => process.exit(code), 1_000).unref();
+  },
+  say: (s) => write(`${s}\n`),
+  sleep,
+  later: (fn, ms) => void setTimeout(fn, ms).unref(),
+});
+for (const sig of HANDLED_SIGNALS) process.on(sig, () => life.signal(sig));
+process.on("uncaughtException", (e) => void life.crash(e, verbose));
+process.on("unhandledRejection", (e) => void life.crash(e, verbose));
+process.on("exit", () => {
+  life.onExit();
+  restoreTerminal();
+});
+
+/** A hidden prompt leaves the terminal in raw mode if ft stops during it. */
+function restoreTerminal() {
+  try {
+    if (process.stdin.isTTY && process.stdin.isRaw) process.stdin.setRawMode(false);
+  } catch {
+    // No terminal any more.
+  }
 }
 
 /** @param {string} question */
@@ -75,9 +126,9 @@ function readHidden(prompt) {
 
 const code = await main(process.argv.slice(2), {
   root,
-  write: (s) => process.stdout.write(s),
+  write,
   color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
-  runner: createRunner({ root, env: childEnv(process.env, allSecretNames()) }),
+  runner: createRunner({ root, env: childEnv(process.env, allSecretNames()), track: life.track }),
   nodeVersion: process.versions.node,
   stdinIsTTY: Boolean(process.stdin.isTTY),
   ask,
@@ -98,11 +149,11 @@ const code = await main(process.argv.slice(2), {
     if ((await canConnect("127.0.0.1", port)) || (await canConnect("::1", port))) return true;
     return !(await canListen(port));
   },
-  async waitHttp(port, timeoutMs) {
+  async waitHttp(port, timeoutMs, signal) {
     const end = Date.now() + timeoutMs;
-    while (Date.now() < end) {
+    while (Date.now() < end && !signal?.aborted) {
       try {
-        await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2_000) });
+        await fetch(`http://127.0.0.1:${port}/`, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(2_000)]) : AbortSignal.timeout(2_000) });
         return true;
       } catch {
         await sleep(300);
@@ -110,13 +161,10 @@ const code = await main(process.argv.slice(2), {
     }
     return false;
   },
-  onInterrupt(handler) {
-    process.on("SIGINT", handler);
-    process.on("SIGTERM", handler);
-    return () => {
-      process.off("SIGINT", handler);
-      process.off("SIGTERM", handler);
-    };
-  },
+  onInterrupt: life.onInterrupt,
+  interrupted: life.interrupted,
+  stopChildren: life.stopAll,
 });
-process.exitCode = code;
+// Always an explicit exit: nothing left open (a socket, a timer, a prompt) keeps ft
+// running after the command is done, and anything still running is stopped first.
+await life.end(code);

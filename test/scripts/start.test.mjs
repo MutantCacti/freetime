@@ -11,15 +11,15 @@ afterEach(() => {
 });
 
 /** Runs ./ft start with fake children; `script(children, interrupt)` drives them once they've started. */
-async function start(/** @type {string[]} */ argv, /** @type {(children: any[], interrupt: () => void) => Promise<void> | void} */ script, deps = {}) {
-  /** @type {() => void} */
+async function start(/** @type {string[]} */ argv, /** @type {(children: any[], interrupt: (sig?: string, o?: { forced: boolean }) => void) => Promise<void> | void} */ script, deps = {}) {
+  /** @type {(sig?: string, o?: { forced: boolean }) => void} */
   let interrupt = () => {};
   const run = ft(["start", ...argv], {
     root: makeRepo(),
     deps: {
       sleep: (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 20))),
       stopGraceMs: 20,
-      onInterrupt: (h) => ((interrupt = h), () => {}),
+      onInterrupt: (h) => ((interrupt = /** @type {any} */ (h)), () => {}),
       ...deps,
     },
   });
@@ -70,6 +70,124 @@ describe("./ft start", () => {
     expect(r.code).toBe(1);
     expect(r.output).toContain("site stopped unexpectedly (exit 1). Stopping accounts too.");
     expect(r.calls.filter((c) => c.kind === "long")).toHaveLength(2);
+  });
+
+  for (const [sig, code] of /** @type {const} */ ([["SIGTERM", 143], ["SIGHUP", 129]])) {
+    it(`${sig} stops both Workers and exits ${code}`, async () => {
+      /** @type {any[]} */
+      let kids = [];
+      const r = await start(["--no-router"], (children, interrupt) => {
+        kids = children;
+        for (const c of children) c.onSignal = () => c.exit(0);
+        interrupt(sig);
+      });
+      expect(r.code).toBe(code);
+      expect(kids.map((k) => k.signals)).toEqual([["SIGINT"], ["SIGINT"]]);
+      expect(r.output).toContain(`${sig}${sig === "SIGHUP" ? " (the terminal closed)" : ""}: stopping.`);
+      expect(r.output).toContain("Stopped site and accounts.");
+    });
+  }
+
+  it("a Worker that stops on its own: names it, shows its last lines, stops the other, exit 1", async () => {
+    /** @type {any[]} */
+    let kids = [];
+    const r = await start(["--no-router"], (children) => {
+      kids = children;
+      children[0].onLine("site is fine");
+      children[1].onLine("\x1b[31m✘ [ERROR] Address already in use (127.0.0.1:8788).\x1b[0m");
+      children[1].onLine("");
+      children[0].onSignal = () => children[0].exit(0);
+      children[1].exit(1);
+    });
+    expect(r.code).toBe(1);
+    expect(kids[0].signals).toEqual(["SIGINT"]);
+    const after = r.output.slice(r.output.indexOf("accounts stopped unexpectedly (exit 1). Stopping site too."));
+    expect(after).toContain("Last lines from accounts:\naccounts | ✘ [ERROR] Address already in use (127.0.0.1:8788).");
+    expect(after).not.toContain("site is fine");
+    expect(after).toContain("Stopped site and accounts.");
+  });
+
+  it("a Worker that stops while starting ends the wait for it at once", async () => {
+    /** @type {AbortSignal[]} */
+    const signals = [];
+    const r = await start(
+      ["--no-router"],
+      (children) => {
+        children[1].onSignal = () => children[1].exit(0);
+        children[0].exit(1);
+      },
+      {
+        // Never ready by itself: only the abort ends it.
+        waitHttp: (_p, _t, /** @type {AbortSignal} */ signal) => (signals.push(signal), new Promise((res) => signal.addEventListener("abort", () => res(false)))),
+      },
+    );
+    expect(r.code).toBe(1);
+    expect(signals.length).toBe(2);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+    expect(r.output).not.toContain("didn't answer");
+    expect(r.output).not.toContain("Ready.");
+  });
+
+  it("a Worker that never answers: stops both, exit 1", async () => {
+    const r = await start(
+      ["--no-router"],
+      (children) => {
+        for (const c of children) c.onSignal = () => c.exit(0);
+      },
+      { waitHttp: async (/** @type {number} */ p) => p === 8787 },
+    );
+    expect(r.code).toBe(1);
+    expect(r.output).toContain("accounts didn't answer within 60 seconds. Stopping.");
+    expect(r.output).toContain("Stopped site and accounts.");
+  });
+
+  it("a signal during the local migration stops it, starts nothing, and doesn't report the cut-short migration", async () => {
+    /** @type {(sig?: string) => void} */
+    let interrupt = () => {};
+    let stopped = 0;
+    const r = await ft(["start"], {
+      root: makeRepo(),
+      handler: (c) => {
+        if (c.args.includes("freetime-accounts-dev")) {
+          interrupt("SIGTERM");
+          return { code: 143, stdout: "killed" };
+        }
+        return undefined;
+      },
+      deps: { onInterrupt: (h) => ((interrupt = /** @type {any} */ (h)), () => {}), stopChildren: async () => void stopped++ },
+    });
+    expect(r.code).toBe(143);
+    expect(stopped).toBe(1);
+    expect(r.calls.some((c) => c.kind === "long")).toBe(false);
+    expect(r.output).not.toContain("local-db");
+    expect(r.output).toContain("Stopped by SIGTERM.");
+  });
+
+  it("closes the router even with a keep-alive connection open, and frees its port", async () => {
+    const offset = 3000 + Math.floor(Math.random() * 500);
+    const routerPort = PORTS.router + offset;
+    /** @type {import("node:http").Server | null} */
+    let server = null;
+    /** @type {http.Agent | null} */
+    let agent = null;
+    const r = await start(["--port-offset", String(offset)], async (children, interrupt) => {
+      for (const c of children) c.onSignal = () => c.exit(0);
+      // A browser-like keep-alive connection to the router (the Workers are fakes, so it's a 502).
+      agent = new http.Agent({ keepAlive: true });
+      await new Promise((res) => http.get({ host: "127.0.0.1", port: routerPort, path: "/", agent: /** @type {any} */ (agent) }, (resp) => (resp.resume(), resp.on("end", res))));
+      interrupt();
+    }, {
+      createRouter: (/** @type {any} */ o) => (server = createRouter(o)),
+    });
+    expect(r.code).toBe(130);
+    expect(/** @type {any} */ (server).listening).toBe(false);
+    const free = await new Promise((res) => {
+      const s = http.createServer();
+      s.once("error", () => res(false));
+      s.listen(routerPort, "127.0.0.1", () => s.close(() => res(true)));
+    });
+    expect(free).toBe(true);
+    /** @type {any} */ (agent)?.destroy();
   });
 
   it("stops before starting anything when a port is busy", async () => {
@@ -163,6 +281,22 @@ describe("./ft install and ./ft test", () => {
     expect(r.code).toBe(0);
     expect(r.calls.some((c) => c.program === "npm")).toBe(false);
     expect(r.output).toContain("Ready. Next: ./ft start");
+  });
+
+  it("test, stopped by a signal: nothing more starts, one line says so, exit 143", async () => {
+    /** @type {string | null} */
+    let sig = null;
+    const r = await ft(["test"], {
+      root: makeRepo(),
+      // The signal arrives while npm test runs; ft stops it (here: it exits 143).
+      handler: (c) => (c.args[0] === "test" ? ((sig = "SIGTERM"), { code: 143 }) : undefined),
+      deps: { interrupted: () => /** @type {any} */ (sig) },
+    });
+    expect(r.code).toBe(143);
+    expect(r.calls.map((c) => c.args.join(" "))).toEqual(["test"]);
+    expect(r.output).toContain("Stopped by SIGTERM.");
+    expect(r.output).not.toContain("FAIL");
+    expect(r.output).not.toContain("internal error");
   });
 
   it("test runs both and reports both", async () => {

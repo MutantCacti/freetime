@@ -1,7 +1,9 @@
 // The only module that starts processes (DEV-SPEC.md §2.4). Every wrangler, npm
 // and git call goes through `isAllowed`, an allow-list of the subcommands ft uses.
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 import { join } from "node:path";
+import { Interrupted, childExit } from "./lifecycle.mjs";
 
 /** wrangler subcommands ft may run (the words before the first flag). */
 export const WRANGLER_ALLOWED = [
@@ -101,115 +103,129 @@ export function lineSplitter(onLine) {
 }
 
 /**
- * The real runner.
- * @param {{ root: string, env: NodeJS.ProcessEnv }} o
+ * The real runner. Every child starts in its own process group (`detached`), so a
+ * stop reaches its own children too (wrangler's workerd, npm's vitest), and is
+ * handed to `track`, which is how the lifecycle (lifecycle.mjs) knows what to stop.
+ * Children never read ft's terminal: stdin is a pipe or closed.
+ * @param {{ root: string, env: NodeJS.ProcessEnv, track?: (pid: number | undefined, done: Promise<number>) => void }} o
  * @returns {Runner}
  */
-export function createRunner({ root, env }) {
+export function createRunner({ root, env, track = () => {} }) {
   /** @param {string} p */
   const bin = (p) => (p === "wrangler" ? join(root, "node_modules", ".bin", "wrangler") : p);
   /** @param {string} program @param {string[]} args */
   const check = (program, args) => {
     if (!isAllowed(program, args)) throw new NotAllowed(program, args);
   };
+  /** @param {number | undefined} pid @param {NodeJS.Signals} sig */
+  const signalGroup = (pid, sig) => {
+    try {
+      if (pid) process.kill(-pid, sig);
+    } catch {
+      // Already gone.
+    }
+  };
+  /** @param {number | null} code @param {NodeJS.Signals | null} signal */
+  const exitOf = (code, signal) => childExit(code, signal, constants.signals);
+
+  /**
+   * Starts one child and resolves with its exit code once it has exited and its output has ended.
+   * @param {string} program @param {string[]} args
+   * @param {{ input?: string, stdio: "pipe" | "inherit", onOut?: (d: Buffer) => void, onErr?: (d: Buffer) => void, onEnd?: () => void, timeoutMs?: number }} o
+   */
+  const start = (program, args, { input, stdio, onOut, onErr, onEnd, timeoutMs }) => {
+    const child = spawn(bin(program), args, { cwd: root, env, detached: true, stdio: [input === undefined ? "ignore" : "pipe", stdio, stdio] });
+    let timedOut = false;
+    /** @type {NodeJS.Timeout | null} */
+    let timer = null;
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        signalGroup(child.pid, "SIGTERM");
+        setTimeout(() => signalGroup(child.pid, "SIGKILL"), 5_000).unref();
+      }, timeoutMs);
+    }
+    if (onOut) child.stdout?.on("data", onOut);
+    if (onErr) child.stderr?.on("data", onErr);
+    if (input !== undefined) {
+      child.stdin?.on("error", () => {}); // A child that exits before reading all of it.
+      child.stdin?.end(input);
+    }
+    const done = /** @type {Promise<number>} */ (
+      new Promise((resolve) => {
+        child.on("error", () => {
+          if (timer) clearTimeout(timer);
+          resolve(127);
+        });
+        child.on("close", (code, signal) => {
+          if (timer) clearTimeout(timer);
+          onEnd?.();
+          resolve(timedOut ? 124 : exitOf(code, signal));
+        });
+      })
+    );
+    track(child.pid, done);
+    return { child, done, signal: (/** @type {NodeJS.Signals} */ sig) => signalGroup(child.pid, sig) };
+  };
 
   return {
     capture(program, args, { input, timeoutMs } = {}) {
       check(program, args);
-      return new Promise((resolve) => {
-        const child = spawn(bin(program), args, { cwd: root, env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const timer = timeoutMs ? setTimeout(() => ((timedOut = true), child.kill("SIGTERM")), timeoutMs) : null;
-        child.stdout?.on("data", (d) => (stdout += d));
-        child.stderr?.on("data", (d) => (stderr += d));
-        if (input !== undefined) child.stdin?.end(input);
-        child.on("error", (e) => {
-          if (timer) clearTimeout(timer);
-          resolve({ code: 127, stdout, stderr: stderr + String(e.message) });
-        });
-        child.on("close", (code) => {
-          if (timer) clearTimeout(timer);
-          resolve({ code: timedOut ? 124 : (code ?? 1), stdout, stderr });
-        });
-      });
+      let stdout = "";
+      let stderr = "";
+      let spawnError = "";
+      const { child, done } = start(program, args, { input, timeoutMs, stdio: "pipe", onOut: (d) => void (stdout += d), onErr: (d) => void (stderr += d) });
+      child.on("error", (e) => (spawnError = String(e.message)));
+      return done.then((code) => ({ code, stdout, stderr: stderr + spawnError }));
     },
 
     stream(program, args, { onLine, input }) {
       check(program, args);
-      return new Promise((resolve) => {
-        const child = spawn(bin(program), args, { cwd: root, env, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
-        const out = lineSplitter(onLine);
-        const err = lineSplitter(onLine);
-        child.stdout?.on("data", (d) => out.push(d));
-        child.stderr?.on("data", (d) => err.push(d));
-        if (input !== undefined) child.stdin?.end(input);
-        child.on("error", () => resolve(127));
-        child.on("close", (code) => {
-          out.flush();
-          err.flush();
-          resolve(code ?? 1);
-        });
-      });
+      const out = lineSplitter(onLine);
+      const err = lineSplitter(onLine);
+      return start(program, args, {
+        input,
+        stdio: "pipe",
+        onOut: (d) => out.push(d),
+        onErr: (d) => err.push(d),
+        onEnd: () => (out.flush(), err.flush()),
+      }).done;
     },
 
+    // Output straight to the terminal. Ctrl+C reaches ft, not the child (its own
+    // group); ft then stops the child's whole group, as for every other child.
     interactive(program, args) {
       check(program, args);
-      return new Promise((resolve) => {
-        // Ctrl+C goes to the child too; ft waits for it to finish instead of dying first.
-        const ignore = () => {};
-        process.on("SIGINT", ignore);
-        const child = spawn(bin(program), args, { cwd: root, env, stdio: "inherit" });
-        const done = (/** @type {number} */ code) => {
-          process.off("SIGINT", ignore);
-          resolve(code);
-        };
-        child.on("error", () => done(127));
-        child.on("close", (code, signal) => done(signal === "SIGINT" ? 130 : (code ?? 1)));
-      });
+      return start(program, args, { stdio: "inherit" }).done;
     },
 
     long(program, args, { onLine }) {
       check(program, args);
-      // Its own process group, so a stop reaches wrangler's workerd children too.
-      const child = spawn(bin(program), args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
       const out = lineSplitter(onLine);
       const err = lineSplitter(onLine);
-      child.stdout?.on("data", (d) => out.push(d));
-      child.stderr?.on("data", (d) => err.push(d));
-      const done = new Promise((resolve) => {
-        child.on("error", () => resolve(127));
-        child.on("close", (code, signal) => {
-          out.flush();
-          err.flush();
-          resolve(code ?? (signal ? 128 : 1));
-        });
+      const { child, done, signal } = start(program, args, {
+        stdio: "pipe",
+        onOut: (d) => out.push(d),
+        onErr: (d) => err.push(d),
+        onEnd: () => (out.flush(), err.flush()),
       });
-      return {
-        pid: child.pid,
-        done: /** @type {Promise<number>} */ (done),
-        signal(sig) {
-          try {
-            if (child.pid) process.kill(-child.pid, sig);
-          } catch {
-            // Already gone.
-          }
-        },
-      };
+      return { pid: child.pid, done, signal };
     },
   };
 }
 
 /**
- * Wraps any runner (real or fake) with the allow-list and `--verbose` echo.
- * @param {Runner} runner @param {{ verbose: boolean, echo: (line: string) => void }} o
+ * Wraps any runner (real or fake) with the allow-list, the `--verbose` echo, and the
+ * rule that nothing new starts once ft has been told to stop (it throws `Interrupted`).
+ * @param {Runner} runner @param {{ verbose: boolean, echo: (line: string) => void, interrupted?: () => string | null }} o
  * @returns {Runner}
  */
-export function guarded(runner, { verbose, echo }) {
+export function guarded(runner, { verbose, echo, interrupted = () => null }) {
   /** @param {string} program @param {string[]} args */
   const before = (program, args) => {
     if (!isAllowed(program, args)) throw new NotAllowed(program, args);
+    const sig = interrupted();
+    if (sig) throw new Interrupted(sig);
     if (verbose) echo(`$ ${program} ${args.join(" ")}`);
   };
   return {

@@ -174,3 +174,123 @@ describe("./ft deploy writes", () => {
     expect(r.output).toContain("npx wrangler rollback");
   });
 });
+
+/**
+ * Runs ./ft deploy --yes with a signal sent from inside a fake child (`when(call)` picks
+ * which). `interrupted` and the guarded runner behave as the real lifecycle's.
+ * @param {{ when: (c: { program: string, args: string[] }) => boolean, sig?: string, forced?: boolean, pending?: string[], deps?: Record<string, any> }} o
+ */
+async function interruptedDeploy({ when, sig = "SIGINT", forced = false, pending = ["0002_profiles.sql"], deps = {} }) {
+  const dir = makeRepo({ secrets: GOOD_SECRETS });
+  /** @type {any} */
+  let handler = () => {};
+  /** @type {string | null} */
+  let got = null;
+  let stopped = 0;
+  const base = healthy({ pending });
+  const r = await ft(["deploy", "--yes"], {
+    root: dir,
+    handler: (c) => {
+      if (when(c) && !got) {
+        got = sig;
+        handler(sig, { forced: false });
+        if (forced) handler(sig, { forced: true });
+      }
+      return base(c);
+    },
+    deps: {
+      fetch: liveFetch(),
+      onInterrupt: (h) => ((handler = h), () => {}),
+      interrupted: () => /** @type {any} */ (got),
+      stopChildren: async () => void stopped++,
+      ...deps,
+    },
+  });
+  return { ...r, stopped, dir };
+}
+
+const isDeployOf = (/** @type {string} */ w) => (/** @type {{ args: string[] }} */ c) =>
+  c.args[0] === "deploy" && !c.args.includes("--dry-run") && c.args.includes("wrangler.accounts.toml") === (w === "accounts");
+
+describe("./ft deploy interrupted", () => {
+  it("during the checks: stops the running check, nothing written, says so (exit 130)", async () => {
+    const r = await interruptedDeploy({ when: (c) => c.program === "npm" && c.args[0] === "test" });
+    expect(r.code).toBe(130);
+    expect(r.stopped).toBe(1);
+    expect(writes(r.calls)).toEqual([]);
+    // Nothing after the signal is run, or reported as a failure.
+    expect(r.calls.some((c) => c.args.join(" ") === "run typecheck")).toBe(false);
+    expect(r.output).not.toContain("FAIL");
+    expect(r.output).toContain("Stopped by Ctrl+C before any write. Not deployed. Nothing was changed.");
+  });
+
+  it("at the question: nothing written (exit 143)", async () => {
+    const dir = makeRepo({ secrets: GOOD_SECRETS });
+    /** @type {any} */
+    let handler = () => {};
+    const r = await ft(["deploy"], {
+      root: dir,
+      handler: healthy(),
+      deps: {
+        stdinIsTTY: true,
+        // The question is never answered: the signal ends it.
+        ask: () => (setTimeout(() => handler("SIGTERM", { forced: false }), 5), new Promise(() => {})),
+        onInterrupt: (h) => ((handler = h), () => {}),
+      },
+    });
+    expect(r.code).toBe(143);
+    expect(writes(r.calls)).toEqual([]);
+    expect(r.output).toContain("Stopped by SIGTERM before any write. Not deployed. Nothing was changed.");
+  });
+
+  it("during the accounts deploy: lets it finish, stops before the site, and lists each step", async () => {
+    const r = await interruptedDeploy({ when: isDeployOf("accounts") });
+    expect(r.code).toBe(130);
+    // The running write was not stopped; the next one never started.
+    expect(r.stopped).toBe(0);
+    expect(writes(r.calls).map((c) => c.args.slice(0, 2).join(" "))).toEqual(["d1 migrations", "deploy -c"]);
+    expect(r.output).toContain("Ctrl+C: finishing freetime-accounts first, then stopping");
+    expect(r.output).toContain("DEPLOY INTERRUPTED by Ctrl+C, during freetime-accounts.");
+    expect(r.output).toContain("    done      remote migrations on freetime-accounts: applied (they stay)");
+    expect(r.output).toContain("    done      freetime-accounts: new version 1a2b3c4d-0000-4000-8000-000000000000");
+    expect(r.output).toContain("    not done  freetime: unchanged (the previous version)");
+    expect(r.output).toContain("    not done  live checks: not run");
+    expect(r.output).not.toContain("UNKNOWN");
+    // What finished is recorded as deployed: its secrets' hashes are kept.
+    expect(Object.keys(loadHashes(r.dir).accounts)).toEqual(["RESEND_API_KEY", "ACCOUNTS_KEY"]);
+    expect(loadHashes(r.dir).site).toEqual({});
+    noSecretsAnywhere(r);
+  });
+
+  it("during the migration, by SIGTERM: no Worker deployed (exit 143)", async () => {
+    const r = await interruptedDeploy({ when: (c) => c.args[2] === "apply" && c.args.includes("--remote"), sig: "SIGTERM" });
+    expect(r.code).toBe(143);
+    expect(writes(r.calls)).toHaveLength(1);
+    expect(r.output).toContain("DEPLOY INTERRUPTED by SIGTERM, during remote migrations on freetime-accounts.");
+    expect(r.output).toContain("    not done  freetime-accounts: unchanged (the previous version)");
+  });
+
+  it("a second signal during a write: that step is UNKNOWN, never guessed", async () => {
+    const r = await interruptedDeploy({ when: isDeployOf("site"), forced: true, pending: [] });
+    expect(r.output).toContain("    done      freetime-accounts: new version");
+    expect(r.output).toContain("    UNKNOWN   freetime: stopped part-way: it may or may not have gone live");
+    expect(r.output).toContain("./ft status");
+  });
+
+  it("during the live checks: both deployed, the checks not finished", async () => {
+    /** @type {any} */
+    let handler = () => {};
+    const r = await interruptedDeploy({
+      when: () => false,
+      pending: [],
+      deps: {
+        onInterrupt: (/** @type {any} */ h) => ((handler = h), () => {}),
+        fetch: () => (setTimeout(() => handler("SIGHUP", { forced: false }), 5), new Promise(() => {})),
+      },
+    });
+    expect(r.code).toBe(129);
+    expect(r.output).toContain("DEPLOY INTERRUPTED by SIGHUP (the terminal closed).");
+    expect(r.output).toContain("    done      freetime: new version");
+    expect(r.output).toContain("    not done  live checks: not finished");
+  });
+});

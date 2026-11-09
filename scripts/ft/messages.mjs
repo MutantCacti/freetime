@@ -3,6 +3,11 @@
 
 /** @param {string[]} xs */
 const list = (xs) => xs.join(", ");
+/** How a signal is named to the person: Ctrl+C is what they pressed. */
+/** @param {string} sig */
+const how = (sig) =>
+  // PRINTED OUTPUT: ft / signal names
+  sig === "SIGINT" ? "Ctrl+C" : sig === "SIGHUP" ? "SIGHUP (the terminal closed)" : sig;
 /** @param {number} n @param {string} one @param {string} many */
 const plural = (n, one, many) => (n === 1 ? one : many);
 
@@ -46,6 +51,17 @@ export const M = {
     noTerminal: "This needs an answer, and there's no terminal to ask. Run it in a terminal, or add --yes.",
   },
 
+  lifecycle: {
+    /** @param {string} sig */
+    // PRINTED OUTPUT: ft / stopped by a signal
+    stopped: (sig) => `Stopped by ${how(sig)}.`,
+    /** @param {string} sig */
+    // PRINTED OUTPUT: ft / forced stop
+    forced: (sig) => `${how(sig)} again, or still stopping: killed everything ft started that was still running.`,
+    // PRINTED OUTPUT: ft / stopping children after an internal error
+    stoppingChildren: "Stopping everything ft started.",
+  },
+
   help: {
     // PRINTED OUTPUT: ft help / command list
     list: `ft: freetime's developer commands
@@ -79,7 +95,7 @@ Exit: 0; 2 for an unknown command.
 
 Flags: --verbose (show each command run).
 Never: logs in, creates .dev.vars or .secrets, touches the remote database.
-Exit: 0 done (warnings allowed); 1 failed.
+Exit: 0 done (warnings allowed); 1 failed; 130 Ctrl+C (143 SIGTERM, 129 SIGHUP).
 `,
     // PRINTED OUTPUT: ft help / start
     start: `./ft start [--live] [--only site|accounts] [--no-router] [--port-offset N]
@@ -97,7 +113,8 @@ Flags:
   --port-offset <n>   Add n to every port (for a second checkout running at once).
 
 Never: deploys, uses the remote database, or restarts a Worker that stopped.
-Exit: 130 stopped with Ctrl+C; 1 a port was busy or a Worker stopped; 3 --live without .dev.vars.
+Exit: 130 stopped with Ctrl+C (143 SIGTERM, 129 SIGHUP); 1 a port was busy or a
+Worker stopped; 3 --live without .dev.vars.
 `,
     // PRINTED OUTPUT: ft help / test
     test: `./ft test [--only site|accounts]
@@ -130,7 +147,8 @@ Exit: 0 all good; 1 something needs attention; 3 a setup step is missing.
   Worker, the database id, local secret values, login, pending migrations,
   DNS), shows the plan and asks once. Then: remote migrations, the accounts
   Worker, the site (each with its secrets from .secrets), and smoke checks
-  against the live site.
+  against the live site. Ctrl+C during a write lets that write finish, then
+  stops and lists each step as done or not; Ctrl+C again stops it at once.
 
 Flags:
   --only <worker>     Deploy one Worker. All tests and smoke checks still run.
@@ -141,7 +159,8 @@ Flags:
 Never: skips tests, rolls back, deletes anything, applies a migration that
 removes or renames data, or prints a secret value.
 Exit: 0 deployed; 1 a check failed (nothing changed); 3 a setup step is
-missing; 4 production changed but not completely; 130 answered no.
+missing; 4 production changed but not completely; 130 answered no or Ctrl+C
+(143 SIGTERM, 129 SIGHUP).
 `,
     // PRINTED OUTPUT: ft help / secrets
     secrets: `./ft secrets [--set NAME [--yes]] [--generate NAME]
@@ -169,7 +188,7 @@ Flags:
   --errors            Only failed requests.
 
 Never: changes anything.
-Exit: 130 stopped with Ctrl+C; 3 not logged in.
+Exit: 130 stopped with Ctrl+C (143 SIGTERM, 129 SIGHUP); 3 not logged in.
 `,
   },
 
@@ -323,6 +342,15 @@ Exit: 130 stopped with Ctrl+C; 3 not logged in.
     /** @param {string[]} which */
     // PRINTED OUTPUT: ft start / not ready
     notReady: (which) => `${which.join(" and ")} didn't answer within 60 seconds. Stopping.`,
+    /** @param {string} w */
+    // PRINTED OUTPUT: ft start / last lines of the Worker that stopped
+    lastLines: (w) => `Last lines from ${w}:`,
+    /** @param {string} w */
+    // PRINTED OUTPUT: ft start / no output from the Worker that stopped
+    noOutput: (w) => `${w} printed nothing.`,
+    /** @param {string} sig */
+    // PRINTED OUTPUT: ft start / stopping after a signal
+    stopping: (sig) => `${how(sig)}: stopping. ${how(sig) === "Ctrl+C" ? "Ctrl+C again" : "A second signal"} kills everything now.`,
     /** @param {Record<string, number>} ports @param {boolean} router @param {string[]} which */
     // PRINTED OUTPUT: ft start / ready
     ready: (ports, router, which) =>
@@ -515,6 +543,56 @@ Exit: 130 stopped with Ctrl+C; 3 not logged in.
         `    4. Open ${base}/ and check the calendar, and that the account icon opens /account.`,
         "",
       ].join("\n"),
+  },
+
+  interrupted: {
+    /** @param {string} sig */
+    // PRINTED OUTPUT: ft deploy / interrupted before any write
+    beforeWrites: (sig) => `Stopped by ${how(sig)} before any write. Not deployed. Nothing was changed.`,
+    /** @param {string} sig @param {string} step */
+    // PRINTED OUTPUT: ft deploy / interrupted during a write: finishing it first
+    finishing: (sig, step) =>
+      `${how(sig)}: finishing ${step} first, then stopping (stopping it part-way would leave it unclear whether it went live). ${how(sig) === "Ctrl+C" ? "Ctrl+C again" : "A second signal"} stops it now.`,
+    /** @param {string} sig @param {string | null} during @param {{ label: string, state: "done" | "not-started" | "unknown" | "failed", detail?: string }[]} steps */
+    // PRINTED OUTPUT: ft deploy / DEPLOY INTERRUPTED block
+    block: (sig, during, steps) => {
+      const bar = "=".repeat(64);
+      const word = { done: "done", "not-started": "not done", unknown: "UNKNOWN", failed: "FAILED" };
+      return [
+        "",
+        bar,
+        `  DEPLOY INTERRUPTED by ${how(sig)}${during ? `, during ${during}` : ""}.`,
+        "",
+        "  Steps:",
+        ...steps.map((s) => `    ${word[s.state].padEnd(10)}${s.label}${s.detail ? `: ${s.detail}` : ""}`),
+        "",
+        "  Next (ft does none of this for you):",
+        ...(steps.some((s) => s.state === "unknown") ? ["    See what each Worker runs now: ./ft status"] : []),
+        ...(steps.some((s) => s.state === "done")
+          ? ["    Finish it: ./ft deploy (migrations already applied are skipped)"]
+          : ["    Nothing in production was changed. Deploy when ready: ./ft deploy"]),
+        bar,
+        "",
+      ].join("\n");
+    },
+    /** @param {string} db */
+    // PRINTED OUTPUT: ft deploy / interrupted step: migrations
+    migrations: (db) => `remote migrations on ${db}`,
+    // PRINTED OUTPUT: ft deploy / interrupted step: smoke checks
+    smoke: "live checks",
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: applied
+    applied: "applied (they stay)",
+    /** @param {string} v */
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: new version
+    newVersion: (v) => `new version ${v}`,
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: unchanged
+    unchanged: "unchanged (the previous version)",
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: stopped part-way
+    partWay: "stopped part-way: it may or may not have gone live",
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: smoke not finished
+    smokeNotFinished: "not finished",
+    // PRINTED OUTPUT: ft deploy / interrupted step detail: smoke not run
+    notRun: "not run",
   },
 
   incomplete: {

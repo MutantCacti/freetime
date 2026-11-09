@@ -81,7 +81,11 @@ Like Mite Spotter's `m` prefix, one short name groups every developer command; u
 | 2 | Usage: unknown command or flag, or a missing argument. The command's help is printed. |
 | 3 | One-time setup is missing (§9), including a missing local secret value. The message says which step and how to do it. |
 | 4 | **Production changed, but not completely**: a migration ran or one Worker deployed, and a later step or a smoke check failed (§5.6). |
-| 130 | Stopped with Ctrl+C, or a confirmation was answered "no". |
+| 129 | Stopped by SIGHUP (the terminal closed) (§2.6). |
+| 130 | Stopped with Ctrl+C (SIGINT), or a confirmation was answered "no". |
+| 143 | Stopped by SIGTERM (`kill`, or a tool running ft that gave up on it) (§2.6). |
+
+A signal's code wins over whatever the command had reached: an interrupted deploy exits 130, 143 or 129, and its `DEPLOY INTERRUPTED` block (§5.6) says what changed.
 
 ### 2.3 Secrets
 
@@ -115,6 +119,31 @@ Rollback commands are **printed** when they're the right next step (§5.6), neve
 - `deploy` asks once before its first write: `Deploy? [y/N]`. Only `y` or `yes` continues; anything else (including Enter) stops with exit 130.
 - `--yes` answers that question. It never skips a check.
 - If standard input isn't a terminal and `--yes` wasn't given, a command that would ask stops instead: "This needs an answer, and there's no terminal to ask. Run it in a terminal, or add --yes." (exit 1). `secrets --set` always needs a terminal, for the hidden prompt.
+
+### 2.6 Stopping: signals, crashes and children
+
+One module, `scripts/ft/lifecycle.mjs`, knows every process ft started and how ft ends. Added after agents in this repository couldn't stop a running `./ft start` and had to leave it running. What was wrong before, found by running it here:
+
+| Before | Effect |
+|---|---|
+| No SIGHUP handler; children in their own process groups | Closing the terminal killed ft and **left both `wrangler dev`, both their workers and four `workerd` processes running**, holding 8787, 8788, 9229 and 9230. |
+| SIGTERM handled as Ctrl+C | Exit 130 instead of 143. |
+| `fetch` keep-alive sockets from the readiness check | ft printed "Stopped" and then sat there 5 s more before exiting. |
+| The readiness wait wasn't cancelled | A Worker that failed to start (port taken, a config error) was reported in 2 s, then ft hung until the 60 s readiness timeout. |
+| `test` and `logs` children in ft's process group, SIGTERM unhandled | `kill <ft>` left `npm test` and vitest running, orphaned. |
+| `deploy` had no handler at all | Ctrl+C killed ft and wrangler mid-write with no word about what had been written; SIGTERM left wrangler deploying, orphaned. |
+| Uncaught errors and a closed stdout (EPIPE, EIO) | Crashed ft without stopping its children. |
+| A Worker killed by a signal | Reported as "exit 128" whatever the signal. |
+
+What it does now:
+
+- **Every child ft starts is in its own process group** (`detached`), so a signal to the group reaches its own children too (wrangler's `workerd`, npm's vitest), and is **tracked** until it exits. When a child's leader exits, anything left in its group is killed. Children never read ft's terminal (stdin is a pipe or closed); `test` and `logs` still write straight to it, colours included. So Ctrl+C reaches ft only, and ft stops the children.
+- **SIGINT, SIGTERM and SIGHUP** are handled the same way, with exit codes 130, 143 and 129. `start` and `deploy` handle the signal themselves (§3.2, §5.6). For every other command ft stops each child (SIGINT, then SIGTERM, then SIGKILL, 3 s apart), nothing new starts after the signal (the runner refuses: `Interrupted`), ft prints `Stopped by Ctrl+C.` (or `SIGTERM`, or `SIGHUP (the terminal closed)`), and exits. What a cut-short step would report (a killed `wrangler whoami` reads as "not logged in") isn't printed.
+- **A second signal** kills every child's group with SIGKILL and exits at once: `Ctrl+C again, or still stopping: killed everything ft started that was still running.` So does a first signal that hasn't finished stopping after 30 s. Nothing can make ft hang after a signal.
+- **An error nothing caught** (an exception or a rejected promise anywhere) prints `ft: internal error (FT_INTERNAL): …`, stops every child and exits 1.
+- **When the process exits**, for whatever reason, every child still running gets SIGKILL, and the terminal leaves raw mode if a hidden prompt (§3.5) had it.
+- **ft always exits explicitly** when the command is done, after its output is written, so nothing left open (a socket, a prompt) keeps it alive. A closed stdout (EPIPE, EIO) no longer crashes it; output is dropped from then on.
+- **SIGKILL to ft itself can't be handled** by any program: its children would keep running. `pkill -f workerd` cleans up after that, and the next `./ft start` names any port still in use.
 
 ---
 
@@ -169,8 +198,8 @@ Flags common to every command: `--help` (same as `./ft help <command>`), `--verb
   Ctrl+C stops both.
 ```
 
-5. **Ctrl+C:** ft sends SIGINT to each Worker's process group, waits up to 5 s, then SIGTERM, then after 5 more seconds SIGKILL; closes the router; prints `Stopped site and accounts.`; exits 130. Then it checks the ports are free again and, if one isn't, names it with `lsof -i :<port>`.
-6. **If one Worker stops on its own,** ft stops the other one too and exits 1: "site stopped unexpectedly (exit 1). Stopping accounts too." **It never restarts anything.**
+5. **Ctrl+C, SIGTERM or SIGHUP** (§2.6): prints `Ctrl+C: stopping. Ctrl+C again kills everything now.`; sends SIGINT to each Worker's process group, waits up to 3 s, then SIGTERM, then after 3 more seconds SIGKILL; closes the router, dropping any open connection (a browser's keep-alive would otherwise hold it open); prints `Stopped site and accounts.`; exits 130, 143 or 129. Then it checks the ports are free again and, if one isn't, names it with `lsof -i :<port>`. `wrangler dev` stops within a fraction of a second on SIGINT, so this normally takes well under a second. A signal during the local migration stops it, and nothing starts. A second signal kills everything at once.
+6. **If one Worker stops on its own, or never answers,** ft stops the other one and the router too and exits 1: "accounts stopped unexpectedly (exit 1). Stopping site too.", then `Last lines from accounts:` and its last 12 lines again (they may have scrolled past, between the other Worker's), or "didn't answer within 60 seconds". A Worker that fails while starting (its port taken, a config error) ends the wait for readiness at once. A Worker killed by a signal shows 128 + its number (137 for SIGKILL). **It never restarts anything.**
 
 **Flags:** `--live` (the site uses the real feed from `.dev.vars`; exit 3 without it), `--only site|accounts` (one Worker, no router), `--no-router`, `--port-offset N` (adds N to all five ports, for a second checkout or worktree running at the same time; added during the build, when the build session found another checkout's dev servers on 8787 and 8788).
 
@@ -355,6 +384,17 @@ Read-only requests from `fetch` to the live host (`redirect: "manual"`, user age
 
 The `DEPLOY INCOMPLETE` block starts and ends with a line of `=` and lists each Worker as "new version …" or "unchanged (the previous version)". Migrations are never rolled back by ft.
 
+**Interrupted** (Ctrl+C, SIGTERM or SIGHUP; exit 130, 143 or 129, §2.6). It's never left unclear what was deployed:
+
+| When | What ft does | ft prints |
+|---|---|---|
+| During the checks, or at the question | Stops the running check; writes nothing | `Stopped by Ctrl+C before any write. Not deployed. Nothing was changed.` |
+| During a write (the migration, or a Worker's deploy) | **Lets that write finish**, then stops before the next: stopping wrangler part-way would leave it unknown whether it went live | `Ctrl+C: finishing freetime-accounts first, then stopping (…). Ctrl+C again stops it now.`, then the `DEPLOY INTERRUPTED` block |
+| A second signal during a write | Kills it at once | the block, with that step as `UNKNOWN … stopped part-way: it may or may not have gone live` and `./ft status` to find out |
+| During the live checks (read-only) | Stops them at once | the block, with "live checks: not finished" |
+
+The `DEPLOY INTERRUPTED` block lists every step, in order, as `done` (with the new version id, or "applied (they stay)"), `not done` ("unchanged (the previous version)"), `FAILED` or `UNKNOWN`. A Worker whose deploy finished has its secrets' hashes recorded as usual.
+
 ---
 
 ## 6. The secrets file
@@ -474,9 +514,13 @@ Tests for ft run in Node, in a third Vitest project, `scripts` (`test/scripts/*.
 - **Migration safety:** each unsafe statement stops; additive ones and the repository's own migrations pass.
 - **Deploy flows:** `--dry-run` makes no write; `--only site` makes no D1 or accounts call; each pre-flight failure stops before any write with its exit code; the writes happen in order with each Worker's secrets as JSON on stdin; a failure at each write gives its row of §5.6; no secret value appears in any output or argument.
 - **Smoke:** healthy responses pass; each missing header, a cookie, the wrong Worker and a 503's reference; retries end on a fake clock.
-- **Start:** fake children: prefixed lines, SIGINT → SIGTERM → SIGKILL, one stopping stops the other, busy ports stop before anything starts, `--port-offset`, `--live` without `.dev.vars`. The router with two real local HTTP servers: method, path, body, `Host`, `Origin` and several `Set-Cookie` pass through; a dead upstream gives a 502.
+- **Start:** fake children: prefixed lines, SIGINT → SIGTERM → SIGKILL, SIGTERM and SIGHUP give 143 and 129, one stopping stops the other and shows its last lines, a Worker failing while starting ends the readiness wait at once, one never answering stops both, a signal during the local migration starts nothing, the router closes with a keep-alive connection open and frees its port, busy ports stop before anything starts, `--port-offset`, `--live` without `.dev.vars`.
+- **Lifecycle** (§2.6): each signal stops every child's group and exits with its code; a child ignoring SIGINT and SIGTERM gets SIGKILL and nothing hangs; a second signal kills everything and exits at once (and only once); a command handling the signal is left to do its own stopping; the 30 s force; an uncaught error stops the children and exits 1; a child's group is swept when its leader exits; process exit SIGKILLs what's left. With **real processes** (a stub shell script in place of wrangler, in a temp directory: no wrangler, no network): SIGTERM stops a child and the grandchild it started, also when both ignore SIGINT and SIGTERM. `./ft test` stopped by a signal runs nothing more and says so.
+- **Deploy interrupted:** during the checks nothing is written or reported as failed; at the question; during the accounts deploy it finishes that write, never starts the site's, and lists each step; during the migration by SIGTERM (143); a second signal marks the running write `UNKNOWN`; during the live checks (129). The router with two real local HTTP servers: method, path, body, `Host`, `Origin` and several `Set-Cookie` pass through; a dead upstream gives a 502.
 
 **Run for real in the build session:** `./ft help`, `./ft install` (deps matched, so no `npm ci`), `./ft test`, `./ft start` (busy ports reported while another checkout's dev servers were running; then `--port-offset 100`: both Workers and the router started, the router checks of §3.2.1 passed, Ctrl+C stopped everything and freed the ports), `./ft status --offline`, and `./ft deploy --dry-run` up to its first checks (it stops on the placeholder `database_id`, no `.secrets` and no login, as it should).
+
+**Stopping, run for real** (§2.6), each time checking afterwards that no `wrangler` or `workerd` process was left (`pgrep -f`) and that 8780, 8787, 8788, 9229 and 9230 could be bound again. `./ft start` in the background, then: SIGTERM (exit 143, gone in under 0.5 s), SIGINT (130), SIGHUP (129; before, everything was left running), two SIGINTs (130), Ctrl+C typed into a real terminal (through `script`; 130), `pkill -f "port 8788"` (exit 1, "accounts stopped unexpectedly (exit 143)" and its last lines), SIGKILL to the accounts wrangler only (exit 1, "exit 137"), and port 8788 taken just after ft's port check (wrangler's "Address already in use" shown, exit 1 after 3 s; before, 64 s). `./ft test` stopped by SIGTERM and by SIGINT: 143 and 130, no npm or vitest left. `./ft deploy --dry-run --allow-branch` stopped by SIGTERM during its checks: 143, "Stopped by SIGTERM before any write". Zombie `workerd` entries (`<defunct>`: dead, holding no port) can show for a second or two while this container's init reaps them.
 
 ---
 
