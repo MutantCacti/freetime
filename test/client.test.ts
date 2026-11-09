@@ -106,6 +106,8 @@ describe("settings modal geometry", () => {
     expect(left).toBeGreaterThan(right!);
     expect(px(/\.settings \{[^}]*top: calc\(var\(--cog-top, 18px\) - (\d+)px\)/)).toBe(top! + border);
     expect(px(/\.settings \{[^}]*right: calc\(var\(--cog-right, 16px\) - (\d+)px\)/)).toBe(right! + border);
+    // Not narrowed by the browser's dialog default (max-width: 100% - 6px - 2em), which left a gap on phones.
+    expect(css).toMatch(/\.settings \{[^}]*max-width: none;/);
     // It grows from the centre of Close, which is the centre of the cog.
     expect(css).toMatch(new RegExp(`transform-origin: calc\\(100% - ${right! + border}px - 1\\.125rem\\) calc\\(${top! + border}px \\+ 1\\.125rem\\);`));
     // Both are 2.25rem round pills; the fallbacks are the top bar's padding.
@@ -161,11 +163,17 @@ describe("motion", () => {
   it("dialogs and toasts grow from the top right, where their buttons are", () => {
     expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
     expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
-    // The settings modal grows out of the cog's centre (its Close lands on the cog), on open only.
-    expect(css).toMatch(/\.settings \{[^}]*transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\);/);
+    // The settings modal, on open only: on desktop a short grow from its top right (where the cog is);
+    // on phones, where it covers the screen, out of the cog's centre (its Close lands on the cog).
+    expect(css).toMatch(/\.settings \{[^}]*transform-origin: top right;/);
     expect(css).toContain(".settings[open] { animation: settings-grow var(--motion-settings); }");
+    expect(css).toContain("@keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }");
+    const phone = css.slice(css.indexOf("@media (max-width: 640px) {\n  .settings {"));
+    expect(phone).toMatch(/^@media \(max-width: 640px\) \{\n  \.settings \{ transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\); \}/);
+    expect(phone).toContain(".settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }");
     expect(css).not.toMatch(/\.settings[^{]*is-closing/);
-    expect(tokens).toMatch(/--motion-settings: 200ms/);
+    expect(tokens).toMatch(/--motion-settings: 160ms/);
+    expect(tokens).toMatch(/--motion-settings-phone: 200ms/);
   });
 });
 

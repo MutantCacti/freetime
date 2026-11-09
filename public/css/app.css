@@ -456,16 +456,23 @@ img.avatar { object-fit: cover; padding: 0; }
   position: fixed; inset: auto; margin: 0; padding: 0;
   top: calc(var(--cog-top, 18px) - 14px); right: calc(var(--cog-right, 16px) - 12px);
   width: min(26rem, calc(100vw - 2 * (var(--cog-right, 16px) - 12px)));
+  max-width: none; /* the browser's dialog default (100% - 6px - 2em) left a 30px gap on phones */
   max-height: calc(100dvh - var(--cog-top, 18px) + 14px - 4px);
   overflow: auto; overscroll-behavior: contain;
   background: var(--color-bg); color: var(--color-text);
   border: 1px solid var(--color-divider); border-radius: 12px; box-shadow: 0 12px 36px var(--color-shadow);
   font-size: 14px;
-  /* Grows out of the cog's centre, on open only: closing is instant. */
-  transform-origin: calc(100% - 12px - 1.125rem) calc(14px + 1.125rem);
+  /* Desktop: a short grow from its top-right corner, by the cog. On open only: closing is instant. */
+  transform-origin: top right;
 }
 .settings[open] { animation: settings-grow var(--motion-settings); }
-@keyframes settings-grow { from { opacity: 0; scale: 0.08; } 40% { opacity: 1; } }
+@keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }
+/* Phones: the modal covers the screen, so it grows out of the cog's centre instead. */
+@media (max-width: 640px) {
+  .settings { transform-origin: calc(100% - 12px - 1.125rem) calc(14px + 1.125rem); }
+  .settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }
+}
+@keyframes settings-grow-phone { from { opacity: 0; scale: 0.08; } 40% { opacity: 1; } }
 .settings::backdrop { background: color-mix(in srgb, var(--color-bg) 92%, transparent); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .settings::backdrop {

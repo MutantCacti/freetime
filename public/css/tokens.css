@@ -50,7 +50,8 @@
   --motion-hover: 40ms ease-out;
   --motion-glide: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
   /* The settings modal growing out of the cog: from far smaller, so a little longer. */
-  --motion-settings: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-settings: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-settings-phone: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --grow-scale: 0.96;
   --grow-nudge: 6px;
 
