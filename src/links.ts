@@ -19,13 +19,20 @@ function query(params: Params): string {
   const pairs: string[] = [];
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
-    pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%2F/g, "/")}`);
+    pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%2F/g, "/").replace(/%40/g, "@")}`);
   }
   return pairs.length ? `?${pairs.join("&")}` : "";
 }
 
+/** Where calendar links point: the main site's "/", or a profile ("/@<username>", or "/u/<id>" before one) on the accounts Worker. */
+export const PROFILE_BASE_RE = /^\/(?:u\/[a-z0-9]{10}|@[a-z0-9_]{3,20})$/;
+
 export class Links {
-  constructor(private readonly zone: Pick<ZoneState, "tz" | "dtz">) {}
+  constructor(
+    private readonly zone: Pick<ZoneState, "tz" | "dtz">,
+    /** The calendar's own path. */
+    readonly base: string = "/",
+  ) {}
 
   /** Zone parameters every link keeps. */
   get zoneParams(): { tz?: string; dtz?: string } {
@@ -42,12 +49,12 @@ export class Links {
 
   /** A calendar link for a view, landing on the day window's first row where the view has a time window. */
   view(params: ViewParams): string {
-    return this.href("/", params, usesTimeWindow(params) ? HOUR_ANCHOR : "");
+    return this.href(this.base, params, usesTimeWindow(params) ? HOUR_ANCHOR : "");
   }
 
   /** The same calendar link with `tz` replaced (null removes it). Used only by the time-zone selector. */
   withTz(params: ViewParams, tz: string | null): string {
-    const next = new Links({ tz, dtz: this.zone.dtz });
+    const next = new Links({ tz, dtz: this.zone.dtz }, this.base);
     return next.view(params);
   }
 }

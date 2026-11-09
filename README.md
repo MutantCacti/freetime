@@ -2,7 +2,7 @@
 
 A read-only view of Maxence's free and busy time, in the style of when2meet. Visitors find a slot here, then get in touch through the contact panel. Nothing on the site sends, books or stores anything.
 
-It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`SPEC.md`](SPEC.md).
+It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several calendars) and one custom domain. There's no storage, no login and no cookies. The full spec is in [`SPEC.md`](SPEC.md). Accounts are planned as a separate Worker: see [`ACCOUNTS-SPEC.md`](ACCOUNTS-SPEC.md).
 
 - **Views:** Day, Week, Month and Range, plus `/help`, the contact panel (`/contact`) and a busy-only `.ics` export.
 - **Rendering:** HTML is rendered on the server, and every view, link and form works without JavaScript. Two small scripts in `public/js/` add the extras.
@@ -10,35 +10,35 @@ It's one Cloudflare Worker with one secret (`ICAL_URL`, which can list several c
 
 ## Run it locally
 
-Requires Node 20 or later.
+Requires Node 20 or later. Everything goes through one developer command, `./ft` ([`DEV-SPEC.md`](DEV-SPEC.md)); `npm run ft -- <command>` is the same thing.
 
 ```bash
-npm install
+./ft install
 ```
 
 ```bash
-npm run dev
+./ft start
 ```
 
-`npm run dev` serves the site at http://localhost:8787 from the fixture feed `test/fixtures/dev.ics`, so no secret is needed. It uses the `dev` environment in `wrangler.toml`, whose entry point is `src/dev.ts`. The fixture is never part of the production bundle.
+`./ft install` checks Node, runs `npm ci` only if `node_modules` doesn't match `package-lock.json`, and applies the D1 migrations to the local database. `./ft start` runs both Workers in one terminal, each line prefixed with its name, and stops both on Ctrl+C:
 
-To run locally against the real feed, copy `.dev.vars.example` to `.dev.vars`, put the secret iCal address in it, then:
+| Address | What |
+|---|---|
+| http://localhost:8780 | Both Workers, split by path as in production (ft's local router): open this one |
+| http://localhost:8787 | The site only, from the fixture feed `test/fixtures/dev.ics` (the `dev` environment in `wrangler.toml`, entry `src/dev.ts`). The fixture is never part of the production bundle |
+| http://localhost:8788 | The accounts Worker only (`ACCOUNTS-SPEC.md`), with a local D1 database. Emails aren't sent: they're printed in the terminal, links included |
 
-```bash
-npm run dev:live
-```
+`./ft start --live` uses the real feed instead: copy `.dev.vars.example` to `.dev.vars` and put the secret iCal address in it first. `--only site|accounts` starts one Worker; `--port-offset 10` moves every port, for a second checkout running at the same time. `./ft help` lists every command.
 
 Checks:
 
 ```bash
-npm test
+./ft test
 ```
 
-```bash
-npm run typecheck
-```
+That's `npm test` then `npm run typecheck`. Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`. There are three test projects: `site` (`test/*.test.ts`, in `wrangler.toml`), `accounts` (`test/accounts/`, in `wrangler.accounts.toml`, with the D1 migrations applied and email mocked), and `scripts` (`test/scripts/`, plain Node: `./ft` itself, with a fake runner, so no test runs wrangler or touches the network).
 
-Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), and they never fetch the real feed. Every test uses the `.ics` fixtures in `test/fixtures/`.
+The raw commands still work: `npm run dev` (site, :8787), `npm run dev:live`, `npm run dev:accounts` (:8788), `npm test`, `npm run typecheck`. On their own ports the account icon on :8787 doesn't reach :8788; the router on :8780 is what joins them.
 
 ## Layout
 
@@ -51,18 +51,24 @@ Tests run inside the Workers runtime (Vitest with `@cloudflare/vitest-plugin`), 
 | `src/state.ts`, `src/links.ts` | URL state, the zone rule, navigation, and the one link builder |
 | `src/tz.ts`, `src/dates.ts`, `src/format.ts` | Time-zone arithmetic (Intl only), civil dates, labels |
 | `src/feed.ts` | Fetching `ICAL_URL`, the Cache API copy, stale/fatal handling |
-| `src/levels.ts` | `LEVELS` (9) and the busy fraction → step mapping |
+| `src/levels.ts` | `LEVELS` (6) and the busy fraction → step mapping |
 | `src/parula.ts`, `src/dither.ts`, `src/styles.ts` | Source parula table, the toned palette derived from it, Bayer dither, and the generated `/css/calendar.css` |
 | `src/export-ics.ts` | The busy-only `.ics` file |
-| `src/views/` | JSX for the top bar, calendar, notices, panels and pages |
+| `src/views/` | JSX for the top bar, calendar, notices, panels, pages and the settings modal (`settings.tsx`, the cog's rows, shared by both Workers) |
+| `src/headers.ts` | Security headers, shared by both Workers |
+| `src/accounts/` | The accounts Worker (`ACCOUNTS-SPEC.md`): routes, D1 queries, passwords and tokens, Resend email, pages. Never imported by the main Worker |
+| `migrations/` | D1 migrations for the accounts database |
+| `wrangler.accounts.toml` | The accounts Worker's config: routes, D1, `RESEND_FROM` |
 | `src/config.ts` | Settings you might change (see below) |
 | `public/css/tokens.css` | Design tokens: raw values, then semantic tokens, light and dark |
 | `public/css/fonts.css`, `public/fonts/` | Self-hosted Figtree and Fragment Mono (WOFF2) and their OFL licences |
 | `public/favicon.svg`, `public/apple-touch-icon.png` | The site icon, and a 180 px export of it |
 | `public/css/app.css` | Component styles (tokens only) |
 | `public/js/head.js` | Runs before first paint: applies the theme, corrects `dtz` |
-| `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, Copy, current-time line, scroll |
+| `public/js/app.js` | Toasts, time-zone dropdown, date picker, dialogs, the settings modal and its rows, the theme switch, Copy, current-time line, scroll |
 | `test/` | Vitest suites, `.ics` fixtures and scrubbed when2meet pages (`test/fixtures/w2m/`) |
+| `ft`, `scripts/` | The developer command (`DEV-SPEC.md`): `scripts/ft.mjs` and its modules in `scripts/ft/` |
+| `.secrets.example` | The template for `.secrets`, the gitignored file of production secrets `./ft deploy` sends |
 | `docs/W2M-GET-SPEC.md` | How to read and fill a when2meet event (for the when2meet add-on) |
 
 ## Dependencies
@@ -118,29 +124,50 @@ dig MX mutantcacti.com +short
 
 Then load the apex site and each existing subdomain in a browser, and send a test email to an address on the domain.
 
-### 4. Deploy freetime.
+### 4. Deploy both Workers with `./ft deploy`
 
-`wrangler.toml` already sets `workers_dev = false` and the route `{ pattern = "freetime.mutantcacti.com", custom_domain = true }`.
+Both Workers deploy in one flow (`DEV-SPEC.md` §5): `./ft deploy` checks everything first, shows the plan and asks once, then applies the remote D1 migrations, deploys the accounts Worker, deploys the site (each with its secrets), and checks the live site. It stops at the first failure and never rolls back by itself; if production changed only partly, it says so in a `DEPLOY INCOMPLETE` block (exit 4) with the next steps. The manual commands are in [Deploy without ft](#deploy-without-ft-fallback).
+
+The two Workers stay separate (`ACCOUNTS-SPEC.md` §1): `wrangler.toml` (the site, zone route `freetime.mutantcacti.com/*`, `workers_dev = false`) and `wrangler.accounts.toml` (the paths `/account*`, `/u/*`, `/@*`, `/spaces*`, `/s/*` and `/auth/*` on the same host; the main Worker keeps everything else).
+
+**One-time setup** (`./ft status` shows which of these are missing, and `./ft deploy` stops with exit 3 until they're done):
+
+1. **Log in:** `npx wrangler login`.
+2. **DNS record:** the zone route needs a proxied DNS record for `freetime`: in **DNS → Records**, add `AAAA freetime 100::` with the proxy on (orange cloud). `100::` is a placeholder address: the Worker answers every request, so nothing is ever sent there **(unverified that it's still Cloudflare's recommended placeholder)**. If `freetime.` was deployed earlier with a custom domain, remove that under **Workers & Pages → freetime → Settings → Domains & Routes** at the same time (`DEV-SPEC.md` §9 has the order).
+3. **Database:** `npx wrangler d1 create freetime-accounts`, then put the `database_id` it prints into `wrangler.accounts.toml` (the top-level `[[d1_databases]]`, replacing the zeros) and commit it.
+4. **Pictures:** `npx wrangler r2 bucket create freetime-pictures` (accounts phase 2: profile pictures).
+5. **Resend:** in Resend, add the sending domain (`freetime.mutantcacti.com`, or whichever matches `RESEND_FROM` in `wrangler.accounts.toml`), add the DNS records Resend shows in Cloudflare's **DNS → Records**, wait until Resend shows the domain as verified, and create an API key with sending access only.
+6. **Secrets, in `.secrets`** (gitignored, never committed; `DEV-SPEC.md` §6). Either copy `.secrets.example` to `.secrets` and fill it in, or:
 
 ```bash
-npm ci && npm test
+./ft secrets --set ICAL_URL
 ```
 
 ```bash
-npx wrangler login
+./ft secrets --set RESEND_API_KEY
 ```
 
 ```bash
-npx wrangler secret put ICAL_URL
+./ft secrets --generate ACCOUNTS_KEY
 ```
 
-At the prompt, paste the calendar's **secret address in iCal format** (Google Calendar: Settings → the calendar → Integrate calendar). If Wrangler offers to create the Worker because it doesn't exist yet, accept. **(unverified)**
+   `ICAL_URL` is the calendar's **secret address in iCal format** (Google Calendar: Settings → the calendar → Integrate calendar). **Several calendars:** all their secret addresses on the one line, separated by spaces (commas also work). Busy time from all of them is merged. The most is 10. To change the list later, edit `.secrets` (or `./ft secrets --set ICAL_URL`) and deploy; the whole value is replaced. `ACCOUNTS_KEY` is 32 random bytes for encrypting calendar addresses (accounts phase 2): **keep a copy somewhere safe and never change it**; ft refuses to replace it.
 
-**Several calendars:** paste all their secret addresses on the one line, separated by spaces (commas also work). Busy time from all of them is merged. The most is 10. To add or remove a calendar later, run `npx wrangler secret put ICAL_URL` again with the full new list; the secret is replaced, not appended to.
+**Each deploy:**
 
 ```bash
-npx wrangler deploy
+./ft deploy --dry-run
 ```
+
+```bash
+./ft deploy
+```
+
+`--dry-run` runs every check and prints the plan without changing anything. Deploys come from `main` with a clean tree (`--allow-branch` for another branch); `--only site` or `--only accounts` deploys one Worker. Secret values go to wrangler on stdin, never as arguments, and are never printed.
+
+**Then check the accounts by hand** (`./ft deploy` reminds you): open `https://freetime.mutantcacti.com/account`, create an account with your own address, confirm it from the email, sign out, use **Forgot your password?**, and sign in with the new password. Then load `https://freetime.mutantcacti.com/` and check the calendar is unchanged and the account icon opens `/account`.
+
+`./ft status` shows, any time, what each Worker runs compared with your commit, the secret names set, pending migrations, and the live checks. `./ft logs site` (or `accounts`) tails the logs.
 
 ### 5. Verify
 
@@ -182,7 +209,44 @@ Re-enable DNSSEC through Cloudflare (**DNS → Settings → Enable DNSSEC**), th
 ### 7. Rollback
 
 - **Whole zone:** put the old nameservers back at the registrar. The records at the old provider were never changed.
-- **Just freetime.:** remove the custom domain under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
+- **Just freetime.:** remove its route under **Workers & Pages → freetime → Settings → Domains & Routes**, or delete the Worker with `npx wrangler delete`. Nothing else in the zone depends on it.
+- **Just accounts:** `npx wrangler delete -c wrangler.accounts.toml` removes the accounts Worker and its routes; the main site keeps working. The D1 database stays until deleted with `npx wrangler d1 delete freetime-accounts`.
+
+## Deploy without ft (fallback)
+
+These are the raw commands `./ft deploy` runs, for when ft itself is the problem. **Not through ft: no checks**, and secrets are typed at wrangler's prompt instead of read from `.secrets`.
+
+```bash
+npm ci && npm test && npm run typecheck
+```
+
+```bash
+npx wrangler secret put ICAL_URL
+```
+
+```bash
+npx wrangler secret put RESEND_API_KEY -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler secret put ACCOUNTS_KEY -c wrangler.accounts.toml
+```
+
+At each prompt, paste the value. If Wrangler offers to create the Worker because it doesn't exist yet, accept. **(unverified)**
+
+```bash
+npx wrangler d1 migrations apply freetime-accounts --remote -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler deploy -c wrangler.accounts.toml
+```
+
+```bash
+npx wrangler deploy
+```
+
+Then step 5's checks.
 
 ## Error codes
 
@@ -196,6 +260,10 @@ With several calendars, the log entry also has `feed`: the failing calendar's po
 | `FEED_STATUS_<n>` | The feed answered with HTTP status `<n>`, for example `FEED_STATUS_403` (address revoked or wrong) or `FEED_STATUS_404`. The body is never shown or logged. | 503 |
 | `FEED_PARSE` | The feed arrived but isn't a usable iCalendar file. | 503 |
 | `RANGE_EXPAND` | Expanding recurrences for the requested period failed. | 500 |
+| `AUTH_ORIGIN` | Accounts Worker: a POST that didn't come from the site's own pages (no matching `Origin`). | 403 |
+| `AUTH_LIMIT` | Accounts Worker: too many sign-in, sign-up or email attempts (shown on the form). | 429 |
+| `TOKEN_INVALID` | Accounts Worker: an emailed link that's expired, used or wrong. | 400 |
+| `EMAIL_SEND` | Accounts Worker: Resend couldn't send an email, or `RESEND_API_KEY` isn't set. Logged with Resend's status only, never the address. | 503 |
 | `INTERNAL` | Anything else. | 500 |
 
 If a fetch fails but a good copy from the last 7 days is saved, the page still renders from it with a sticky warning ("Showing a saved copy. Times may be out of date."). The log gets a `warn` entry with the code. Each calendar has its own saved copy.
@@ -212,7 +280,7 @@ With several calendars, **any one failing with no saved copy shows the error pan
 | **Range cap** | `RANGE_CAP_DAYS` in `src/config.ts`. The export, the notice text and `/help` follow it. `RANGE_COLUMN_MAX_DAYS` sets where Range switches from columns to day cells. |
 | **Chrome colours** | The raw values at the top of `public/css/tokens.css`. Each semantic token maps onto them for light and dark. `test/colour-rule.test.ts` checks AA contrast for both modes. `--color-grid` (calendar grid lines: white in light mode, dark in dark mode) and `--color-divider` (top bar and panel lines) are there too. |
 | **Calendar colours** | `PALETTE_CHROMA`, `PALETTE_L_MIN` and `PALETTE_L_MAX` in `src/parula.ts` tone the source table (`PARULA_SOURCE`). `THEME_PALETTES` there sets which way round each theme uses it (light mode is inverted). The cell CSS is generated from the result. |
-| **Number of steps** | `LEVELS` in `src/levels.ts` (9). Colour, dither and the colour bar all follow it. |
+| **Number of steps** | `LEVELS` in `src/levels.ts` (6). Colour, dither and the colour bar all follow it. Each step has one colour and one dot layer (`DITHER_LAYERS` in `src/dither.ts`: none, 2, 4, 6, 9, 12, one to one; they must match `LEVELS`, checked at start-up), with its dot tone fixed per map and theme (`DOT_TONES` in `src/parula.ts`; docs/CHROMA.md, round 7). |
 | **Past dimming** | `PAST_CHROMA` in `src/parula.ts` (saturation of past cells) and `--color-veil` in `tokens.css` (the veil). |
 | **Fonts** | `public/css/fonts.css` (faces) and `--font-sans` / `--font-mono` in `tokens.css` (stacks). Update the two preloads in `src/views/layout.tsx` if the above-the-fold files change. |
 | **Dither range** | `DITHER_MIN_LEVEL` and `DITHER_MAX_LEVEL` in `src/dither.ts`. They're checked at start-up (`0 ≤ MIN < MAX ≤ 15`). |
@@ -221,10 +289,10 @@ With several calendars, **any one failing with no saved copy shows the error pan
 
 ## User-facing text
 
-Every string a visitor can see or hear has a `PRINTED OUTPUT` marker comment beside it (spec §2.1). To find them all:
+Every string a visitor can see or hear has a `PRINTED OUTPUT` marker comment beside it (spec §2.1), and so does every line `./ft` prints (`scripts/ft/messages.mjs`). To find them all:
 
 ```bash
-grep -rn "PRINTED OUTPUT" src public
+grep -rn "PRINTED OUTPUT" src public scripts ft
 ```
 
 `/help` (`HelpPage` in `src/views/pages.tsx`) is a template, ready to be rewritten. Each section has its own marker.
@@ -250,8 +318,8 @@ Anything not checked against current documentation is marked **(unverified)**.
 | No inline styles. Cell colours and dither are classes in a generated `/css/calendar.css`, and dither tiles are generated SVGs at `/img/dither/<level><tone>.svg`. | `style=""` attributes; data URIs | The CSP is `self` only, with no `unsafe-inline`. Generating the CSS from `parula.ts` keeps the hex values in one file. | — |
 | Dither dots are black or white at 42% opacity, picked per palette step by contrast, and the same in both themes | One dot colour | Dark dots vanish on dark blue and light dots on yellow. A test checks that the dots differ in lightness at every step of the toned palette, so the pattern reads in greyscale. | — |
 | Toned palette: OKLCH conversion written out in `src/parula.ts` (about 60 lines). Out-of-gamut colours keep L and h and reduce chroma by bisection. The source table's own lightness range (0.36–0.96) is mapped linearly onto 0.36–0.90 (review 1) | A colour library; CSS `oklch()` | No dependency, and the generated CSS stays plain hex, which every browser renders the same. With the starting constants the change is subtle: lightness drops by at most 0.05, and hues stay within 0.08 rad of the source (tested). | It looking muddy: raise `PALETTE_CHROMA` towards 1 first. |
-| Busy fraction → 9 steps by rounding, except that any busy time is at least step 1 and anything short of fully busy is at most step 7 (review 1) | Plain rounding | With plain rounding, a slot with 3 busy minutes would look free and a slot one minute short of full would look fully busy. That's the wrong way round for a page people use to find free time. Labels still give the exact percentage. | Maxence preferring plain rounding. |
-| Palette step `s` uses toned-table entry `round(s / 8 × 63)` | Re-deriving 9 colours directly | The review asks for "the toned table sampled at the 9 steps". Ends are exact (steps 0 and 8 are the table's first and last entries). | — |
+| Busy fraction → `LEVELS` steps by rounding (9, then 17, now 6), except that any busy time is at least step 1 and anything short of fully busy is at most step `LEVELS − 2` (review 1) | Plain rounding | With plain rounding, a slot with 3 busy minutes would look free and a slot one minute short of full would look fully busy. That's the wrong way round for a page people use to find free time. Labels still give the exact percentage. | Maxence preferring plain rounding. |
+| Palette step `s` uses toned-table entry `round(s / 8 × 63)` (superseded: now `round(smoothstep(s / 16) × 63)`, see the perceptual-dither rows) | Re-deriving 9 colours directly | The review asks for "the toned table sampled at the 9 steps". Ends are exact (steps 0 and 8 are the table's first and last entries). | — |
 | Fonts from Fontsource 5.3.0: Figtree **variable** (one file per subset, weights 300–900) and Fragment Mono 400 (review 1) | Static Figtree weights | One file covers every weight used (400, 600), so preloading one Figtree file is enough. Fragment Mono only comes in 400. | — |
 | Fonts preloaded: Figtree Latin and Fragment Mono Latin (the Latin Extended files load only if a character needs them) | Preload all four | Those are the two faces above the fold for English text. | Non-Latin zone names becoming common. |
 | Fragment Mono for hour labels, column dates, the zone label and the debug line; Figtree for everything else, including the period label (review 2). Tabular figures on the mono text plus the period label, day numbers, the date picker and offsets | Mono everywhere numbers appear | Matches the reviews. The debug line is code, so mono reads better. | — |
@@ -325,3 +393,40 @@ Anything not checked against current documentation is marked **(unverified)**.
 | Renamed from time. to freetime. (user review), with the name locked: one constant (`SITE_HOST`), the route in `wrangler.toml`, and a test that fails if the name appears anywhere else in code. Code identifiers carry no name (`SiteApp`, `SiteHead`, `site.theme`), tests use `example.test`, and the spec is `SPEC.md`. No redirect from the old address. | free., busy., avail., when., cal.; keep time. | "time" collided with other subdomains. freetime. says what the site shows and matches the calendar's own name ("Maxence's free time"). The site had no users yet, so the old address and stored theme keys were dropped rather than forwarded or migrated. | — |
 | Day window as minutes after midnight, `[DAY_START, DAY_END)`, with `DAY_END = 1440` meaning the midnight that ends the day; it replaces `START_HOUR` | "HH:MM" strings; leave unset for whole days | "24:00" isn't a clock time, but as an exclusive end it needs no special case. Whole days are just 0 and 1440, so there's nothing to leave unset. Day cells count only the window, otherwise a free night would make a busy day look free. Tests run with whole days (an app option, like the feed fetcher), so midnight and clock-change behaviour stay covered; `test/day-window.test.ts` checks 08:00–midnight. | — |
 | Contact: icon only, with the medium's name for screen readers; the link text is the address (`github.com/MutantCacti`), and Discord shows and copies the username | Visible names | Maxence's review. The icons use the muted text colour and a thinner stroke (1.5). | — |
+| Accounts are a second Worker (`wrangler.accounts.toml`, `src/accounts/`), on the same host split by path; the main Worker moved from a custom domain to the zone route `freetime.mutantcacti.com/*` | A second subdomain; accounts inside the main Worker | `SPEC.md` keeps the main site read-only forever; one host keeps one name (`SITE_HOST`), and the accounts pages load the main site's own `/css` and `/js` files. More specific routes win, so the accounts paths go to the accounts Worker **(unverified until the first deploy)**. | Route precedence not behaving as documented. |
+| Both Workers render through the same `Document` shell and load the same four stylesheets and two scripts; account styles live in `app.css` | An accounts stylesheet | Maxence's requirement: one look, one source. Tests check both Workers' pages load exactly the same files. | — |
+| Passwords: PBKDF2-SHA-256, 100,000 iterations, 16-byte salt, the count stored with the hash; sessions: a random 32-byte `__Host-session` cookie, only its SHA-256 stored, 30 days, extended at most daily | bcrypt or argon2 in WASM; JWT sessions | WebCrypto only, no dependencies, and 100,000 is the most Workers allows **(unverified)**. Stored session hashes mean a database leak signs nobody in, and signing out really ends a session. | Workers raising the PBKDF2 limit: raise `PBKDF2_ITERATIONS`. |
+| Every POST must carry the site's own `Origin`; cookies are `SameSite=Lax` | A token in every form | Stops cross-site posts with no hidden fields to maintain. | Browsers that send no `Origin` on same-origin posts (none current). |
+| Emailed links open a page with a button; the button does the work | The link does it on open | Mail scanners open links; a GET that confirms or resets would be used up before the person sees it. | — |
+| Limits are counted in a D1 table (`attempts`), keyed by hashed email or by IP | Workers Rate Limiting | Testable in the Workers pool with no extra binding, and exact per window. | Heavy traffic: move to the Rate Limiting binding. |
+| An address that's never confirmed is free again after 24 hours | Hold it forever | Nobody can block someone else's address by signing up with it. | — |
+| Profiles show name and picture at every visibility level (with bio and busy times when private) | Hide the picture when private | A profile with a name but no face reads as broken; the picture is chosen to be seen. | Maxence preferring pictures hidden when private. |
+| `npm run dev:accounts` prints emails to the terminal | Send real email in dev | Dev works offline and without a Resend key; production always uses Resend. | — |
+| One calendar renderer for both Workers (`src/calendar-page.tsx`), given a busy-time loader; `Links` carry a base path ("/", "/@<username>" or "/u/<id>"), and the main site's no-JS time-zone page returns to a profile with `back` (only `/u/<id>` is accepted) | A copy of the calendar page for profiles | Profiles show exactly the main site's views, and a fix to one is a fix to both. The main site's output is unchanged (its tests didn't move). | — |
+| A user's calendars are cached like the main site's feed (fresh 5 minutes, saved copy kept 7 days for failures), and one that can't be loaded at all shows the error panel | Cache busy blocks only; skip the broken calendar | Same code and behaviour as the main site. Skipping it would show that calendar's busy time as free. | Calendars that fail often: show the others with a warning instead. |
+| Calendar addresses are encrypted with AES-256-GCM under a key derived (HKDF) from `ACCOUNTS_KEY`, a fresh IV each; the address is checked once on save and never shown again | Store them plainly; show them masked | A secret iCal address is as good as the calendar itself. | — |
+| Pictures are recognised by their first bytes (PNG, JPEG, WebP), stored in R2 under a random key and served with a cache-forever URL that changes on each upload | Trust the file name or type; resize on upload | A file named `.png` can be anything; sniffing refuses the rest. Resizing needs an image service, and the circle is drawn by CSS. | Large pictures slowing profiles: add resizing. (Superseded: pictures are now decoded and resized in the Worker, and WebP is refused; see below.) |
+| Users choose their profile's colour map from five presets: parula (the default and the main site's), viridis, cividis, magma, plasma; each source table goes through the same OKLCH toning as parula | Free choice of colours; more presets (inferno, turbo) | The toning keeps lightness monotonic and in the same range, so the dither, dot-tone and contrast rules hold for every preset (tests loop over all of them). Inferno is close to magma; turbo isn't perceptually uniform. | Someone wanting a map not on the list. |
+| The choice is a `users.palette` column (migration 0003) with a CHECK on the five names, default `parula`; the form refuses unknown names with a message, and a form that leaves the field out keeps the current map | A separate settings table; silently fall back to parula | One value per user; the CHECK keeps the database honest even if a bug slips past the form. | — |
+| `/css/calendar.css` carries every preset's variables, scoped by `data-palette="<name>"` (on `<html>` for a profile, on a swatch in the account form); parula sets no attribute | Inline styles; a stylesheet per preset | The CSP forbids inline styles, and the four-stylesheet list stays as it is. Custom properties inherit, so the calendar and its colour bar follow one attribute. | — |
+| A profile is drawn in its owner's map for every visitor, signed in or not | The viewer's own map everywhere they look | It's the owner's page; the map is part of how they present it. | Maxence meaning the viewer's choice should follow them. |
+| On phones, Add friend (and Accept, Sign up to add friend) is a full-width pill fixed at the bottom of the screen; Request sent and Friends are quiet lines in the profile card | Keep it in the card everywhere | The bottom of the screen is where a thumb rests, and it's the one action a visitor came to take. The page leaves room so it never covers the calendar. | — |
+| Below 640 px the profile card is compact and the bio is cut to two lines | Show the whole bio | The card sits above the calendar in a fixed-height page; a 280-character bio would take a third of a small screen. The full bio is on wider screens. | Maxence wanting the whole bio on phones (then: let the card scroll away). |
+| One developer command, `./ft` (`DEV-SPEC.md`), a Node script with no dependencies | Raw npm and wrangler commands; a shell script | One flow with checks: deploy stops on a dirty tree, failing tests, a missing setup step or an unsafe migration, and never rolls back by itself. | — |
+| Production secrets in a gitignored `.secrets`, sent with each deploy on stdin (`--secrets-file /dev/stdin`) | `wrangler secret put` by hand | Code and its secrets go live in one version; values never appear in arguments or output **(unverified that a real upload reads `/dev/stdin`; the dry run does)**. | A real deploy rejecting it. |
+| Pictures are decoded in the Worker and only a 128 × 128 PNG of the centre square is stored (area-averaged in linear light); the upload never is | Store the upload; 256 × 256 | Bounds storage and what's served. Compared at 1×, 2× and 3× in the 36–44 px buttons where pictures show, 128 and 256 look the same. A typical photo stores at 15–30 KB. | Pictures shown larger than about 64 px. |
+| PNG is decoded with DecompressionStream and the scanline filters; JPEG by its block averages (DC only, 1/8 scale, already area-averaged) when the short side is at least 1024 px, otherwise in full by a vendored jpeg-js 0.4.4 (BSD-3, at most 4 MP) | An npm dependency; a decoder written from scratch for every case | This checkout shares node_modules, so nothing is installed; jpeg-js is well known and pinned in `src/vendor/`. Block averages decode a 12 MP photo in about 30 ms with little memory. | — |
+| WebP is no longer accepted | Accept it and store it unbounded | There's no WebP decoder here, and a picture that can't be decoded can't be resized. | Maxence wanting WebP back (then: a WebP decoder). |
+| The accent is the picture blurred to one pixel: Kawase passes (down and up kernels overlaid: centre 1/4, diagonals 7/48, axial taps 1/24) at Intel's offsets 0, 1, 2, 2, 3, 3, 4 (7 passes from 128), then clamped in OKLCH: hue kept, chroma at most 0.2, luminance moved into 0.14–0.26 | Average in OKLab and stop halfway; the most colourful region | Maxence's call: blur down to about one pixel and take it. The luminance band keeps 3:1 on both themes' page colours and 4.5:1 with black or white text. | Pictures whose colours cancel out (a teal background behind an orange shirt) give a greyish accent. |
+| The accent reaches the page as a per-user stylesheet, `/u/<id>/accent.css?v=<version>-<map>-<accent or none>`, setting `--user-accent` on `[data-accent-user="<id>"]`; it's the only stylesheet after the shared four | An inline style; a style attribute | The CSP is `style-src 'self'` with no `'unsafe-inline'`. What it depends on, in the query, makes the sheet cacheable for good. | — |
+| What's drawn is the stored accent snapped to the profile's colour map, per theme: the map's colour (its 64-colour toned table, not the calendar's six cells, so pictures don't collapse onto a few colours; skipping the free end, short of busy step 1's place on the ramp; chroma ≥ 0.04) nearest its hue, slightly favouring colourful ones, then OKLCH lightness moved until it's 3:1 off that theme's page and surface (luminance ≥ 0.14 dark, ≤ 0.26 light). Grey (chroma < 0.03) or no picture: the hued map colour nearest the middle of the map, so cividis gives a colour, and so every verified profile has an accent sheet. The sheet sets `--user-accent`/`--user-on-accent` per theme and `--user-accent-dark`/`--user-accent-light` for both | The picture's colour as it is (round 2) | Maxence's redesign: the accent belongs with the calendar's colours. One-sided limits per theme let it be lighter in dark and darker in light than the old two-theme band. | A picture whose hue isn't in the map (blue on magma) gets the map's nearest, which can look unrelated. |
+| A profile card is marked by its owner's accent (its border and buttons), with no picture or initials circle of its own; the picture shows once per page, in the top bar: on a profile the owner's, right before the account and theme buttons ([menu] [picture] [account] [theme]), for every visitor; on the account page yours, in the header. The account button is always the icon. Profiles have the menu too, holding only Help | Initials or the user icon in a circle on the card; the picture beside the period label; no menu on profiles | Maxence's layout: the border already says whose card it is, and the picture sits with the account controls. The menu goes before the picture so only Account and the theme are to its right. Below 375 px row 1's round buttons are 40 px (not 44) so the zone button stays usable; below 340 px the zone button shows only its arrow. | — |
+| The user icon is two circles cut by a larger circle around the head, drawn as precomputed arcs | A clipPath or mask | No ids to keep unique when the icon appears more than once. | — |
+| After the blur, the accent's HSL saturation is raised: S' = S + (1 − S) × 0.42 (Maxence's pick, up from 0.35), fading in between S 0.03 and 0.12 so near-grey pictures stay grey; then the same contrast clamp | Leave the average as it is; a fixed saturation floor | A whole picture averaged to one pixel is greyer than it looks (teal behind orange came out grey). Tuned by eye on real photos (portrait, cat, coffee, rocket, motorcycle) and synthetic cases: colours read as the picture's, not neon. | Accents that look too loud. |
+| Steps sit on an S-curve (smoothstep) for both dots and colour: dither levels 0, 1, 2, 4, 6, 8, 10, 11, 12 at 9 steps (17 now: see the next rows); and each step's lightness is solved so the cell, dots included, reads exactly that far from free to busy, with each step's dot tone chosen for the clearest dots | A straight line, with dot tone by contrast alone | Maxence wanted more steps to read near the ends. And the old linear ramp went the wrong way where the dot tone flipped (in the light theme a fully busy cell looked less busy than a half-busy one). Now every map, theme and past/current gets steadily busier, tested. See docs/CHROMA.md. | Steps near the ends hard to tell apart. |
+| Sign-up signs you in at once; until the address is confirmed, the account page shows a notice with Send it again and the profile stays hidden | Confirm before you can sign in | Maxence's review: a confirm-first dead end felt broken. The profile is what other people see, so that's what waits for the confirmation. | — |
+| The time-zone reload (`head.js` adding `dtz`) never runs on `/account…` pages | Run it everywhere | Those pages are often the answer to a form post: reloading them lost the answer and showed the empty form again, which made sign-in look broken. | — |
+| Form fields: label, then hint, then the field, then any error; placeholders are short nouns or examples ("Your name", "you@example.com") | Hints below the field | Maxence's review: everything that explains a field sits above it. | — |
+| WebP stays refused, after trying it: libwebp compiled to WebAssembly (@jsquash/webp 1.5.0) decoded lossy, lossless and alpha WebP in Workers (about 260 ms for 1.75 MB, +135 KiB of bundle), but its libwebp is 1.1.0, older than the fix for CVE-2023-4863 (a heap overflow in lossless decoding, fixed in 1.3.2) | Accept WebP with that decoder | Untrusted uploads shouldn't go through a decoder with a known memory-safety bug, even inside WebAssembly. The vendored files are removed, so it isn't in the bundle. | A WebAssembly build with libwebp 1.3.2 or later (then: restore commit 9f14a33 with the new build). |
+| 17 steps instead of 9, with the same smoothstep easing; dither levels stay 0–12 (0, 1, 1, 1, 2, 3, …, 11, 11, 11, 12), so near the ends neighbouring steps share a level and differ by colour; after solving, a step that doesn't read busier than the one before is nudged until it does | 9 steps; raise the top dither level to use all 16 Bayer cells | Maxence wanted a gentler curve with more resolution. A fully busy cell stays 12 of 16 (never solid, per the spec). Monotonic averaged lightness and 1.4:1 dots still hold at 17, both tested. | Neighbouring steps too alike to be worth it. |
+| 6 steps, one colour and one dot layer each (0, 2, 4, 6, 9, 12), instead of 17 colour steps sharing six layers; each step keeps its layer's tone from the approved sketch; dark-theme cell colours keep at least 0.25 OKLCH lightness | 17 colour steps with six dot patterns (rounds 5–6) | Maxence: "There are still 17 levels to the dither/colormap when there should be 6." One level per pattern is what the sketch showed. Monotonic averaged lightness and 1.4:1 dots hold for every map and theme, tested. | Too coarse to tell a slightly busy slot from a half-busy one (labels still give the percentage). |

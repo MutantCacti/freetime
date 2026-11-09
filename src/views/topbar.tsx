@@ -1,7 +1,7 @@
 import type { Links } from "../links";
 import type { Navigation, Period, View, ViewParams, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, CogIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
@@ -50,6 +50,10 @@ export interface TopBarProps {
   /** Current view parameters, carried to Help, Contact, Download and /tz. */
   here: ViewParams;
   exportParams: Record<string, string>;
+  /** Maxence's pages (Download .ics, Contact me) in the settings. Off on profiles, which aren't Maxence's calendar. */
+  pages?: boolean;
+  /** Where the cog goes without JS: /help on the main site, /account on the accounts Worker. */
+  settingsHref: string;
 }
 
 export function TopBar(p: TopBarProps) {
@@ -87,7 +91,7 @@ export function TopBar(p: TopBarProps) {
         class="pill tz-button"
         id="tz-button"
         data-tb="tz"
-        href={p.links.href("/tz", p.here)}
+        href={p.links.href("/tz", p.links.base === "/" ? p.here : { ...p.here, back: p.links.base })}
         aria-label={p.zone.spoken}
         aria-haspopup="listbox"
         aria-expanded="false"
@@ -102,23 +106,17 @@ export function TopBar(p: TopBarProps) {
       <button type="button" class="pill round tb-indicator" id="notice-indicator" data-tb="indicator" hidden aria-label="Show notice">
         <WarningIcon />
       </button>
-      {/* PRINTED OUTPUT: topbar / menu button accessible name */}
-      <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
-        <MenuIcon />
-      </button>
-      <div class="tb-menu-items" id="tb-menu-items" popover="auto">
-        {/* PRINTED OUTPUT: topbar / download, contact, help */}
-        <a class="pill" data-tb="download" data-dialog="dlg-download" href={p.links.href("/export", p.exportParams)}>Download .ics</a>
-        <a class="pill" data-tb="contact" data-dialog="dlg-contact" href={p.links.href("/contact", p.here)}>Contact me</a>
-        <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
-      </div>
-      <ThemeButton tb />
+      {/* The only menu: the settings modal (app.js). Without JS, a page with the same things. */}
+      {/* PRINTED OUTPUT: topbar / settings button accessible name */}
+      <a class="pill round tb-cog" id="tb-cog" data-tb="settings" data-settings="dlg-settings" href={p.settingsHref} aria-label="Settings" aria-haspopup="dialog">
+        <CogIcon />
+      </a>
       </div>
     </header>
   );
 }
 
-function ThemeButton({ tb }: { tb?: boolean }) {
+export function ThemeButton({ tb }: { tb?: boolean }) {
   return (
     // PRINTED OUTPUT: topbar / theme switcher accessible name (JS updates it)
     <button type="button" class="pill round tb-theme theme-toggle" data-tb={tb ? "theme" : undefined} hidden aria-label="Switch theme">

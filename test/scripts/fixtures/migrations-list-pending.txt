@@ -1,0 +1,16 @@
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+
+ ⛅️ wrangler 4.154.0 (update available 4.158.0)
+───────────────────────────────────────────────
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+Migrations to be applied:
+┌───────────────────┐
+│ Name              │
+├───────────────────┤
+│ 0001_accounts.sql │
+└───────────────────┘

@@ -5,9 +5,11 @@ import type { ViewParams } from "../state";
 import { ColourBar } from "./calendar";
 import { LiveRegions, type Notice, InlineNotice, NoticeLayer } from "./notices";
 import { ContactContent, DownloadContent, type DownloadProps } from "./panels";
+import type { PaletteName } from "../parula";
 import { Document, pageTitle } from "./layout";
 import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
+import { SiteSettings } from "./settings";
 
 export interface CalendarPageProps {
   title: string;
@@ -19,11 +21,19 @@ export interface CalendarPageProps {
   body: Child;
   showColourBar: boolean;
   download: DownloadProps;
+  /** Above the calendar: a profile's card on the accounts Worker. */
+  intro?: Child;
+  /** A profile's colour map (its owner's choice). */
+  palette?: PaletteName;
+  /** A profile's accent stylesheet (its owner's), if they have one. */
+  accentSheet?: string | string[];
+  /** The settings modal's contents; the main site's when omitted. */
+  settings?: Child;
 }
 
 export function CalendarPage(p: CalendarPageProps) {
   return (
-    <Document title={p.title} bodyClass="page-calendar">
+    <Document title={p.title} bodyClass="page-calendar" palette={p.palette} accentSheet={p.accentSheet}>
       {/* PRINTED OUTPUT: calendar / skip link */}
       <a class="skip-link" href="#main">Skip to calendar</a>
       <TopBar {...p.topbar} />
@@ -31,6 +41,7 @@ export function CalendarPage(p: CalendarPageProps) {
         {/* PRINTED OUTPUT: calendar / region name */}
         <section class="cal-wrap" aria-label="Calendar">
           <NoticeLayer sticky={p.sticky} />
+          {p.intro}
           {p.inline.map((n) => (
             <InlineNotice notice={n} />
           ))}
@@ -39,6 +50,9 @@ export function CalendarPage(p: CalendarPageProps) {
         </section>
         {p.showColourBar ? <ColourBar /> : null}
       </main>
+      {p.settings ?? <SiteSettings links={p.topbar.links} here={p.topbar.here} exportParams={p.topbar.exportParams} />}
+      {p.topbar.pages === false ? null : (
+        <>
       <dialog class="dialog" id="dlg-download" aria-labelledby="dlg-download-title">
         <div class="dialog-head">
           {/* PRINTED OUTPUT: download dialog / title */}
@@ -68,6 +82,8 @@ export function CalendarPage(p: CalendarPageProps) {
           <ContactContent />
         </div>
       </dialog>
+        </>
+      )}
       <dialog class="dialog dialog-wide" id="dlg-help" aria-labelledby="dlg-help-title">
         <div class="dialog-head">
           {/* PRINTED OUTPUT: help dialog / title */}
@@ -158,6 +174,7 @@ export function TzPage(p: TzPageProps) {
       <form class="tz-form" method="get" action="/tz">
         <input type="hidden" name="apply" value="1" />
         {Object.entries(p.here).map(([k, v]) => (v ? <input type="hidden" name={k} value={v} /> : null))}
+        {p.links.base !== "/" ? <input type="hidden" name="back" value={p.links.base} /> : null}
         {p.links.zoneParams.dtz ? <input type="hidden" name="dtz" value={p.links.zoneParams.dtz} /> : null}
         {/* PRINTED OUTPUT: time zone page / field accessible name */}
         <select name="tz" id="tz-select" aria-label="Time zone">
@@ -238,9 +255,9 @@ export function HelpContent({ links, here, level }: { links: Links; here: ViewPa
           <ul>
             <li>Change your view with the view buttons in the top left.</li>
             <li>Navigate with the 'Today' button and the arrows.</li>
-            <li>Download a precise .ics file of my busy times.</li>
+            <li>Download a precise .ics file of my busy times, from Settings.</li>
             <li>See my public contact details are shown under 'Contact me'.</li>
-            <li>Change the theme in the top right.</li>
+            <li>Change the theme in Settings: the cog in the top right.</li>
           </ul>
         </section>
 

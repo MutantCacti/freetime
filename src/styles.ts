@@ -2,21 +2,21 @@
 // Generating it keeps the colour table and the dither levels in one place.
 
 import { RANGE_COLUMN_MAX_DAYS } from "./config";
-import { DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
+import { DITHER_LAYERS, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
-import { THEME_PALETTES, type Theme, toneFor } from "./parula";
+import { PALETTES, PALETTE_NAMES, toneFor, type PaletteName, type Theme } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
 }
 
-/** The SVG for "/img/dither/<level><tone>.svg", or null if there is no such level. */
+/** The SVG for "/img/dither/<level><tone>.svg", or null if that level isn't one of the dotted layers. */
 export function ditherAsset(name: string): string | null {
   const m = /^(\d{1,2})([kw])\.svg$/.exec(name);
   if (!m) return null;
   const level = Number(m[1]);
-  if (level <= DITHER_MIN_LEVEL || level > DITHER_MAX_LEVEL) return null;
+  if (level === DITHER_MIN_LEVEL || !DITHER_LAYERS.includes(level)) return null;
   return ditherSvg(level, m[2] as "k" | "w");
 }
 
@@ -26,19 +26,40 @@ export function calendarCss(): string {
   if (css) return css;
   const out: string[] = [];
   // Per-theme variables for each step: its colour, its past colour, and its dots.
-  const vars = (theme: Theme) => {
-    const { colours, past } = THEME_PALETTES[theme];
+  const vars = (name: PaletteName, theme: Theme) => {
+    const { colours, past, tones } = PALETTES[name][theme];
     return colours
       .map((c, i) => {
         const level = ditherLevelForStep(i);
-        const dots = level === 0 ? "none" : `url(${ditherAssetPath(level, toneFor(c))})`;
+        const dots = level === 0 ? "none" : `url(${ditherAssetPath(level, tones[i]!)})`;
         return `--cell-${i}:${c};--cell-past-${i}:${past[i]};--dots-${i}:${dots}`;
       })
       .join(";");
   };
+  // Each map's free colour (step 0) in both themes, whatever the theme is: the dark/light switch
+  // paints its halves with them. Defined once per map, outside the theme blocks, so the light
+  // theme doesn't override them. --map-on-free-* is black or white for text on each.
+  const free = (name: PaletteName) =>
+    (["dark", "light"] as const)
+      .map((t) => {
+        const c = PALETTES[name][t].colours[0]!;
+        return `--map-free-${t}:${c};--map-on-free-${t}:${toneFor(c) === "k" ? "var(--raw-black)" : "var(--raw-white)"}`;
+      })
+      .join(";");
   // Same structure as tokens.css: dark by default, light only when chosen.
-  out.push(`:root{${vars("dark")}}`);
-  out.push(`:root[data-theme="light"]{${vars("light")}}`);
+  // Parula is the default map.
+  out.push(`:root{${vars("parula", "dark")};${free("parula")}}`);
+  out.push(`:root[data-theme="light"]{${vars("parula", "light")}}`);
+  // Each preset, scoped by data-palette: on <html> for a whole profile page,
+  // or on any element (the swatches in the account form). Custom properties
+  // inherit, so everything inside, the colour bar included, uses that map.
+  for (const name of PALETTE_NAMES) {
+    const sel = `[data-palette="${name}"]`;
+    out.push(`${sel}{${vars(name, "dark")};${free(name)}}`);
+    out.push(`:root[data-theme="light"]${sel},:root[data-theme="light"] ${sel}{${vars(name, "light")}}`);
+  }
+  out.push(".map-free-dark{background-color:var(--map-free-dark);color:var(--map-on-free-dark)}");
+  out.push(".map-free-light{background-color:var(--map-free-light);color:var(--map-on-free-light)}");
   const tile = DOT_PX * 4;
   for (let i = 0; i < LEVELS; i++) {
     out.push(`.p${i}{background-color:var(--cell-${i});background-image:var(--dots-${i});background-size:${tile}px ${tile}px}`);

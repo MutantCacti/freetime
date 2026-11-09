@@ -1,8 +1,8 @@
 import { calendarCss } from "../src/styles";
 import { describe, expect, it } from "vitest";
-import { BAYER_4X4, DITHER_MAX_LEVEL, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg } from "../src/dither";
+import { BAYER_4X4, DITHER_LAYERS, DITHER_MAX_LEVEL, assertDitherLayers, DITHER_MIN_LEVEL, assertDitherConstants, cellClasses, ditherLevel, ditherLevelForStep, ditherSvg, stepPosition } from "../src/dither";
 import { LEVELS, busyStep } from "../src/levels";
-import { THEME_PALETTES, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch } from "../src/parula";
+import { PALETTES, PALETTE_NAMES, PALETTE_SOURCES, THEME_PALETTES, isPaletteName, toneFor, PALETTE, PALETTE_PAST, PAST_CHROMA, PALETTE_CHROMA, PALETTE_L_MAX, PALETTE_L_MIN, PARULA_SOURCE, PARULA_TONED, rgbToOklch, toneTable, DOT_TONES, DARK_FLOOR_L } from "../src/parula";
 
 describe("dither", () => {
   it("uses the spec's range", () => {
@@ -10,15 +10,31 @@ describe("dither", () => {
     expect(DITHER_MAX_LEVEL).toBe(12);
   });
 
-  it("maps each step linearly onto the level range", () => {
+  it("gives each of the six steps its own layer, one to one", () => {
     expect(ditherLevel(0)).toBe(0);
     expect(ditherLevel(0.5)).toBe(6);
     expect(ditherLevel(1)).toBe(12);
     for (let step = 0; step < LEVELS; step++) {
-      expect(ditherLevelForStep(step)).toBe(Math.round(DITHER_MIN_LEVEL + (step / (LEVELS - 1)) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL)));
+      const t = step / (LEVELS - 1);
+      expect(stepPosition(step)).toBeCloseTo(t * t * (3 - 2 * t), 12);
     }
-    expect(Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s))).toEqual([0, 2, 3, 5, 6, 8, 9, 11, 12]);
+    const levels = Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s));
+    expect(levels).toEqual([0, 2, 4, 6, 9, 12]);
+    // Free has none, any busy step has dots, and every step has more than the one before.
+    for (let step = 1; step < LEVELS; step++) expect(levels[step]).toBeGreaterThan(levels[step - 1]!);
   });
+
+  it("has six dot layers, none included, and every one is used", () => {
+    expect(DITHER_LAYERS).toEqual([0, 2, 4, 6, 9, 12]);
+    const used = new Set(Array.from({ length: LEVELS }, (_, s) => ditherLevelForStep(s)));
+    expect([...used].sort((a, b) => a - b)).toEqual([...DITHER_LAYERS]);
+  });
+
+  it.each([[[1, 2, 12]], [[0, 4, 2, 12]], [[0, 2, 11]], [[0, 12]], [[0, 2.5, 12]]])("rejects invalid layers %j", (layers) => {
+    expect(() => assertDitherLayers(layers, 0, 12)).toThrow(/Invalid dither layers/);
+  });
+
+  it("accepts valid layers", () => expect(() => assertDitherLayers([0, 2, 12], 0, 12)).not.toThrow());
 
   it("a fully busy cell is at DITHER_MAX_LEVEL and never solid", () => {
     expect(ditherLevel(1)).toBe(DITHER_MAX_LEVEL);
@@ -56,23 +72,26 @@ describe("dither", () => {
 });
 
 describe("levels", () => {
-  it("has 9 steps", () => expect(LEVELS).toBe(9));
+  it("has 6 steps: free and five busy", () => expect(LEVELS).toBe(6));
 
-  it("quantises busy fractions into steps 0, 1/8, … 1", () => {
+  it("quantises busy fractions into six steps: free, four in between, fully busy", () => {
     expect(busyStep(0)).toBe(0);
-    expect(busyStep(1 / 8)).toBe(1);
-    expect(busyStep(0.5)).toBe(4);
-    expect(busyStep(0.55)).toBe(4);
-    expect(busyStep(0.57)).toBe(5);
-    expect(busyStep(7 / 8)).toBe(7);
-    expect(busyStep(1)).toBe(8);
+    expect(busyStep(0.001)).toBe(1);
+    expect(busyStep(0.29)).toBe(1);
+    expect(busyStep(0.3)).toBe(2);
+    expect(busyStep(0.49)).toBe(2);
+    expect(busyStep(0.5)).toBe(3);
+    expect(busyStep(0.69)).toBe(3);
+    expect(busyStep(0.7)).toBe(4);
+    expect(busyStep(0.999)).toBe(4);
+    expect(busyStep(1)).toBe(5);
     expect(busyStep(-1)).toBe(0);
-    expect(busyStep(2)).toBe(8);
+    expect(busyStep(2)).toBe(5);
   });
 
   it("never shows busy time as free, or part-free time as fully busy", () => {
     expect(busyStep(0.001)).toBe(1);
-    expect(busyStep(0.999)).toBe(7);
+    expect(busyStep(0.999)).toBe(LEVELS - 2);
   });
 
   it("colour and dither use the same step", () => {
@@ -91,7 +110,11 @@ describe("palette", () => {
     expect(PARULA_TONED.length).toBe(64);
     expect(PALETTE.length).toBe(LEVELS);
     expect(PALETTE[0]).toBe(PARULA_TONED[0]);
-    expect(PALETTE[LEVELS - 1]).toBe(PARULA_TONED[63]);
+    // The fully busy end keeps the table's hue; its lightness may move just enough for its dots to show.
+    const [L, , h] = rgbToOklch(rgb(PALETTE[LEVELS - 1]!));
+    const [L0, , h0] = rgbToOklch(rgb(PARULA_TONED[63]!));
+    expect(Math.abs(Math.atan2(Math.sin(h - h0), Math.cos(h - h0)))).toBeLessThan(0.05);
+    expect(Math.abs(L - L0)).toBeLessThan(0.2);
   });
 
   it("compresses lightness into [L_MIN, L_MAX], reduces chroma, and keeps the hue path", () => {
@@ -118,31 +141,118 @@ describe("palette", () => {
     });
   });
 
-  it("light mode inverts the colours, not the dither: free is yellow, busy is dark", () => {
+  it("light mode inverts the map, not the dither: free is yellow, busy is dark", () => {
     const { light, dark } = THEME_PALETTES;
     expect(dark.colours).toEqual(PALETTE);
+    expect(dark.past).toEqual(PALETTE_PAST);
+    // Free is the map's own end colour in both themes, swapped; the steps between follow the map backwards.
+    expect(light.colours[0]).toBe(PARULA_TONED[63]);
+    expect(dark.colours[0]).toBe(PARULA_TONED[0]);
     for (let i = 0; i < LEVELS; i++) {
-      expect(light.colours[i]).toBe(PALETTE[LEVELS - 1 - i]);
-      expect(light.past[i]).toBe(PALETTE_PAST[LEVELS - 1 - i]);
+      const [, C, h] = rgbToOklch(rgb(light.colours[i]!));
+      const [, C2, h2] = rgbToOklch(rgb(dark.colours[LEVELS - 1 - i]!));
+      if (C > 0.03 && C2 > 0.03) expect(Math.abs(Math.atan2(Math.sin(h - h2), Math.cos(h - h2))), `step ${i}`).toBeLessThan(0.1);
     }
     const css = calendarCss();
     const darkBlock = /^:root\{([^}]*)\}/m.exec(css)![1]!;
     const lightBlock = /:root\[data-theme="light"\]\{([^}]*)\}/.exec(css)![1]!;
-    expect(lightBlock).toContain(`--cell-0:${PALETTE[LEVELS - 1]}`);
-    expect(lightBlock).toContain(`--cell-${LEVELS - 1}:${PALETTE[0]}`);
+    expect(lightBlock).toContain(`--cell-0:${light.colours[0]}`);
     expect(darkBlock).toContain(`--cell-0:${PALETTE[0]}`);
-    // Same dither level per step in both themes; the tone follows the colour.
+    // Same dither level per step in both themes; each theme has its own dot tone per step.
     for (let i = 0; i < LEVELS; i++) {
       const level = ditherLevelForStep(i);
       const dots = (block: string) => new RegExp(`--dots-${i}:([^;]*)`).exec(block)![1];
-      for (const [block, colour] of [[lightBlock, light.colours[i]!], [darkBlock, dark.colours[i]!]] as const) {
-        expect(dots(block)).toBe(level === 0 ? "none" : `url(/img/dither/${level}${toneFor(colour)}.svg)`);
+      for (const [block, tone] of [[lightBlock, light.tones[i]!], [darkBlock, dark.tones[i]!]] as const) {
+        expect(dots(block)).toBe(level === 0 ? "none" : `url(/img/dither/${level}${tone}.svg)`);
+      }
+    }
+  });
+});
+
+describe("palette presets", () => {
+  const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
+
+  it("offers parula first, as the default, and the map tables are 64 entries", () => {
+    expect(PALETTE_NAMES[0]).toBe("parula");
+    expect(PALETTES.parula).toBe(THEME_PALETTES);
+    for (const name of PALETTE_NAMES) expect(PALETTE_SOURCES[name].length, name).toBe(64);
+    expect(isPaletteName("viridis")).toBe(true);
+    expect(isPaletteName("jet")).toBe(false);
+    expect(isPaletteName(undefined)).toBe(false);
+  });
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s: ends inside the lightness range; past keeps each step's lightness", (name) => {
+    const { dark, light } = PALETTES[name];
+    expect(dark.colours.length).toBe(LEVELS);
+    expect(rgbToOklch(rgb(dark.colours[0]!))[0]).toBeGreaterThanOrEqual(PALETTE_L_MIN - 0.005);
+    expect(rgbToOklch(rgb(dark.colours[LEVELS - 1]!))[0]).toBeLessThanOrEqual(PALETTE_L_MAX + 0.005);
+    for (const ramp of [dark, light]) {
+      for (let i = 0; i < LEVELS; i++) {
+        const [L, C] = rgbToOklch(rgb(ramp.colours[i]!));
+        const [Lp, Cp] = rgbToOklch(rgb(ramp.past[i]!));
+        expect(Lp).toBeCloseTo(L, 1);
+        expect(Cp).toBeLessThanOrEqual(C * PAST_CHROMA + 0.01);
       }
     }
   });
 
-  it("gets lighter from free to busy", () => {
-    const ls = PALETTE.map((h) => rgbToOklch(rgb(h))[0]);
-    for (let i = 1; i < ls.length; i++) expect(ls[i]!).toBeGreaterThan(ls[i - 1]!);
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s: keeps the sketch's dot tones, and the solve fits every rule with them", (name) => {
+    for (const theme of ["dark", "light"] as const) {
+      const ramp = PALETTES[name][theme];
+      expect(ramp.tones.join(""), theme).toBe(DOT_TONES[name][theme]);
+      expect(ramp.issues, theme).toEqual([]);
+    }
+  });
+
+  it("fits every step to its target, with nothing left over", () => {
+    for (const name of PALETTE_NAMES) for (const theme of ["dark", "light"] as const) expect(PALETTES[name][theme].issues, `${name} ${theme}`).toEqual([]);
+  });
+
+  it("dark-theme cell colours stay at or above the lightness floor, so every cell keeps its hue", () => {
+    for (const name of PALETTE_NAMES) {
+      const { colours } = PALETTES[name].dark;
+      for (let i = 1; i < LEVELS; i++) expect(rgbToOklch(rgb(colours[i]!))[0], `${name} step ${i}`).toBeGreaterThanOrEqual(DARK_FLOOR_L - 0.005);
+    }
+  });
+
+  it("each step keeps its layer's sketch tone: light dots on the dark theme's early steps", () => {
+    expect(DOT_TONES.parula).toEqual({ dark: "wwwkkw", light: "kkkkkk" });
+    for (const name of PALETTE_NAMES) {
+      expect(DOT_TONES[name].dark.slice(1, 3), name).toBe("ww");
+      expect(DOT_TONES[name].dark[5], name).toBe("w");
+      expect(DOT_TONES[name].light, name).toBe("kkkkkk");
+    }
+  });
+
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s: its free colour in both themes is in calendar.css for the theme switch, outside the theme blocks", (name) => {
+    const css = calendarCss();
+    const esc = name.replace(/[-]/g, "\\-");
+    const darkBlock = new RegExp(`^\\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const { dark, light } = PALETTES[name];
+    expect(darkBlock).toContain(`--map-free-dark:${dark.colours[0]};--map-on-free-dark:var(--raw-white)`);
+    expect(darkBlock).toContain(`--map-free-light:${light.colours[0]};--map-on-free-light:var(--raw-black)`);
+    expect(css.match(/--map-free-dark:/g)?.length).toBe(1 + PALETTE_NAMES.length);
+    for (const line of css.split("\n").filter((l) => l.startsWith(':root[data-theme="light"]'))) expect(line).not.toContain("--map-free");
+    expect(css).toContain(".map-free-dark{background-color:var(--map-free-dark);color:var(--map-on-free-dark)}");
+    expect(css).toContain(".map-free-light{background-color:var(--map-free-light);color:var(--map-on-free-light)}");
+  });
+
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s has its own scoped block in calendar.css, in both themes", (name) => {
+    const css = calendarCss();
+    const esc = name.replace(/[-]/g, "\\-");
+    const darkBlock = new RegExp(`^\\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const lightBlock = new RegExp(`^:root\\[data-theme="light"\\]\\[data-palette="${esc}"\\],:root\\[data-theme="light"\\] \\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const { dark, light } = PALETTES[name];
+    for (let i = 0; i < LEVELS; i++) {
+      const level = ditherLevelForStep(i);
+      expect(darkBlock).toContain(`--cell-${i}:${dark.colours[i]};`);
+      expect(lightBlock).toContain(`--cell-${i}:${light.colours[i]};`);
+      const dots = (block: string) => new RegExp(`--dots-${i}:([^;}]*)`).exec(block)![1];
+      for (const [block, tone] of [[lightBlock, light.tones[i]!], [darkBlock, dark.tones[i]!]] as const) {
+        expect(dots(block)).toBe(level === 0 ? "none" : `url(/img/dither/${level}${tone}.svg)`);
+      }
+    }
   });
 });
+

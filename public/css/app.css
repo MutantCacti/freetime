@@ -52,6 +52,9 @@ code { font-family: var(--font-mono); }
 }
 .pill:hover { background: var(--color-surface-2); }
 .pill.round { width: 2.25rem; padding: 0; font-size: 1.15rem; }
+/* Drawn small, tapped big: a round pill's tap area is 44 px, whatever it's drawn at. */
+.pill.round { position: relative; }
+.pill.round::before { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); border-radius: 50%; }
 .pill-primary { background: var(--color-link); border-color: var(--color-link); color: var(--color-on-accent); }
 .pill-primary:hover { background: var(--color-link); filter: brightness(1.08); }
 .pill[aria-disabled="true"] { color: var(--color-text-muted); cursor: default; background: var(--color-surface); }
@@ -68,11 +71,11 @@ code { font-family: var(--font-mono); }
 .topbar {
   position: sticky; top: 0; z-index: 30;
   display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
-  grid-template-areas: "left centre right"; align-items: center; gap: var(--space-2) var(--space-4);
-  padding: var(--space-2) var(--space-3);
+  grid-template-areas: "left centre right"; align-items: center; gap: 14px;
+  padding: 18px 16px;
   background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
 }
-.tb-left, .tb-centre, .tb-right { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.tb-left, .tb-centre, .tb-right { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tb-left { grid-area: left; justify-self: start; }
 .tb-centre { grid-area: centre; justify-self: stretch; justify-content: center; }
 .tb-right { grid-area: right; justify-self: end; }
@@ -90,12 +93,9 @@ code { font-family: var(--font-mono); }
 .tz-button:hover { color: var(--color-text); }
 .tz-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .icon-step { width: 16px; height: 16px; }
-.tb-menu { display: none; }
-.tb-menu-items {
-  /* Inline on wide screens: overrides the popover's hidden state. */
-  display: flex; gap: var(--space-2); position: static; inset: auto; margin: 0; padding: 0;
-  border: 0; background: none; color: inherit; overflow: visible; width: auto; height: auto;
-}
+/* The cog: the only menu. Drawn as a 2.25rem pill; its tap area is at least 44 px (::before). */
+.tb-cog { position: relative; flex: none; }
+.tb-cog .icon { width: 18px; height: 18px; }
 .tb-indicator { color: var(--color-warning); border-color: var(--color-warning); }
 .tb-indicator.sev-error { color: var(--color-error); border-color: var(--color-error); }
 
@@ -329,6 +329,272 @@ code { font-family: var(--font-mono); }
 .copy-btn[data-state="fail"] .copy-fail { visibility: visible; }
 .copy-btn[data-state="fail"] { color: var(--color-error); border-color: var(--color-error); }
 
+/* ---------------------------------------------------------------- forms (account pages, ACCOUNTS-SPEC.md) */
+/* The same controls as the rest of the site; the accounts Worker has no stylesheet of its own. */
+.form { display: grid; gap: var(--space-3); margin: var(--space-4) 0; max-width: 28rem; }
+.field { display: grid; gap: var(--space-1); margin: 0; padding: 0; border: 0; min-width: 0; }
+.field > label, .field > legend { font-weight: 600; font-size: 0.9rem; padding: 0; }
+.field input, .field select, .field textarea {
+  width: 100%; min-height: 2.25rem; padding: 0.3rem 0.6rem;
+  font: inherit; font-size: 0.9rem; color: var(--color-text); background: var(--color-bg);
+  border: 1px solid var(--color-border); border-radius: var(--radius);
+}
+.field textarea { resize: vertical; }
+.field [aria-invalid="true"] { border-color: var(--color-error); }
+.field.choice label { display: flex; gap: var(--space-2); align-items: baseline; font-weight: 400; font-size: 0.9rem; margin-top: var(--space-1); }
+.field.choice input { width: auto; min-height: 0; }
+.field-hint { margin: 0; color: var(--color-text-muted); font-size: 0.85rem; }
+.field-error { margin: 0; color: var(--color-error); font-size: 0.85rem; }
+.form-message { margin: var(--space-3) 0; padding: var(--space-2) var(--space-3); border-left: 4px solid var(--color-link); background: var(--color-surface); font-size: 0.9rem; }
+.form-message.form-error { border-left-color: var(--color-error); }
+/* One link per line, well apart, so they're easy to tell apart and to tap. */
+.form-links { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); font-size: 0.9rem; color: var(--color-text-muted); }
+.confirm-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.confirm-notice p { margin: 0; flex: 1 1 16rem; }
+.confirm-notice form { margin: 0; }
+.actions-start { justify-content: flex-start; }
+.actions form { margin: 0; }
+.pill-danger { color: var(--color-error); border-color: var(--color-error); }
+.form.danger { padding-top: var(--space-3); border-top: 1px solid var(--color-divider); }
+.form.danger h3 { margin: 0; font-size: 1rem; }
+.calendar-list { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-2); }
+.calendar-list li { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.calendar-list form { margin: 0 0 0 auto; }
+.calendar-label { font-weight: 600; }
+/* Colour map choice: one tappable row per preset, its swatch drawn by calendar.css. */
+.palette-options { display: grid; gap: var(--space-2); margin-top: var(--space-1); }
+.field.choice label.palette-option {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "radio name" "radio swatch";
+  align-items: center; gap: var(--space-1) var(--space-3); margin: 0;
+  min-height: 2.75rem; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer;
+}
+.palette-option:hover { background: var(--color-surface-2); }
+.palette-option:has(:checked) { border-color: var(--color-link); box-shadow: inset 0 0 0 1px var(--color-link); }
+.palette-option input { grid-area: radio; }
+.palette-name { grid-area: name; }
+.palette-swatch { grid-area: swatch; display: flex; height: 1rem; gap: 1px; border-radius: 3px; overflow: hidden; background: var(--color-grid); }
+.palette-swatch > span { flex: 1; background-repeat: repeat; }
+.share-link code { overflow-wrap: anywhere; }
+img.avatar { object-fit: cover; padding: 0; }
+/* A profile's card, with its calendar: above it on wide screens, under it on phones. */
+.profile-strip { align-items: center; gap: 12px; padding: 18px 18px 18px 16px; border-bottom: 1px solid var(--color-divider); }
+.card-picture { flex: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; object-fit: cover; }
+.profile-strip .profile-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.profile-strip .profile-text h2 { margin: 0; font-size: 0.95rem; line-height: 1.3; }
+.profile-strip .profile-bio { margin: 0; font-size: 0.82rem; line-height: 1.4; color: var(--color-text-muted); }
+.profile-strip .profile-meta { margin: 0; font-size: 0.75rem; }
+.account-section { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--color-divider); }
+.account-section h2 { font-size: 1.1rem; margin: 0 0 var(--space-2); }
+.profile-card { display: flex; gap: var(--space-4); align-items: flex-start; }
+.profile-card.profile-strip { align-items: center; gap: 12px; }
+/*
+ * A profile card is drawn in its owner's accent (their picture's hue snapped to
+ * their colour map, per theme, set by /u/<id>/accent.css on [data-accent-user]);
+ * until that sheet loads, the site's link colour. The accent keeps 3:1 on the
+ * current theme's page colours, and its text colour 4.5:1.
+ */
+.profile-card {
+  --card-accent: var(--user-accent, var(--color-link));
+  --card-on-accent: var(--user-on-accent, var(--color-on-accent));
+  border-left: 4px solid var(--card-accent); padding-left: var(--space-3);
+}
+.profile-card .pill-primary { background: var(--card-accent); border-color: var(--card-accent); color: var(--card-on-accent); }
+.profile-card .pill-primary:hover { background: var(--card-accent); }
+.profile-text h2 { margin: 0; font-size: 1.25rem; }
+.profile-bio { margin: var(--space-1) 0; white-space: pre-line; overflow-wrap: anywhere; }
+.profile-meta { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: 0.85rem; }
+/* The picture circle; initials until pictures arrive (phase 2). */
+.avatar {
+  flex: none; display: inline-grid; place-items: center; width: 4rem; height: 4rem; border-radius: 50%;
+  background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-border);
+  font-weight: 600; font-size: 1.25rem; letter-spacing: 0.02em;
+}
+
+/*
+ * Add friend (ACCOUNTS-SPEC.md §4): a round accent button with a person and a
+ * plus, in the card. Its tap area is 44 px; the circle drawn in ::before is 36.
+ * Sent (or friends): an outlined check.
+ */
+.add-friend-form { margin: 0; flex: none; }
+.add-friend {
+  position: relative; flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: 0; background: none; color: var(--user-on-accent, var(--color-on-accent)); cursor: pointer; text-decoration: none; font: inherit;
+}
+.add-friend::before {
+  content: ""; position: absolute; inset: 4px; border-radius: 50%;
+  background: var(--user-accent, var(--color-link)); border: 1px solid var(--user-accent, var(--color-link));
+}
+.add-friend .icon { position: relative; width: 17px; height: 17px; }
+.add-friend.is-done { color: var(--user-accent, var(--color-link)); }
+.add-friend.is-done::before { background: none; }
+.add-friend:disabled { cursor: default; }
+.add-friend-tip {
+  position: absolute; bottom: calc(100% + 4px); right: 4px; white-space: nowrap; pointer-events: none;
+  padding: 4px 8px; border-radius: var(--radius); font-size: 0.72rem; font-weight: 600;
+  background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-divider);
+}
+/* Account page: requests waiting, a link to the Friends section. */
+.request-badge {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.75rem; margin: 0 0 var(--space-4); padding: 0 1rem 0 0.4rem;
+  border: 1px solid var(--color-link); border-radius: 9999px; color: var(--color-text); text-decoration: none; font-size: 0.9rem; font-weight: 600;
+}
+.request-badge:hover { background: var(--color-surface-2); }
+.request-count {
+  display: inline-grid; place-items: center; min-width: 1.9rem; height: 1.9rem; padding: 0 0.4rem; border-radius: 9999px;
+  background: var(--color-link); color: var(--color-on-accent); font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- settings (the cog) */
+/*
+ * The cog is the top bar's only menu. Its modal sits over the page blurred
+ * under a strong tint: centred on desktop, over the cog on phones (below).
+ */
+.settings {
+  /* Desktop: centred on the screen. */
+  position: fixed; inset: 0; margin: auto; padding: 0; height: fit-content;
+  width: min(26rem, calc(100vw - 32px));
+  max-width: none; /* the browser's dialog default (100% - 6px - 2em) left a 30px gap on phones */
+  max-height: calc(100dvh - 64px);
+  overflow: auto; overscroll-behavior: contain;
+  background: var(--color-bg); color: var(--color-text);
+  border: 1px solid var(--color-divider); border-radius: 12px; box-shadow: 0 12px 36px var(--color-shadow);
+  font-size: 14px;
+  /* A short grow from its top-right corner, where Close is. On open only: closing is instant. */
+  transform-origin: top right;
+}
+.settings[open] { animation: settings-grow var(--motion-settings); }
+@keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }
+/*
+ * Phones: the modal covers the screen and its Close lands exactly on the cog: app.js gives
+ * the cog's top and right edge (--cog-top, --cog-right), and the head's padding plus the 1px
+ * border make up the rest (13 + 1 down, 11 + 1 in). It grows out of the cog's centre.
+ */
+@media (max-width: 640px) {
+  .settings {
+    inset: auto; margin: 0; height: auto;
+    top: calc(var(--cog-top, 18px) - 14px); right: calc(var(--cog-right, 16px) - 12px);
+    width: calc(100vw - 2 * (var(--cog-right, 16px) - 12px));
+    max-height: calc(100dvh - var(--cog-top, 18px) + 14px - 4px);
+    transform-origin: calc(100% - 12px - 1.125rem) calc(14px + 1.125rem);
+  }
+  .settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }
+}
+@keyframes settings-grow-phone { from { opacity: 0; scale: 0.08; } 40% { opacity: 1; } }
+.settings::backdrop { background: color-mix(in srgb, var(--color-bg) 92%, transparent); }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .settings::backdrop {
+    background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(0.8); backdrop-filter: blur(14px) saturate(0.8);
+  }
+}
+.settings-head {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px;
+  padding: 13px 11px 13px 18px; background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
+}
+.settings-head h2 { margin: 0; flex: 1; font-size: 0.95rem; }
+.pill.round.settings-close { flex: none; width: 2.25rem; min-height: 2.25rem; height: 2.25rem; }
+
+/* You, at the top: picture, name and profile link, edged in your accent. */
+.me {
+  display: flex; align-items: center; gap: 12px; padding: 20px 18px 20px 14px;
+  border-left: 4px solid var(--user-accent, var(--color-link)); border-bottom: 1px solid var(--color-divider);
+}
+.me .avatar { width: 2.5rem; height: 2.5rem; font-size: 0.85rem; }
+.me-text { display: grid; min-width: 0; flex: 1; }
+.me-text strong { font-size: 0.92rem; }
+.settings-intro { display: grid; gap: 10px; padding: 14px 18px 18px; border-bottom: 1px solid var(--color-divider); }
+.settings-intro p { margin: 0; font-size: 0.85rem; color: var(--color-text-muted); }
+.settings-intro .actions { margin: 0; }
+
+/* Rows: each a dropdown that opens in place, or a link. */
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { border-bottom: 1px solid var(--color-divider); }
+.row:last-child { border-bottom: 0; }
+.row > form { margin: 0; }
+.row-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; min-height: 3.75rem; padding: 0 18px;
+  border: 0; background: none; color: var(--color-text); font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+}
+.row-head:hover { background: var(--color-surface); }
+.row-what { flex: 1; font-size: 0.88rem; }
+.row-value { color: var(--color-text-muted); font-size: 0.78rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-values { display: inline-flex; gap: 12px; }
+.row-head .icon { color: var(--color-text-muted); transition: rotate var(--motion-ui); }
+.row-head[aria-expanded="true"] .icon { rotate: 90deg; }
+.row-danger .row-what { color: var(--color-error); }
+.row-panel { display: grid; gap: 14px; padding: 4px 18px 20px; }
+.row-panel > * { margin: 0; }
+.row-panel .form { margin: 0; gap: 10px; max-width: none; }
+.row-panel .field > label, .row-panel .field > legend, .field-label { font-weight: 600; font-size: 0.8rem; margin: 0; }
+.row-panel .field-hint, .row-panel .field-error { font-size: 0.75rem; }
+.row-panel .field input, .row-panel .field select, .row-panel .field textarea { font-size: 16px; min-height: 2.4rem; }
+.row-panel .actions { margin-top: 0; }
+.row-panel .form.danger { padding-top: 14px; }
+.row-panel .form.danger .field-label { color: var(--color-error); }
+/* Delete stays quiet: error-coloured text on a plain pill. */
+.row-panel .pill-danger { border-color: var(--color-border); }
+
+/* /account: the same rows as a page. */
+.settings-page { border: 1px solid var(--color-divider); border-radius: 12px; overflow: hidden; margin-top: var(--space-4); }
+.account-links { margin: var(--space-2) 0 0; }
+
+/* The profile link: the full address, losing characters from the start so the username always shows. */
+.profile-link { display: flex; align-items: center; gap: 2px; min-width: 0; margin-top: 2px; }
+.profile-link a {
+  min-width: 0; font-family: var(--font-mono); font-size: 0.72rem;
+  direction: rtl; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-btn.copy-icon {
+  position: relative; flex: none; display: inline-grid; place-items: center; width: 1.75rem; min-height: 1.75rem; height: 1.75rem; padding: 0;
+  border: 0; border-radius: var(--radius); background: none; color: var(--color-text-muted); cursor: pointer;
+}
+.copy-btn.copy-icon:hover { color: var(--color-text); background: var(--color-surface-2); }
+.copy-btn.copy-icon .icon { width: 15px; height: 15px; }
+/* Drawn small, tapped big: 44 px around it. */
+.copy-btn.copy-icon::before { content: ""; position: absolute; inset: calc((1.75rem - 44px) / 2); }
+
+/*
+ * Theme: Dark | Light. One rounded rectangle split down the middle; the theme
+ * in use is painted in the map's step-0 colour for it (--map-free-dark /
+ * --map-free-light), the other is the page colour with muted text, tilted
+ * towards the middle line as if hinged there. No animation.
+ */
+.switch-line { display: flex; justify-content: flex-end; }
+.theme-switch {
+  position: relative; display: grid; place-items: center; width: 7.5rem; min-height: 44px; padding: 0;
+  border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.theme-switch[hidden] { display: none; }
+.theme-switch::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2.1rem; translate: 0 -50%;
+  border: 1px solid var(--color-border); border-radius: 10px; pointer-events: none; z-index: 1;
+}
+.theme-switch::after { content: ""; position: absolute; left: 50%; width: 1px; top: calc(50% - 1.05rem + 5px); height: calc(2.1rem - 10px); background: var(--color-border); z-index: 1; }
+.theme-switch .half {
+  grid-row: 1; display: flex; align-items: center; justify-content: center; width: 3.75rem; height: 2.1rem;
+  font-weight: 600; font-size: 0.72rem; background: var(--color-bg); color: var(--color-text-muted);
+}
+.theme-switch .h-dark { grid-column: 1; justify-self: end; border-radius: 10px 0 0 10px; transform-origin: right center; }
+.theme-switch .h-light { grid-column: 2; justify-self: start; border-radius: 0 10px 10px 0; transform-origin: left center; }
+.theme-switch { grid-template-columns: 1fr 1fr; perspective: 22rem; }
+:root:not([data-theme="light"]) .theme-switch .h-dark { background: var(--map-free-dark); color: var(--map-on-free-dark); }
+:root:not([data-theme="light"]) .theme-switch .h-light { transform: rotateY(-24deg); }
+:root[data-theme="light"] .theme-switch .h-light { background: var(--map-free-light); color: var(--map-on-free-light); }
+:root[data-theme="light"] .theme-switch .h-dark { transform: rotateY(24deg); }
+
+/* The colour maps: the name just left of its colours. */
+.palette-choice { display: grid; gap: 10px; }
+.pal-list { display: grid; gap: 4px; }
+.pal-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 2.4rem; padding: 0 10px;
+  border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); font: inherit; cursor: pointer;
+}
+.pal-btn:hover { background: var(--color-surface); }
+.pal-btn[aria-pressed="true"] { border-color: var(--color-link); box-shadow: inset 0 0 0 1px var(--color-link); }
+.pal-name { flex: 1; text-align: right; font-size: 0.82rem; }
+.pal-btn .palette-swatch { flex: none; width: 5.5rem; height: 0.6rem; }
+
 /* ---------------------------------------------------------------- sub-pages */
 .subheader {
   display: flex; align-items: center; gap: var(--space-3);
@@ -353,12 +619,12 @@ code { font-family: var(--font-mono); }
 @media (max-width: 1160px) {
   .topbar {
     grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "centre right" "left left";
-    gap: var(--space-2) var(--space-2); padding: var(--space-2);
+    gap: 14px; padding: 18px 16px;
   }
   .tb-centre { justify-self: stretch; justify-content: flex-start; }
   /* The zone selector takes what row 1 has left and truncates, so nothing wraps. */
   .tz-button { flex: 0 1 auto; min-width: 0; justify-content: space-between; }
-  .tb-right { gap: var(--space-1); }
+  .tb-right { gap: 6px; }
 }
 
 /* ---------------------------------------------------------------- narrow screens */
@@ -367,21 +633,15 @@ code { font-family: var(--font-mono); }
   /* Row 2 fills the width with bigger tap targets: the tabs share the free space. */
   .tb-left { justify-self: stretch; }
   .tb-tabs { flex: 1 1 auto; }
-  .tab { flex: 1 1 auto; justify-content: center; padding: 0.25rem 0.3rem; font-size: 0.85rem; min-height: 2.75rem; }
-  .tb-today { padding: 0.25rem 0.6rem; min-height: 2.75rem; margin-left: var(--space-1); }
-  .pill.round.tb-prev, .pill.round.tb-next { width: 2.5rem; min-height: 2.75rem; }
-  .period-label { padding-inline: var(--space-2) var(--space-1); font-size: 0.9rem; }
-  .tz-button { font-size: 0.8rem; padding: 0.2rem 0.4rem 0.2rem 0.6rem; }
-  .tb-menu { display: inline-flex; }
-  .tb-menu-items {
-    position: fixed; inset: auto; top: 3.25rem; right: var(--space-2); margin: 0;
-    flex-direction: column; align-items: stretch; padding: var(--space-2);
-    background: var(--color-bg); border: 1px solid var(--color-divider); border-radius: calc(var(--radius) + 4px);
-    box-shadow: 0 8px 28px var(--color-shadow);
-  }
-  .tb-menu-items:not(:popover-open) { display: none; }
-  /* Grows from the menu button. Its exit is instant: popovers close natively. */
-  .tb-menu-items:popover-open { transform-origin: top right; --grow-from: var(--grow-nudge) calc(-1 * var(--grow-nudge)); animation: grow-in var(--motion-in); }
+  .tab { position: relative; flex: 1 1 auto; justify-content: center; padding: 0.25rem 0.2rem; font-size: 0.76rem; min-height: 2.25rem; }
+  .tb-today { position: relative; padding: 0.2rem 0.85rem; font-size: 0.8rem; }
+  .period-label { padding-left: 6px; font-size: 0.88rem; font-weight: 600; }
+  .tz-button { font-size: 0.72rem; padding: 0.2rem 0.5rem 0.2rem 0.7rem; min-height: 2.25rem; }
+  /* Tap areas of 44 px around controls drawn at 2.25rem (36 px). */
+  .tab::before, .tb-today::before, .tz-button::before { content: ""; position: absolute; inset: -4px 0; }
+  .tz-button { position: relative; }
+  /* Taller slots, so the calendar keeps its share of the roomier screen. */
+  .cols { --row-min: 1.75rem; }
 
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "bar" "cal"; }
   .colourbar { flex-direction: row-reverse; border-left: 0; border-bottom: 1px solid var(--color-divider); padding: 2px var(--space-2); }
@@ -391,6 +651,36 @@ code { font-family: var(--font-mono); }
   .month { grid-auto-rows: minmax(3rem, 1fr); }
   .dialog-head { padding-inline: var(--space-4); }
   .dialog-body { padding: var(--space-3) var(--space-4) var(--space-4); }
+
+  /* Tap targets of at least 44 px on phones: the sub-page header, form fields and buttons,
+     and links standing alone. The top bar draws its controls at 2.25rem with bigger tap areas (above). */
+  .subheader .pill.round { width: 2.75rem; min-height: 2.75rem; }
+  .pill, .btn { min-height: 2.75rem; }
+  .topbar .pill { min-height: 2.25rem; }
+  .field input, .field select, .field textarea { min-height: 2.75rem; font-size: 1rem; }
+  .field.choice label { min-height: 2.75rem; align-items: center; margin-top: 0; }
+  .form-links a, .account-section > p > a { display: inline-block; padding-block: 0.75rem; }
+  .sub-main { padding: var(--space-3) var(--space-4) var(--space-6); }
+
+  /* A profile's card: under the calendar, short, so the calendar keeps its height. */
+  .profile-strip { order: 2; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)) 16px; border-bottom: 0; border-top: 1px solid var(--color-divider); }
+  .profile-strip .profile-meta { display: none; }
+  .profile-strip .profile-bio { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+}
+
+/* Very narrow phones (320–374 px): the four view tabs don't fit beside Today
+   and the arrows, so the tabs take row 2 on their own and the rest wraps below. */
+@media (max-width: 374px) {
+  .tb-left { flex-wrap: wrap; }
+  .tb-tabs { flex: 1 1 100%; }
+  .tb-today { flex: 1 1 auto; margin-left: 0; }
+  .pill.round.tb-prev, .pill.round.tb-next { width: 2.75rem; }
+  .tb-centre { gap: var(--space-1); }
+}
+/* 320–339 px: the zone button shows only its arrow (its accessible name still says the zone). */
+@media (max-width: 339px) {
+  .tz-text { display: none; }
+  .tz-button { flex: none; width: 2.25rem; padding: 0; justify-content: center; }
 }
 
 /* ================================================================ motion */
@@ -457,6 +747,7 @@ code { font-family: var(--font-mono); }
 
 /* No motion at all when the viewer asks for less. */
 @media (prefers-reduced-motion: reduce) {
+  .settings[open] { animation: none; }
   *, *::before, *::after, ::backdrop {
     animation-duration: 0s !important; animation-delay: 0s !important;
     transition-duration: 0s !important; transition-delay: 0s !important;

@@ -8,6 +8,13 @@
  */
 export const SITE_HOST = "freetime.mutantcacti.com";
 
+/**
+ * The release, as in package.json (a test keeps them equal). The shared stylesheets and
+ * scripts carry it as ?v=, so a new release never runs against a browser's copy of the last
+ * one's files.
+ */
+export const APP_VERSION = "1.1.0";
+
 /** Zone used when the viewer's zone is unknown (no JS), and for all-day and floating events. */
 export const DEFAULT_TZ = "Europe/London";
 

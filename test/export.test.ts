@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { exportEvents } from "../src/export-ics";
-import { attr, decode, makeApp, params, tagWith, topbarHref } from "./helpers";
+import { attr, decode, makeApp, params, settingHref, tagWith } from "./helpers";
 
 const app = makeApp();
 
@@ -25,7 +25,7 @@ describe(".ics export", () => {
     // The dialog's Download link and the no-JS /export link both carry the week.
     const download = attr(tagWith(html, 'download=""'), "href")!;
     expect(download).toBe("/free-busy.ics?from=2026-11-02&to=2026-11-08");
-    expect(Object.fromEntries(params(topbarHref(html, "download")!))).toMatchObject({ from: "2026-11-02", to: "2026-11-08" });
+    expect(Object.fromEntries(params(settingHref(html, "download")!))).toMatchObject({ from: "2026-11-02", to: "2026-11-08" });
 
     const res = await app.get(download);
     expect(res.status).toBe(200);

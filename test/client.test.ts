@@ -92,6 +92,46 @@ describe("toasts", () => {
   });
 });
 
+describe("settings modal geometry", () => {
+  const css = allCss["/public/css/app.css"]!;
+  const js = allCss["/public/js/app.js"]!;
+  const px = (re: RegExp) => Number(re.exec(css)?.[1]);
+
+  // On phones the Close lands exactly on the cog (checked in a browser at 360, 400 and 430 px on both Workers):
+  // the dialog sits (head padding + border) above and right of the cog's box, and Close is drawn at the cog's size.
+  it("puts Close on the cog: offsets equal the head's padding plus the border", () => {
+    const [top, right, bottom, left] = /\.settings-head \{[^}]*padding: (\d+)px (\d+)px (\d+)px (\d+)px;/.exec(css)!.slice(1).map(Number);
+    const border = px(/\.settings \{[^}]*border: (\d+)px solid/);
+    expect(top).toBe(bottom);
+    expect(left).toBeGreaterThan(right!);
+    expect(px(/\.settings \{[^}]*top: calc\(var\(--cog-top, 18px\) - (\d+)px\)/)).toBe(top! + border);
+    expect(px(/\.settings \{[^}]*right: calc\(var\(--cog-right, 16px\) - (\d+)px\)/)).toBe(right! + border);
+    // Not narrowed by the browser's dialog default (max-width: 100% - 6px - 2em), which left a gap on phones.
+    expect(css).toMatch(/\.settings \{[^}]*max-width: none;/);
+    // It grows from the centre of Close, which is the centre of the cog.
+    expect(css).toMatch(new RegExp(`transform-origin: calc\\(100% - ${right! + border}px - 1\\.125rem\\) calc\\(${top! + border}px \\+ 1\\.125rem\\);`));
+    // Both are 2.25rem round pills; the fallbacks are the top bar's padding.
+    expect(css).toMatch(/\.pill\.round\.settings-close \{[^}]*width: 2\.25rem;[^}]*height: 2\.25rem;/);
+    expect(css).toMatch(/\.topbar \{[^}]*padding: 18px 16px;/);
+    expect(js).toContain('dlg.style.setProperty("--cog-top", r.top + "px")');
+    expect(js).toContain('dlg.style.setProperty("--cog-right", document.documentElement.clientWidth - r.right + "px")');
+  });
+
+  it("blurs the page behind under a strong tint, solid enough where blur isn't supported", () => {
+    expect(css).toContain(".settings::backdrop { background: color-mix(in srgb, var(--color-bg) 92%, transparent); }");
+    expect(css).toMatch(/@supports \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\) \{\s*\.settings::backdrop \{\s*background: color-mix\(in srgb, var\(--color-bg\) 62%, transparent\);[^}]*backdrop-filter: blur\(14px\) saturate\(0\.8\);/);
+  });
+
+  it("the theme switch paints only the half in use, and tilts the other towards the middle", () => {
+    expect(css).toContain(':root:not([data-theme="light"]) .theme-switch .h-dark { background: var(--map-free-dark); color: var(--map-on-free-dark); }');
+    expect(css).toContain(':root[data-theme="light"] .theme-switch .h-light { background: var(--map-free-light); color: var(--map-on-free-light); }');
+    expect(css).toContain(':root:not([data-theme="light"]) .theme-switch .h-light { transform: rotateY(-24deg); }');
+    expect(css).toContain(':root[data-theme="light"] .theme-switch .h-dark { transform: rotateY(24deg); }');
+    expect(css).toMatch(/\.theme-switch \.half \{[^}]*background: var\(--color-bg\); color: var\(--color-text-muted\);/);
+    expect(css).not.toMatch(/\.theme-switch[^{]*\{[^}]*transition/);
+  });
+});
+
 describe("motion", () => {
   const css = allCss["/public/css/app.css"]!;
 
@@ -123,7 +163,19 @@ describe("motion", () => {
   it("dialogs and toasts grow from the top right, where their buttons are", () => {
     expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
     expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
-    expect(css).toMatch(/\.tb-menu-items:popover-open \{ transform-origin: top right;/);
+    // Desktop: centred on the screen.
+    expect(css).toMatch(/\.settings \{[^}]*position: fixed; inset: 0; margin: auto;[^}]*height: fit-content;/);
+    // The settings modal, on open only: on desktop a short grow from its top right (where Close is);
+    // on phones, where it covers the screen, out of the cog's centre (its Close lands on the cog).
+    expect(css).toMatch(/\.settings \{[^}]*transform-origin: top right;/);
+    expect(css).toContain(".settings[open] { animation: settings-grow var(--motion-settings); }");
+    expect(css).toContain("@keyframes settings-grow { from { opacity: 0; scale: 0.96; translate: 6px -6px; } }");
+    const phone = css.slice(css.indexOf("@media (max-width: 640px) {\n  .settings {"));
+    expect(phone).toMatch(/^@media \(max-width: 640px\) \{\n  \.settings \{[^}]*transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\);/);
+    expect(phone).toContain(".settings[open] { animation: settings-grow-phone var(--motion-settings-phone); }");
+    expect(css).not.toMatch(/\.settings[^{]*is-closing/);
+    expect(tokens).toMatch(/--motion-settings: 160ms/);
+    expect(tokens).toMatch(/--motion-settings-phone: 200ms/);
   });
 });
 

@@ -68,7 +68,7 @@ describe("feed failures", () => {
     expect(entry?.code).toBe("FEED_FETCH");
     expect(String(entry?.cause)).toContain("ECONNREFUSED");
     // The top bar still works.
-    expect(html).toContain('data-tb="contact"');
+    expect(html).toContain('data-setting="contact"');
   });
 
   it("names the upstream status and never shows the upstream body", async () => {

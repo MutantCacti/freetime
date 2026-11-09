@@ -3,7 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 workers_dev = false
 routes = [
-  { pattern = "freetime.mutantcacti.com", custom_domain = true }
+  # A zone route, not a custom domain: the accounts Worker (wrangler.accounts.toml)
+  # takes its own paths on the same host, and more specific routes win.
+  { pattern = "freetime.mutantcacti.com/*", zone_name = "mutantcacti.com" }
 ]
 
 # The Worker runs first for every request, so security headers and the

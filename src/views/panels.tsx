@@ -34,7 +34,7 @@ const CHANNELS: Channel[] = [
 ];
 
 /** A Copy button that keeps its width as it shows "Copied" or "Copy failed". Hidden without JS. */
-function CopyButton({ value, what }: { value: string; what: string }) {
+export function CopyButton({ value, what }: { value: string; what: string }) {
   return (
     // PRINTED OUTPUT: contact / copy button accessible name
     <button type="button" class="btn copy-btn" data-copy={value} hidden aria-label={`Copy ${what}`}>
@@ -133,7 +133,7 @@ export interface RangeFormProps {
 export function RangeForm({ links, from, to, notices }: RangeFormProps) {
   const zone = links.zoneParams;
   return (
-    <form class="range-form" id="range-form" method="get" action={`/#${HOUR_ANCHOR}`}>
+    <form class="range-form" id="range-form" method="get" action={`${links.base}#${HOUR_ANCHOR}`}>
       <input type="hidden" name="view" value="range" />
       {/* PRINTED OUTPUT: range form / date field names, the inline "to", and Apply */}
       <input type="date" name="from" id="range-from" value={from} required aria-label="Start date" />

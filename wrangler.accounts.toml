@@ -1,0 +1,69 @@
+# The accounts Worker (ACCOUNTS-SPEC.md). Always a different Worker from the
+# read-only site in wrangler.toml, which never stores anything or reads cookies.
+name = "freetime-accounts"
+main = "src/accounts/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+# Same host as the main site, split by path: these paths are the accounts Worker's,
+# everything else is the main Worker's (including /css, /fonts and /js).
+routes = [
+  { pattern = "freetime.mutantcacti.com/account*", zone_name = "mutantcacti.com" },
+  { pattern = "freetime.mutantcacti.com/u/*", zone_name = "mutantcacti.com" },
+  # Profiles by username: /@<username>.
+  { pattern = "freetime.mutantcacti.com/@*", zone_name = "mutantcacti.com" },
+  { pattern = "freetime.mutantcacti.com/spaces*", zone_name = "mutantcacti.com" },
+  { pattern = "freetime.mutantcacti.com/s/*", zone_name = "mutantcacti.com" },
+  { pattern = "freetime.mutantcacti.com/auth/*", zone_name = "mutantcacti.com" },
+]
+
+[vars]
+RESEND_FROM = "freetime <noreply@freetime.mutantcacti.com>"
+
+# Dev only: the sample calendar (test/fixtures/dev.ics) bundled as text.
+[[rules]]
+type = "Text"
+globs = ["**/*.ics"]
+fallthrough = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "freetime-accounts"
+# Fill in after `npx wrangler d1 create freetime-accounts` (README, "Accounts Worker").
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Profile pictures (ACCOUNTS-SPEC.md §8). Create with `npx wrangler r2 bucket create freetime-pictures`.
+[[r2_buckets]]
+binding = "PICTURES"
+bucket_name = "freetime-pictures"
+
+# Local dev only: the same stylesheets and scripts as the main site, so account
+# pages look right on their own. In production these paths are the main Worker's.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# `npm run dev:accounts`: a local database, and emails printed to the terminal instead of sent.
+[env.dev]
+main = "src/accounts/dev.ts"
+workers_dev = true
+routes = []
+
+[env.dev.vars]
+RESEND_FROM = "freetime <noreply@freetime.mutantcacti.com>"
+# Dev only, never a production secret: the key that encrypts calendar addresses in the local database.
+ACCOUNTS_KEY = "ZGV2LW9ubHkta2V5LWRldi1vbmx5LWtleS1kZXYtMDE"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "freetime-accounts-dev"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[env.dev.r2_buckets]]
+binding = "PICTURES"
+bucket_name = "freetime-pictures-dev"
+
+[env.dev.assets]
+directory = "./public"
+binding = "ASSETS"

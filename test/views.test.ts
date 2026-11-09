@@ -1,7 +1,8 @@
+import { PALETTE_NAMES } from "../src/parula";
 import { describe, expect, it } from "vitest";
 import { cellClasses, DITHER_MAX_LEVEL, ditherLevel } from "../src/dither";
 import { LEVELS } from "../src/levels";
-import { NOW, attr, cellClass, makeApp, params, tagWith, topbarHref } from "./helpers";
+import { NOW, attr, cellClass, makeApp, params, settingHref, tagWith, topbarHref } from "./helpers";
 
 const files = import.meta.glob(["/public/css/*.css"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
@@ -206,8 +207,10 @@ describe("current time", () => {
     for (let i = 0; i < LEVELS; i++) expect(css).toContain(`.past.p${i}{background-color:var(--cell-past-${i})}`);
     const appCss = files["/public/css/app.css"]!;
     expect(appCss).toMatch(/\.slot\.past::after, \.slot\.split::after, \.daycell\.past::after \{[^}]*background: var\(--color-veil\)/);
-    // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does.
-    expect(appCss.match(/backdrop-filter/g)?.length).toBe(2);
+    // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does,
+    // and the settings modal's backdrop (one element, while it's open).
+    const withFilter = [...appCss.matchAll(/([^{}]+)\{[^{}]*backdrop-filter:/g)].map((m) => m[1]!.trim().split("\n").pop()!.trim());
+    expect(withFilter).toEqual([".slot.split::after", ".settings::backdrop"]);
     expect(appCss).toMatch(/\.daycell\.is-today \{ outline: 3px solid var\(--color-now\)/);
   });
 
@@ -258,7 +261,7 @@ describe("colour and dither", () => {
   it("gives a fraction the same colour and Bayer level in every view", async () => {
     const half = cellClasses(0.5);
     const full = cellClasses(1);
-    expect(half).toBe("p4");
+    expect(half).toBe("p3"); // 0.5 rounds up to step 3 of 0–5
     expect(full).toBe(`p${LEVELS - 1}`);
     // A half-busy 30-minute slot, in each column view.
     for (const path of ["/?view=day&date=2026-11-03", "/?view=week&date=2026-11-02", "/?view=range&from=2026-11-01&to=2026-11-05"]) {
@@ -275,7 +278,7 @@ describe("colour and dither", () => {
     expect(ditherLevel(1)).toBe(DITHER_MAX_LEVEL);
   });
 
-  it("the colour bar shows the same 9 steps as the cells", async () => {
+  it("the colour bar shows the same steps as the cells", async () => {
     const html = await app.html("/?view=week&date=2026-11-02");
     const bands = [...html.matchAll(/<div class="cb-band ([^"]*)"><\/div>/g)].map((m) => m[1]);
     expect(bands).toEqual(Array.from({ length: LEVELS }, (_, step) => cellClasses(step / (LEVELS - 1))));
@@ -285,16 +288,24 @@ describe("colour and dither", () => {
 
   it("serves the generated colour CSS and dither tiles", async () => {
     const css = await (await app.get("/css/calendar.css")).text();
-    expect(css).toContain(".p8{background-color:var(--cell-8);background-image:var(--dots-8);background-size:8px 8px}");
-    expect(css).not.toContain(".p9{");
-    // Fully busy: level 12 dots in both themes (the dot tone follows the colour underneath).
-    expect(css.match(new RegExp(`--dots-8:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(2);
-    expect(css.match(/--dots-0:none/g)?.length).toBe(2);
+    const top = LEVELS - 1;
+    expect(css).toContain(`.p${top}{background-color:var(--cell-${top});background-image:var(--dots-${top});background-size:8px 8px}`);
+    expect(css).not.toContain(`.p${LEVELS}{`);
+    // Fully busy: level 12 dots in both themes, for the default and for each
+    // preset (the dot tone follows the colour underneath).
+    const blocks = 2 * (1 + PALETTE_NAMES.length);
+    expect(css.match(new RegExp(`--dots-${top}:url\\(/img/dither/${DITHER_MAX_LEVEL}[kw]\\.svg\\)`, "g"))?.length).toBe(blocks);
+    expect(css.match(/--dots-0:none/g)?.length).toBe(blocks);
     expect(css).not.toContain("prefers-color-scheme");
     const svg = await app.get(`/img/dither/${DITHER_MAX_LEVEL}k.svg`);
     expect(svg.headers.get("content-type")).toBe("image/svg+xml");
     expect((await svg.text()).match(/<rect /g)?.length).toBe(DITHER_MAX_LEVEL);
     expect((await app.get("/img/dither/16k.svg")).status).toBe(404);
+    // Only the six layers have tiles: a level between them isn't served, and calendar.css uses none.
+    expect((await app.get("/img/dither/11k.svg")).status).toBe(404);
+    expect((await app.get("/img/dither/9w.svg")).status).toBe(200);
+    const used = new Set([...css.matchAll(/\/img\/dither\/(\d+)[kw]\.svg/g)].map((m) => Number(m[1])));
+    expect([...used].sort((a, b) => a - b)).toEqual([2, 4, 6, 9, 12]);
   });
 
   it("labels every cell and makes it keyboard-focusable", async () => {
@@ -313,7 +324,7 @@ describe("top bar", () => {
     const html = await app.html("/?view=week&date=2026-11-02");
     const topbar = html.slice(html.indexOf('<header class="topbar"'), html.indexOf("</header>"));
     const order = [...topbar.matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1]);
-    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "download", "contact", "help", "theme"]);
+    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "settings"]);
     const tabs = [...topbar.matchAll(/<a class="tab"[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
     expect(tabs).toEqual(["Day", "Week", "Month", "Range"]);
   });
@@ -326,7 +337,7 @@ describe("top bar", () => {
     const between = (a: string, b: string) => topbar.slice(topbar.indexOf(a), b ? topbar.indexOf(b) : undefined);
     expect([...between('class="tb-left"', 'class="tb-centre"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["tabs", "today", "prev", "next"]);
     expect([...between('class="tb-centre"', 'class="tb-right"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["period", "tz"]);
-    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "download", "contact", "help", "theme"]);
+    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "settings"]);
     const css = files["/public/css/app.css"]!;
     expect(css).toMatch(/grid-template-columns: minmax\(max-content, 1fr\) minmax\(0, max-content\) minmax\(max-content, 1fr\);\s*grid-template-areas: "left centre right"/);
   });
@@ -343,10 +354,10 @@ describe("top bar", () => {
 
   it("uses pills for Today, the arrows, the zone selector and the right-hand buttons, and keeps tabs as a segmented control", async () => {
     const html = await app.html("/?view=week&date=2026-11-09");
-    for (const name of ["today", "prev", "next", "tz", "indicator", "download", "contact", "help", "theme"]) {
+    for (const name of ["today", "prev", "next", "tz", "indicator", "settings"]) {
       expect(attr(tagWith(html, `data-tb="${name}"`), "class")!.split(" "), name).toContain("pill");
     }
-    for (const name of ["prev", "next", "indicator", "theme"]) expect(attr(tagWith(html, `data-tb="${name}"`), "class")).toContain("round");
+    for (const name of ["prev", "next", "indicator", "settings"]) expect(attr(tagWith(html, `data-tb="${name}"`), "class")).toContain("round");
     expect(html).not.toMatch(/class="tab [^"]*pill/);
   });
 
@@ -371,9 +382,26 @@ describe("top bar", () => {
     expect(tagWith(html, 'data-tb="indicator"')).toContain('hidden=""');
   });
 
-  it("has a menu for narrow screens that works without JS (popover)", async () => {
-    const html = await app.html("/");
-    expect(html).toContain('popovertarget="tb-menu-items"');
-    expect(tagWith(html, 'id="tb-menu-items"')).toContain('popover="auto"');
+  it("the cog is the only menu: it opens the settings with JS, and goes to /help without it", async () => {
+    const html = await app.html("/?view=month&date=2026-11-01&dtz=Europe/Paris");
+    const cog = tagWith(html, 'data-tb="settings"')!;
+    expect(attr(cog, "href")).toBe("/help?view=month&date=2026-11-01&dtz=Europe/Paris");
+    expect(attr(cog, "data-settings")).toBe("dlg-settings");
+    expect(attr(cog, "aria-label")).toBe("Settings");
+    for (const gone of ["popovertarget", "tb-menu", "tb-account", "tb-theme", "tb-owner"]) expect(html, gone).not.toContain(gone);
+  });
+
+  it("the main site's settings: Account, Theme (the switch only), Download .ics, Contact me and Help", async () => {
+    const html = await app.html("/?view=week&date=2026-11-02");
+    const dlg = html.slice(html.indexOf('<dialog class="settings"'), html.indexOf("</dialog>", html.indexOf('<dialog class="settings"')));
+    const names = [...dlg.matchAll(/<span class="row-what">([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(names).toEqual(["Account", "Theme", "Download .ics", "Contact me", "Help"]);
+    expect(settingHref(html, "account")).toBe("/account");
+    // The switch, in parula; no colour maps here, and nothing read from a cookie.
+    expect(dlg).toContain('class="theme-switch" data-palette="parula" hidden=""');
+    expect(dlg).not.toContain("pal-btn");
+    expect(dlg).toContain('<span data-theme-mode="true">Dark</span>');
+    // The Close button that lands on the cog.
+    expect(dlg).toMatch(/class="pill round settings-close" data-settings-close="true" aria-label="Close"/);
   });
 });

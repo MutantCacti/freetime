@@ -5,7 +5,7 @@ import { makeApp } from "./helpers";
 // The site's name is written once, in src/config.ts (SITE_HOST), and in the
 // route in wrangler.toml. Everything else uses the constant, so a rename is
 // two lines. Docs may say the name; code may not.
-const code = import.meta.glob(["/src/**/*.{ts,tsx}", "/public/**/*.{css,js,svg,txt,html}", "/test/**/*.ts"], {
+const code = import.meta.glob(["/src/**/*.{ts,tsx}", "/public/**/*.{css,js,svg,txt,html}", "/test/**/*.{ts,mjs}", "/scripts/**/*.mjs", "/ft"], {
   query: "?raw",
   import: "default",
   eager: true,
@@ -26,7 +26,7 @@ describe("the site's name", () => {
   });
 
   it("is the production route in wrangler.toml", () => {
-    expect(wrangler).toContain(`{ pattern = "${SITE_HOST}", custom_domain = true }`);
+    expect(wrangler).toContain(`{ pattern = "${SITE_HOST}/*", zone_name = "mutantcacti.com" }`);
   });
 
   it("no longer uses the old name anywhere", () => {

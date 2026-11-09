@@ -2,7 +2,7 @@
  * Progressive enhancement. Without this file every view, link and form still
  * works; with it you get toasts, the current-time line moving, the starting
  * scroll position, the time-zone dropdown, the date-picker popover, the
- * dialogs, the theme switcher and the Copy button.
+ * dialogs, the settings modal, the theme switcher and the Copy button.
  * Pure functions are exposed on globalThis.SiteApp for tests.
  */
 (function () {
@@ -453,6 +453,22 @@
     };
   }
 
+  // -------------------------------------------------------------- account forms
+
+  /** Sign-up's hidden time-zone field gets the device's zone (ACCOUNTS-SPEC.md §5.1). */
+  function initDeviceZone() {
+    var zone = null;
+    try {
+      zone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+    } catch (e) {
+      zone = null;
+    }
+    if (!zone) return;
+    $$("input[data-device-zone]").forEach(function (input) {
+      input.value = zone;
+    });
+  }
+
   // -------------------------------------------------------------- theme
 
   function initTheme() {
@@ -461,18 +477,106 @@
     function current() {
       return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
     }
-    $$(".theme-toggle").forEach(function (btn) {
-      function label() {
+    function labelAll() {
+      $$(".theme-toggle, .theme-switch").forEach(function (btn) {
         // PRINTED OUTPUT: theme switcher / accessible names
         btn.setAttribute("aria-label", current() === "dark" ? "Switch to light mode" : "Switch to dark mode");
-      }
+      });
+      // The Theme row's head says which mode is in use.
+      $$("[data-theme-mode]").forEach(function (el) {
+        el.textContent = current() === "dark" ? "Dark" : "Light"; // PRINTED OUTPUT: settings / theme mode in use
+      });
+    }
+    $$(".theme-toggle, .theme-switch").forEach(function (btn) {
       btn.hidden = false;
-      label();
       btn.addEventListener("click", function () {
         var next = current() === "dark" ? "light" : "dark";
         document.documentElement.setAttribute("data-theme", next);
         if (globalThis.SiteHead) globalThis.SiteHead.writeTheme(store, next);
-        label();
+        labelAll();
+      });
+    });
+    labelAll();
+  }
+
+  // -------------------------------------------------------------- settings
+
+  /**
+   * The settings modal (the top bar's cog) and its rows. The modal is placed
+   * so its Close lands exactly on the cog, and grows out of the cog's centre
+   * (CSS, on open only). Rows are dropdowns, one open at a time; they render
+   * open for pages without JS, so they're folded here, except a row holding
+   * a form mistake to fix.
+   */
+  function initSettings() {
+    $$(".rows").forEach(function (list) {
+      var rows = $$(":scope > .row[data-row]", list);
+      function set(row, open) {
+        var head = $(":scope > .row-head", row);
+        var panel = $(":scope > .row-panel", row);
+        head.setAttribute("aria-expanded", open ? "true" : "false");
+        panel.hidden = !open;
+        row.classList.toggle("is-open", open);
+      }
+      rows.forEach(function (row) {
+        set(row, !!$(".field-error, [aria-invalid='true']", row));
+        $(":scope > .row-head", row).addEventListener("click", function () {
+          var open = !row.classList.contains("is-open");
+          rows.forEach(function (r) {
+            set(r, r === row ? open : false);
+          });
+        });
+      });
+    });
+
+    var dlg = document.getElementById("dlg-settings");
+    var cog = $("[data-settings]");
+    if (!dlg || !cog || typeof dlg.showModal !== "function") return;
+    function place() {
+      var r = cog.getBoundingClientRect();
+      dlg.style.setProperty("--cog-top", r.top + "px");
+      dlg.style.setProperty("--cog-right", document.documentElement.clientWidth - r.right + "px");
+    }
+    function close() {
+      if (dlg.open) dlg.close();
+    }
+    cog.addEventListener("click", function (e) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      place();
+      dlg.showModal();
+      var x = $("[data-settings-close]", dlg);
+      if (x) x.focus();
+    });
+    window.addEventListener("resize", function () {
+      if (dlg.open) place();
+    });
+    $$("[data-settings-close]", dlg).forEach(function (b) {
+      b.addEventListener("click", close);
+    });
+    // A tap on the blurred page behind closes it; closing is instant (it only animates on open).
+    dlg.addEventListener("click", function (e) {
+      if (e.target === dlg) close();
+    });
+    dlg.addEventListener("close", function () {
+      if (!dlg.getAttribute("data-switching")) cog.focus();
+    });
+  }
+
+  /** Signed out, Add friend's first tap says you need to sign in; the second goes there. */
+  function initAddFriend() {
+    $$("[data-signin-tip]").forEach(function (link) {
+      var tip = $(".add-friend-tip", link);
+      var timer = null;
+      link.addEventListener("click", function (e) {
+        if (!tip || !tip.hidden) return;
+        e.preventDefault();
+        tip.hidden = false;
+        announce(tip.textContent, false);
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          tip.hidden = true;
+        }, 2500);
       });
     });
   }
@@ -489,16 +593,14 @@
       link.addEventListener("click", function (e) {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
         e.preventDefault();
-        var menu = document.getElementById("tb-menu-items");
-        if (menu && menu.hidePopover && menu.matches(":popover-open")) menu.hidePopover();
-        // A link inside another dialog keeps the original opener.
-        var returnTo = link.closest("dialog") ? opener : link;
-        // A link in the closed narrow-screen menu can't take focus; use the menu button.
-        if (returnTo && !returnTo.offsetParent) returnTo = $(".tb-menu") || returnTo;
+        // A link inside another dialog keeps the original opener; from the settings, that's the cog.
+        var returnTo = link.closest("dialog") ? opener || $("[data-settings]") : link;
         var current = $("dialog[open]");
         if (current && current !== dlg) {
           switching = true;
+          current.setAttribute("data-switching", "1");
           current.close();
+          current.removeAttribute("data-switching");
           switching = false;
         }
         opener = returnTo;
@@ -1127,7 +1229,10 @@
     initToday();
     var toasts = initToasts();
     initTheme();
+    initDeviceZone();
+    initSettings();
     initDialogs();
+    initAddFriend();
     initCopy(toasts);
     initCalendar();
     initDragScroll();

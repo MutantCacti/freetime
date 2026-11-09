@@ -1,0 +1,5 @@
+#!/bin/sh
+# ./ft: freetime's developer command (DEV-SPEC.md). The work is in scripts/ft.mjs.
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+command -v node >/dev/null 2>&1 || { echo "ft needs Node 20 or later: https://nodejs.org" >&2; exit 1; } # PRINTED OUTPUT: ft shim / no node
+exec node "$dir/scripts/ft.mjs" "$@"
