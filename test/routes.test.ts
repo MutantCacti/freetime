@@ -42,6 +42,25 @@ describe("routes", () => {
     }
   });
 
+  it("stylesheets and scripts are checked before reuse; fonts and images are kept an hour", async () => {
+    // Their addresses carry no version: an old app.js reused against a new page would break the cog.
+    for (const path of ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css", "/js/head.js", "/js/app.js"]) {
+      expect((await app.get(path)).headers.get("cache-control"), path).toBe("no-cache");
+    }
+    for (const path of ["/favicon.svg", "/fonts/figtree-latin-wght-normal.woff2"]) {
+      expect((await app.get(path)).headers.get("cache-control"), path).toBe("public, max-age=3600");
+    }
+  });
+
+  it("calendar.css answers 304 to its own ETag", async () => {
+    const first = await app.get("/css/calendar.css");
+    const etag = first.headers.get("etag");
+    expect(etag).toMatch(/^"[0-9a-f]{32}"$/);
+    const again = await app.get("/css/calendar.css", { headers: { "if-none-match": etag! } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+  });
+
   it("returns 404 with a page for unknown paths", async () => {
     const res = await app.get("/no/such/page");
     expect(res.status).toBe(404);

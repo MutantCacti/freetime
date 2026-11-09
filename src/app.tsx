@@ -51,7 +51,23 @@ type AppContext = Context<{ Bindings: Env }>;
 
 /** HTML and .ics: short, so the calendar is never long out of date. */
 export const PAGE_CACHE = "private, max-age=60";
+/** Fonts and images: an hour. They rarely change, and a stale one still works. */
 const ASSET_CACHE = "public, max-age=3600";
+/**
+ * Stylesheets and scripts: kept, but checked before every use (ETag, so an unchanged file
+ * costs a 304). Their addresses carry no version, so an hour-old app.js could otherwise run
+ * against a newer page: the cog would fall through to its no-JS link to /help.
+ */
+export const CODE_CACHE = "no-cache";
+
+let calendarCssEtag: Promise<string> | undefined;
+/** calendar.css is the same for the life of a deploy: hash it once. */
+function calendarEtag(): Promise<string> {
+  calendarCssEtag ??= crypto.subtle.digest("SHA-256", new TextEncoder().encode(calendarCss())).then(
+    (d) => `"${[...new Uint8Array(d).slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("")}"`,
+  );
+  return calendarCssEtag;
+}
 
 function zoneFrom(c: AppContext): ZoneState {
   return resolveZone(c.req.query("tz"), c.req.query("dtz"));
@@ -286,9 +302,11 @@ export function createApp(deps: AppDeps = {}) {
 
   // ------------------------------------------------------------ generated assets
 
-  app.get("/css/calendar.css", (c) =>
-    c.body(calendarCss(), 200, { "content-type": "text/css; charset=utf-8", "cache-control": ASSET_CACHE }),
-  );
+  app.get("/css/calendar.css", async (c) => {
+    const etag = await calendarEtag();
+    if (c.req.header("if-none-match") === etag) return c.body(null, 304, { etag, "cache-control": CODE_CACHE });
+    return c.body(calendarCss(), 200, { "content-type": "text/css; charset=utf-8", "cache-control": CODE_CACHE, etag });
+  });
 
   app.get("/img/dither/:name", (c) => {
     const svg = ditherAsset(c.req.param("name"));
@@ -302,7 +320,8 @@ export function createApp(deps: AppDeps = {}) {
     const res = await c.env.ASSETS.fetch(c.req.raw);
     if (res.status !== 404) {
       const out = new Response(res.body, res);
-      out.headers.set("cache-control", ASSET_CACHE);
+      const path = new URL(c.req.url).pathname;
+      out.headers.set("cache-control", path.startsWith("/css/") || path.startsWith("/js/") ? CODE_CACHE : ASSET_CACHE);
       return out;
     }
     return c.notFound();
