@@ -3,6 +3,7 @@
 
 import type { Child } from "hono/jsx";
 import { Document, pageTitle } from "../views/layout";
+import { SITE_HOST } from "../config";
 import { LiveRegions } from "../views/notices";
 import { WithSeps } from "../views/sep";
 import { CloseControl, ThemeButton } from "../views/topbar";
@@ -17,6 +18,7 @@ import { dateAt } from "../tz";
 import { PALETTE_NAMES, type PaletteName } from "../parula";
 import { LEVELS } from "../levels";
 import { stepClasses } from "../dither";
+import { USERNAME_MAX, USERNAME_MIN } from "./username";
 
 /** Limits shown in forms and checked on the server. */
 export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, email: 254, label: 40 } as const;
@@ -131,6 +133,25 @@ function ZoneSelect({ value, name = "zone" }: { value: string; name?: string }) 
   );
 }
 
+/** The username field, at sign-up and in Profile: the address it makes is in the hint. */
+export function UsernameField({ value, error }: { value?: string; error?: string }) {
+  return (
+    // PRINTED OUTPUT: account / username field label, hint and placeholder
+    <Field
+      label="Username"
+      name="username"
+      placeholder="username"
+      value={value}
+      error={error}
+      required
+      minlength={USERNAME_MIN}
+      maxlength={USERNAME_MAX}
+      autocomplete="username"
+      hint={`Your profile's address: ${SITE_HOST}/@username. ${USERNAME_MIN} to ${USERNAME_MAX} letters, numbers or _.`}
+    />
+  );
+}
+
 // ---------------------------------------------------------------- signed out
 
 export type Errors = Partial<Record<string, string>>;
@@ -163,6 +184,7 @@ export function SignInPage({ email, next, error, done }: { email?: string; next?
 
 export interface SignUpValues {
   name?: string;
+  username?: string;
   email?: string;
   zone: string;
   next?: string;
@@ -179,6 +201,7 @@ export function SignUpPage({ values, errors = {} }: { values: SignUpValues; erro
         <input type="hidden" name="zone" value={values.zone} data-device-zone="" />
         {/* PRINTED OUTPUT: sign up / field labels, hints, placeholders and button */}
         <Field label="Name" name="name" placeholder="Your name" value={values.name} error={errors.name} autocomplete="name" required maxlength={LIMITS.name} hint="Shown on your profile." />
+        <UsernameField value={values.username} error={errors.username} />
         <Field label="Email" name="email" placeholder="you@example.com" type="email" value={values.email} error={errors.email} autocomplete="email" required maxlength={LIMITS.email} hint="We'll send a link to confirm it. Never shown to anyone." />
         <Field
           label="Password"
@@ -333,7 +356,7 @@ export interface AccountPageProps {
   done?: string;
   errors?: Errors;
   /** Values to put back after a failed save. */
-  draft?: { name?: string; bio?: string; email?: string; label?: string; address?: string };
+  draft?: { name?: string; username?: string; bio?: string; email?: string; label?: string; address?: string };
 }
 
 export function AccountPage({ user, calendars, shareLink, done, errors = {}, draft = {} }: AccountPageProps) {
@@ -436,6 +459,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         <h2 id="edit-profile">Edit profile</h2>
         <form class="form" method="post" action="/account/profile">
           <Field label="Name" name="name" placeholder="Your name" value={draft.name ?? user.name} error={errors.name} required maxlength={LIMITS.name} autocomplete="name" />
+          <UsernameField value={draft.username ?? user.username ?? ""} error={errors.username} />
           <div class="field">
             <label for="f-bio">Bio</label>
             <textarea id="f-bio" name="bio" rows={3} maxlength={LIMITS.bio} placeholder="A line about you" aria-invalid={errors.bio ? "true" : undefined}>

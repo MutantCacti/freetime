@@ -181,7 +181,7 @@ describe("profiles", () => {
     const a = makeAccounts();
     expect((await a.browser().get("/u/aaaaaaaaaa")).status).toBe(404);
     expect((await a.browser().get("/u/not-an-id")).status).toBe(404);
-    await a.browser().post("/account/sign-up", { name: "Eve", email: "eve@example.com", password: "correct horse battery", zone: "Europe/London" });
+    await a.browser().post("/account/sign-up", { username: "eve", name: "Eve", email: "eve@example.com", password: "correct horse battery", zone: "Europe/London" });
     expect((await a.browser().get(await profilePath("eve@example.com"))).status).toBe(404);
   });
 });

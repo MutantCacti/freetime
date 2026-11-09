@@ -6,6 +6,8 @@ import { randomId, randomToken, sha256Hex } from "./crypto";
 export interface User {
   user_id: number;
   public_id: string;
+  /** Lower-case, unique ignoring case (username.ts); null until chosen. */
+  username: string | null;
   name: string;
   bio: string;
   zone: string;
@@ -52,12 +54,12 @@ export class Db {
     return this.db.prepare("SELECT * FROM users WHERE user_id = ?").bind(id).first<User>();
   }
 
-  async createUser(u: { name: string; email: string; zone: string; passwordHash: string }, now: number): Promise<User> {
+  async createUser(u: { name: string; username: string; email: string; zone: string; passwordHash: string }, now: number): Promise<User> {
     const row = await this.db
       .prepare(
-        "INSERT INTO users (public_id, name, zone, email, password_hash, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *",
+        "INSERT INTO users (public_id, username, name, zone, email, password_hash, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
       )
-      .bind(randomId(10), u.name, u.zone, u.email, u.passwordHash, randomId(16), now)
+      .bind(randomId(10), u.username, u.name, u.zone, u.email, u.passwordHash, randomId(16), now)
       .first<User>();
     return row!;
   }
@@ -70,11 +72,26 @@ export class Db {
     await this.db.prepare("UPDATE users SET email_verified = 1 WHERE user_id = ?").bind(id).run();
   }
 
-  async updateProfile(id: number, p: { name: string; bio: string; zone: string; visibility: "public" | "private"; palette: PaletteName }): Promise<void> {
+  async updateProfile(id: number, p: { name: string; username: string | null; bio: string; zone: string; visibility: "public" | "private"; palette: PaletteName }): Promise<void> {
     await this.db
-      .prepare("UPDATE users SET name = ?, bio = ?, zone = ?, visibility = ?, palette = ? WHERE user_id = ?")
-      .bind(p.name, p.bio, p.zone, p.visibility, p.palette, id)
+      .prepare("UPDATE users SET name = ?, username = ?, bio = ?, zone = ?, visibility = ?, palette = ? WHERE user_id = ?")
+      .bind(p.name, p.username, p.bio, p.zone, p.visibility, p.palette, id)
       .run();
+  }
+
+  async setPalette(id: number, palette: PaletteName): Promise<void> {
+    await this.db.prepare("UPDATE users SET palette = ? WHERE user_id = ?").bind(palette, id).run();
+  }
+
+  /** The user with this username, ignoring case. */
+  userByUsername(username: string): Promise<User | null> {
+    return this.db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first<User>();
+  }
+
+  /** Whether someone other than `exceptUserId` has this username, ignoring case. */
+  async usernameTaken(username: string, exceptUserId?: number): Promise<boolean> {
+    const row = await this.db.prepare("SELECT user_id FROM users WHERE username = ?").bind(username).first<{ user_id: number }>();
+    return !!row && row.user_id !== exceptUserId;
   }
 
   async setPicture(id: number, key: string | null, accent: string | null = null): Promise<void> {

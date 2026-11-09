@@ -19,6 +19,7 @@ import { checkPassword, dummyPasswordHash, hashPassword, randomId, sha256Hex } f
 import { PICTURE_MAX_BYTES, accentCss, accentSheetUrl, pictureUrl, processPicture, sniffPicture } from "./pictures";
 import { isAccent } from "./accent";
 import { seal } from "./secret-box";
+import { type UsernameProblem, USERNAME_MAX, USERNAME_MIN, normaliseUsername, profilePath, usernameProblem } from "./username";
 import { Db, SESSION_SECONDS, type User } from "./db";
 import { type SendEmail, confirmEmail, resendSender, resetEmail } from "./email";
 import {
@@ -109,7 +110,17 @@ const MSG = {
   addressRefused: "That address was refused: it may be wrong, or no longer secret.",
   addressNotCalendar: "That address isn't a calendar in iCal format.",
   resetDone: "Password changed. You've been signed out everywhere else.",
+  usernameTaken: "Someone already has that username. Try another.",
 } as const;
+
+// PRINTED OUTPUT: account / username mistakes
+const USERNAME_MSG: Record<UsernameProblem, string> = {
+  required: "Choose a username.",
+  short: `Use at least ${USERNAME_MIN} characters.`,
+  long: `Use ${USERNAME_MAX} characters or fewer.`,
+  chars: "Use only letters, numbers and _.",
+  reserved: "That username is taken by the site. Try another.",
+};
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
@@ -250,14 +261,17 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   app.post("/account/sign-up", async (c) => {
     const f = await form(c);
     const name = clean(f.name);
+    const username = normaliseUsername(clean(f.username));
     const email = clean(f.email).toLowerCase();
     const password = typeof f.password === "string" ? f.password : "";
     const zone = canonicalZone(clean(f.zone)) ?? DEFAULT_TZ;
     const next = safeNext(f.next);
-    const values = { name, email, zone, next };
+    const values = { name, username, email, zone, next };
     const errors: Errors = {};
     if (!name) errors.name = MSG.nameRequired;
     else if (name.length > LIMITS.name) errors.name = MSG.nameLong;
+    const usernameBad = usernameProblem(username);
+    if (usernameBad) errors.username = USERNAME_MSG[usernameBad];
     if (!EMAIL_RE.test(email) || email.length > LIMITS.email) errors.email = MSG.emailInvalid;
     if (password.length < LIMITS.passwordMin) errors.password = MSG.passwordShort;
     else if (password.length > LIMITS.passwordMax) errors.password = MSG.passwordLong;
@@ -273,7 +287,13 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       if (!existing.email_verified && existing.created_at < t - 24 * 3600) await db(c).deleteUser(existing.user_id);
       else return page(c, <SignUpPage values={values} errors={{ email: MSG.emailTaken }} />, 400);
     }
-    const user = await db(c).createUser({ name, email, zone, passwordHash: await hashPassword(password) }, t);
+    const holder = await db(c).userByUsername(username);
+    if (holder) {
+      // The same rule as email: an unconfirmed day-old account doesn't hold its username.
+      if (!holder.email_verified && holder.created_at < t - 24 * 3600) await db(c).deleteUser(holder.user_id);
+      else return page(c, <SignUpPage values={values} errors={{ username: MSG.usernameTaken }} />, 400);
+    }
+    const user = await db(c).createUser({ name, username, email, zone, passwordHash: await hashPassword(password) }, t);
     try {
       await sendConfirm(c, user, "verify", email, next);
     } catch (e) {
@@ -466,6 +486,8 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (user instanceof Response) return user;
     const f = await form(c);
     const name = clean(f.name);
+    // Missing (an older form): keep the current username.
+    const username = f.username === undefined ? user.username : normaliseUsername(clean(f.username));
     const bio = clean(f.bio).replace(/\r\n/g, "\n");
     const zone = canonicalZone(clean(f.zone)) ?? user.zone;
     const visibility = f.visibility === "public" ? "public" : "private";
@@ -476,8 +498,13 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (!name) errors.name = MSG.nameRequired;
     else if (name.length > LIMITS.name) errors.name = MSG.nameLong;
     if (bio.length > LIMITS.bio) errors.bio = MSG.bioLong;
-    if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors, draft: { name, bio } }, 400);
-    await db(c).updateProfile(user.user_id, { name, bio, zone, visibility, palette: palette! });
+    if (username !== user.username) {
+      const bad = usernameProblem(username ?? "");
+      if (bad) errors.username = USERNAME_MSG[bad];
+      else if (await db(c).usernameTaken(username!, user.user_id)) errors.username = MSG.usernameTaken;
+    }
+    if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors, draft: { name, bio, username: username ?? "" } }, 400);
+    await db(c).updateProfile(user.user_id, { name, username, bio, zone, visibility, palette: palette! });
     return c.redirect("/account?done=profile", 303);
   });
 

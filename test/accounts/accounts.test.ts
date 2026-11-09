@@ -33,7 +33,7 @@ describe("sign up and confirm", () => {
   it("creates an unconfirmed account and emails a link; the password is only stored hashed", async () => {
     const a = makeAccounts();
     const b = a.browser();
-    const res = await b.post("/account/sign-up", { name: "Ada Lovelace", email: "Ada@Example.com", password: PASSWORD, zone: "Asia/Tokyo" });
+    const res = await b.post("/account/sign-up", { username: "ada", name: "Ada Lovelace", email: "Ada@Example.com", password: PASSWORD, zone: "Asia/Tokyo" });
     // Signed in straight away, with a notice to confirm.
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/account?done=signedup");
@@ -55,7 +55,7 @@ describe("sign up and confirm", () => {
 
   it("shows mistakes next to their fields", async () => {
     const a = makeAccounts();
-    const res = await a.browser().post("/account/sign-up", { name: "", email: "nope", password: "short", zone: "Europe/London" });
+    const res = await a.browser().post("/account/sign-up", { username: "nope", name: "", email: "nope", password: "short", zone: "Europe/London" });
     expect(res.status).toBe(400);
     const html = decode(await res.text());
     expect(html).toContain("Enter your name.");
@@ -66,7 +66,7 @@ describe("sign up and confirm", () => {
 
   it("an unknown zone falls back to Europe/London; dtz fills the form without JS", async () => {
     const a = makeAccounts();
-    await a.browser().post("/account/sign-up", { name: "B", email: "b@example.com", password: PASSWORD, zone: "Mars/Olympus" });
+    await a.browser().post("/account/sign-up", { username: "b__", name: "B", email: "b@example.com", password: PASSWORD, zone: "Mars/Olympus" });
     expect((await userRow("b@example.com"))!.zone).toBe("Europe/London");
     const html = await (await a.browser().get("/account/sign-up?dtz=America/New_York")).text();
     expect(html).toMatch(/name="zone" value="America\/New_York" data-device-zone=""/);
@@ -74,7 +74,7 @@ describe("sign up and confirm", () => {
 
   it("can sign in before confirming, with the notice and Send it again", async () => {
     const a = makeAccounts();
-    await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    await a.browser().post("/account/sign-up", { username: "ada", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     const b = a.browser();
     const res = await b.post("/account/sign-in", { email: "ada@example.com", password: PASSWORD });
     expect(res.headers.get("location")).toBe("/account");
@@ -88,7 +88,7 @@ describe("sign up and confirm", () => {
   it("the link shows a button first; pressing it confirms and signs you in", async () => {
     const a = makeAccounts();
     const b = a.browser();
-    await b.post("/account/sign-up", { name: "Ada Lovelace", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    await b.post("/account/sign-up", { username: "ada", name: "Ada Lovelace", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     const link = linkIn(a.emails[0]!);
     const view = await b.get(link);
     expect(view.status).toBe(200);
@@ -115,7 +115,7 @@ describe("sign up and confirm", () => {
   it("a link works once, and not after it expires", async () => {
     const a = makeAccounts();
     const b = a.browser();
-    await b.post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    await b.post("/account/sign-up", { username: "ada", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     const token = new URL(linkIn(a.emails[0]!), ORIGIN).searchParams.get("t")!;
     a.setNow(NOW + DAY + 1000);
     expect((await b.post("/account/verify", { t: token })).status).toBe(400);
@@ -128,18 +128,40 @@ describe("sign up and confirm", () => {
 
   it("an address taken but never confirmed is free again after a day", async () => {
     const a = makeAccounts();
-    await a.browser().post("/account/sign-up", { name: "Squatter", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
-    const again = await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    await a.browser().post("/account/sign-up", { username: "ada", name: "Squatter", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    const again = await a.browser().post("/account/sign-up", { username: "ada", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     expect(decode(await again.text())).toContain("An account already uses this email.");
     a.setNow(NOW + DAY + 1000);
-    await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    await a.browser().post("/account/sign-up", { username: "ada", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     expect((await userRow("ada@example.com"))!.name).toBe("Ada");
+  });
+
+  it("asks for a username: stored lower-case, checked, unique ignoring case", async () => {
+    const a = makeAccounts();
+    const form = await (await a.browser().get("/account/sign-up")).text();
+    expect(form).toMatch(/<input id="f-username" name="username" type="text"[^>]*required=""[^>]*maxlength="20" minlength="3"/);
+    await a.browser().post("/account/sign-up", { username: "@Ada_L", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    expect((await userRow("ada@example.com"))!.username).toBe("ada_l");
+    const cases: [string, string][] = [
+      ["", "Choose a username."],
+      ["ab", "Use at least 3 characters."],
+      ["a".repeat(21), "Use 20 characters or fewer."],
+      ["ada-l", "Use only letters, numbers and _."],
+      ["account", "That username is taken by the site. Try another."],
+      ["ADA_L", "Someone already has that username. Try another."],
+    ];
+    for (const [username, message] of cases) {
+      const res = await a.browser().post("/account/sign-up", { username, name: "B", email: "b@example.com", password: PASSWORD, zone: "Europe/London" });
+      expect(res.status, username).toBe(400);
+      expect(decode(await res.text()), username).toContain(message);
+    }
+    expect(await userRow("b@example.com")).toBeNull();
   });
 
   it("if Resend fails, the account still exists and the failure is logged without the address", async () => {
     const a = makeAccounts();
     a.failEmail(true);
-    const res = await a.browser().post("/account/sign-up", { name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
+    const res = await a.browser().post("/account/sign-up", { username: "ada", name: "Ada", email: "ada@example.com", password: PASSWORD, zone: "Europe/London" });
     expect(res.status).toBe(303);
     expect(await userRow("ada@example.com")).not.toBeNull();
     expect(a.logs.length).toBeGreaterThan(0);
@@ -224,6 +246,24 @@ describe("the account page", () => {
     expect(html).toContain("Profile saved.");
     expect(html).toContain("Asia/Tokyo");
     expect(html).toMatch(/value="public" checked=""/);
+  });
+
+  it("edits the username in Profile; a form without it keeps it", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    await signedUp(a, "grace@example.com", "Grace Hopper");
+    const base = { name: "Ada", bio: "", zone: "Europe/London", visibility: "private" };
+    expect((await b.post("/account/profile", { ...base, username: "Countess" })).status).toBe(303);
+    expect((await userRow("ada@example.com"))!.username).toBe("countess");
+    await b.post("/account/profile", base);
+    expect((await userRow("ada@example.com"))!.username).toBe("countess");
+    const taken = await b.post("/account/profile", { ...base, username: "GRACE" });
+    expect(taken.status).toBe(400);
+    const html = decode(await taken.text());
+    expect(html).toContain("Someone already has that username. Try another.");
+    expect(html).toContain('value="grace"');
+    expect((await b.post("/account/profile", { ...base, username: "help" })).status).toBe(400);
+    expect((await userRow("ada@example.com"))!.username).toBe("countess");
   });
 
   it("refuses an empty name and a long bio, keeping what you typed", async () => {

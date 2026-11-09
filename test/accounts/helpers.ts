@@ -118,10 +118,15 @@ export function linkIn(m: EmailMessage): string {
 
 export const PASSWORD = "correct horse battery";
 
+/** A test username from an email's local part: "ada@example.com" is "ada". */
+export function usernameFor(email: string): string {
+  return email.split("@")[0]!.toLowerCase().replace(/[^a-z0-9_]/g, "_").padEnd(3, "_").slice(0, 20);
+}
+
 /** Sign up and confirm: returns a signed-in browser. */
-export async function signedUp(a: TestAccounts, email = "ada@example.com", name = "Ada Lovelace"): Promise<Browser> {
+export async function signedUp(a: TestAccounts, email = "ada@example.com", name = "Ada Lovelace", username = usernameFor(email)): Promise<Browser> {
   const b = a.browser();
-  await b.post("/account/sign-up", { name, email, password: PASSWORD, zone: "Europe/London" });
+  await b.post("/account/sign-up", { name, username, email, password: PASSWORD, zone: "Europe/London" });
   const link = linkIn(a.emails[a.emails.length - 1]!);
   const token = new URL(link, ORIGIN).searchParams.get("t")!;
   await b.post("/account/verify", { t: token });
