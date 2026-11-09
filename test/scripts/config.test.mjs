@@ -19,7 +19,7 @@ describe("the wrangler config readers, on the real files", () => {
   });
 
   it("read the accounts routes", () => {
-    expect(routePaths(accounts)).toEqual(["/account*", "/u/*", "/spaces*", "/s/*", "/auth/*"]);
+    expect(routePaths(accounts)).toEqual(["/account*", "/u/*", "/@*", "/spaces*", "/s/*", "/auth/*"]);
     expect(routePaths(site)).toEqual(["/*"]);
   });
 
@@ -79,6 +79,8 @@ describe("the local router's path table (DEV-SPEC.md §3.2.1)", () => {
     ["/account/sign-in", "accounts"],
     ["/accounts", "accounts"],
     ["/u/someone", "accounts"],
+    ["/@ada", "accounts"],
+    ["/@ada?f=abc", "accounts"],
     ["/spaces", "accounts"],
     ["/spaces/1", "accounts"],
     ["/s/abc", "accounts"],

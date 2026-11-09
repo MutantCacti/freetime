@@ -39,7 +39,7 @@ describe("profile pictures", () => {
     // (before the period label) for every visitor, with the owner's name as its text.
     expect(await (await b.get("/account")).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
     for (const viewer of [a.browser(), b]) {
-      const html = decode(await (await viewer.get(`/u/${public_id}`)).text());
+      const html = decode(await (await viewer.get("/@ada")).text());
       expect(html).toContain(`<img class="tb-owner" data-tb="owner" src="${src}" alt="Ada Lovelace"`);
       expect(html.split(src).length - 1).toBe(1);
       // The account button is the icon for everyone, right after the picture; the card has no circle of its own.
@@ -148,7 +148,7 @@ describe("accent", () => {
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     const { public_id, accent } = (await row())!;
     const href = `/u/${public_id}/accent.css?v=${accent!.slice(1)}`;
-    for (const html of [await (await b.get("/account")).text(), await (await a.browser().get(`/u/${public_id}`)).text()]) {
+    for (const html of [await (await b.get("/account")).text(), await (await a.browser().get("/@ada")).text()]) {
       expect(sheets(html)).toEqual([...SHARED, href]);
       expect(html).toContain(`data-accent-user="${public_id}"`);
     }
@@ -164,7 +164,7 @@ describe("accent", () => {
     const b = await signedUp(a);
     const { public_id } = (await row())!;
     expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
-    const bare = await (await a.browser().get(`/u/${public_id}`)).text();
+    const bare = await (await a.browser().get("/@ada")).text();
     expect(sheets(bare)).toEqual(SHARED);
     expect(bare).not.toContain("tb-owner");
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));

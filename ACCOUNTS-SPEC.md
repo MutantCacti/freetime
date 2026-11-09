@@ -43,7 +43,7 @@ Each phase is its own pull request.
 | Secrets | `ICAL_URL` | `RESEND_API_KEY`, `ACCOUNTS_KEY` (phase 2), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (phase 5) |
 
 - **One look, one stylesheet set.** Every page of both Workers is rendered by the same `Document` shell (`src/views/layout.tsx`) and loads the same stylesheets from `public/css/` (`fonts.css`, `tokens.css`, `app.css`, `calendar.css`), the same fonts and the same scripts. Account pages add their styles to `app.css`; there is no accounts-only stylesheet and no second set of tokens. Account pages use the same top bar, sub-page header, buttons, pills, forms, toasts and error panel.
-- **Addresses: one host, split by path.** Both Workers answer on `freetime.mutantcacti.com` (`SITE_HOST`). The accounts Worker owns `/account`, `/account/*`, `/u/*`, `/spaces`, `/spaces/*`, `/s/*` and `/auth/*`; the main Worker owns everything else, including `/css/*`, `/fonts/*` and `/js/*`, so account pages load the very same files. This needs zone routes for both Workers instead of the main Worker's custom domain (§13).
+- **Addresses: one host, split by path.** Both Workers answer on `freetime.mutantcacti.com` (`SITE_HOST`). The accounts Worker owns `/account`, `/account/*`, `/u/*`, `/@*` (profiles by username), `/spaces`, `/spaces/*`, `/s/*` and `/auth/*`; the main Worker owns everything else, including `/css/*`, `/fonts/*` and `/js/*`, so account pages load the very same files. This needs zone routes for both Workers instead of the main Worker's custom domain (§13).
 - **The main site's one addition:** an **account** icon (a person, round pill) in the top bar, directly before the menu button: on phones it sits to the left of the menu and theme icons; on wide screens it comes before **Download .ics**. It's a plain link to `/account`, named "Account" for screen readers, and looks the same whether you're signed in or not, since the main Worker never reads the cookie.
 - **Shared code** lives in `src/` (calendar model, views, tokens, time zones, iCal). The accounts Worker imports it; the main Worker never imports anything from `src/accounts/`. A test checks that import direction, and another that no path is claimed by both Workers.
 
@@ -121,7 +121,7 @@ CREATE TABLE space_calendars (space_id INTEGER REFERENCES spaces ON DELETE CASCA
 
 ## 3. Profiles and visibility
 
-Every user has a profile at `/u/<public_id>`.
+Every user has a profile at `/@<username>` (3–20 of a–z, 0–9 and _, unique ignoring case, chosen at sign-up and changeable in Profile; the site's own words are refused). `/u/<public_id>` still works and moves (301) to `/@<username>` once there is one, keeping its query, the friend invite included.
 
 | Shown on the profile | Private | Public | To friends |
 |---|---|---|---|
@@ -143,7 +143,7 @@ Every user has a profile at `/u/<public_id>`.
 
 Making a friend should take one tap.
 
-- **Your share link** is `https://freetime.mutantcacti.com/u/<public_id>?f=<invite_code>`. The account page has a **Copy link** button for it (the same in-button confirmation as the contact panel). It opens your profile, and it's also a friend invite.
+- **Your share link** is `https://freetime.mutantcacti.com/@<username>?f=<invite_code>`. The account page has a **Copy link** button for it (the same in-button confirmation as the contact panel). It opens your profile, and it's also a friend invite.
 - **Add friend** is on every profile you visit while signed in (not your own, not existing friends):
   - opened from your share link (with your `f` code): pressing it makes you friends at once, because you sent the link;
   - otherwise: it sends a friend request. The other person sees it on their account page, with **Accept** and **Decline**. If both people request each other, they become friends at once.

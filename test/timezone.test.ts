@@ -161,6 +161,7 @@ describe("the head script", () => {
     }
     // Profiles still get the device zone.
     expect(head.headRedirect("https://example.test/u/abcdefghij", "Europe/Paris", { state: {} })).toBe("https://example.test/u/abcdefghij?dtz=Europe/Paris");
+    expect(head.headRedirect("https://example.test/@ada?f=abc", "Europe/Paris", { state: {} })).toBe("https://example.test/@ada?f=abc&dtz=Europe/Paris");
   });
 
   it("never replaces twice in one page view, or again on the page it just replaced to", () => {
@@ -205,6 +206,16 @@ describe("/tz without JS", () => {
     const res = await app.get("/tz?apply=1&view=week&date=2026-11-02&dtz=Europe/Paris&tz=Asia/Tokyo");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/?view=week&date=2026-11-02&tz=Asia/Tokyo&dtz=Europe/Paris#h08");
+  });
+
+  it("returns to a profile (by username or id), and only to a profile", async () => {
+    const at = await app.get("/tz?apply=1&view=week&date=2026-11-02&dtz=Europe/Paris&tz=Asia/Tokyo&back=/@ada");
+    expect(at.headers.get("location")).toBe("/@ada?view=week&date=2026-11-02&tz=Asia/Tokyo&dtz=Europe/Paris#h08");
+    const id = await app.get("/tz?apply=1&view=week&date=2026-11-02&tz=Asia/Tokyo&back=/u/abcdefghij");
+    expect(id.headers.get("location")).toMatch(/^\/u\/abcdefghij\?/);
+    for (const back of ["//evil.example", "/@a", "/@ADA", "/account"]) {
+      expect((await app.get(`/tz?apply=1&tz=Asia/Tokyo&back=${encodeURIComponent(back)}`)).headers.get("location"), back).toMatch(/^\/\?/);
+    }
   });
 
   it("removes tz for Device default", async () => {

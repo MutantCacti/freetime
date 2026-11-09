@@ -19,13 +19,13 @@ function query(params: Params): string {
   const pairs: string[] = [];
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
-    pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%2F/g, "/")}`);
+    pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value).replace(/%2F/g, "/").replace(/%40/g, "@")}`);
   }
   return pairs.length ? `?${pairs.join("&")}` : "";
 }
 
-/** Where calendar links point: the main site's "/", or a profile ("/u/<id>") on the accounts Worker. */
-export const PROFILE_BASE_RE = /^\/u\/[a-z0-9]{10}$/;
+/** Where calendar links point: the main site's "/", or a profile ("/@<username>", or "/u/<id>" before one) on the accounts Worker. */
+export const PROFILE_BASE_RE = /^\/(?:u\/[a-z0-9]{10}|@[a-z0-9_]{3,20})$/;
 
 export class Links {
   constructor(

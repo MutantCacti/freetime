@@ -37,7 +37,7 @@ describe("the two Workers", () => {
 
   it("no path belongs to both: the accounts Worker's routes aren't the main site's", async () => {
     const patterns = [...accountsConfig.matchAll(/pattern = "freetime\.mutantcacti\.com(\/[^"]*)"/g)].map((m) => m[1]!);
-    expect(patterns).toEqual(["/account*", "/u/*", "/spaces*", "/s/*", "/auth/*"]);
+    expect(patterns).toEqual(["/account*", "/u/*", "/@*", "/spaces*", "/s/*", "/auth/*"]);
     const app = makeApp();
     const html = await app.html("/?view=week&date=2026-11-02");
     const mainPaths = new Set(["/", "/help", "/contact", "/export", "/tz", "/free-busy.ics", "/css/", "/img/", "/js/", "/fonts/", "/favicon.svg"]);

@@ -9,6 +9,8 @@ workers_dev = false
 routes = [
   { pattern = "freetime.mutantcacti.com/account*", zone_name = "mutantcacti.com" },
   { pattern = "freetime.mutantcacti.com/u/*", zone_name = "mutantcacti.com" },
+  # Profiles by username: /@<username>.
+  { pattern = "freetime.mutantcacti.com/@*", zone_name = "mutantcacti.com" },
   { pattern = "freetime.mutantcacti.com/spaces*", zone_name = "mutantcacti.com" },
   { pattern = "freetime.mutantcacti.com/s/*", zone_name = "mutantcacti.com" },
   { pattern = "freetime.mutantcacti.com/auth/*", zone_name = "mutantcacti.com" },

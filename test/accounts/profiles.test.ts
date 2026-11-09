@@ -24,9 +24,15 @@ const FEED = [
 
 const WEEK = "?view=week&date=2026-11-02&dtz=Europe/London";
 
+/** The profile's address: /@<username>. */
 async function profilePath(email = "ada@example.com"): Promise<string> {
+  const row = await accountsEnv.DB.prepare("SELECT username FROM users WHERE email = ?").bind(email).first<{ username: string }>();
+  return `/@${row!.username}`;
+}
+
+async function publicId(email = "ada@example.com"): Promise<string> {
   const row = await accountsEnv.DB.prepare("SELECT public_id FROM users WHERE email = ?").bind(email).first<{ public_id: string }>();
-  return `/u/${row!.public_id}`;
+  return row!.public_id;
 }
 
 describe("calendars", () => {
@@ -131,7 +137,7 @@ describe("profiles", () => {
     const html = decode(await (await b.get((await profilePath()) + WEEK)).text());
     expect(html).toContain("Member since");
     expect(html).toContain('href="/account"');
-    expect(html).toMatch(/data-copy="http:\/\/localhost\/u\/[a-z0-9]{10}\?f=[a-z0-9]{16}"/);
+    expect(html).toMatch(/data-copy="http:\/\/localhost\/@ada\?f=[a-z0-9]{16}"/);
     const other = decode(await (await a.browser().get((await profilePath()) + WEEK)).text());
     expect(other).not.toContain("data-copy=");
   });
@@ -183,6 +189,46 @@ describe("profiles", () => {
     expect((await a.browser().get("/u/not-an-id")).status).toBe(404);
     await a.browser().post("/account/sign-up", { username: "eve", name: "Eve", email: "eve@example.com", password: "correct horse battery", zone: "Europe/London" });
     expect((await a.browser().get(await profilePath("eve@example.com"))).status).toBe(404);
+  });
+});
+
+describe("profile addresses", () => {
+  it("/@username is the profile, found ignoring case; other spellings move to the stored one", async () => {
+    const a = makeAccounts();
+    await signedUp(a);
+    const res = await a.browser().get("/@ada" + WEEK);
+    expect(res.status).toBe(200);
+    expect(decode(await res.text())).toContain("Ada Lovelace");
+    const upper = await a.browser().get("/@ADA?f=x");
+    expect(upper.status).toBe(301);
+    expect(upper.headers.get("location")).toBe("/@ada?f=x");
+    for (const missing of ["/@nobody", "/@ab", "/@help"]) expect((await a.browser().get(missing)).status, missing).toBe(404);
+  });
+
+  it("/u/<id> moves for good to /@username, keeping the query and the friend invite", async () => {
+    const a = makeAccounts();
+    await signedUp(a);
+    const res = await a.browser().get(`/u/${await publicId()}?f=abcdefghijklmnop&view=week`);
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("/@ada?f=abcdefghijklmnop&view=week");
+  });
+
+  it("/u/<id> still works for an account with no username yet", async () => {
+    const a = makeAccounts();
+    await signedUp(a);
+    await accountsEnv.DB.prepare("UPDATE users SET username = NULL").run();
+    const id = await publicId();
+    const res = await a.browser().get(`/u/${id}` + WEEK);
+    expect(res.status).toBe(200);
+    const html = decode(await res.text());
+    const tabs = [...html.matchAll(/<a class="tab" href="([^"]+)"/g)].map((m) => m[1]!);
+    expect(tabs.every((h) => h.startsWith(`/u/${id}?`))).toBe(true);
+  });
+
+  it("the share link is /@username with the friend invite", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    expect(decode(await (await b.get("/account")).text())).toMatch(/http:\/\/localhost\/@ada\?f=[a-z0-9]{16}/);
   });
 });
 

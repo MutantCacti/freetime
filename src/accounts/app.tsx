@@ -168,7 +168,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
 
   /** The profile address, which is also the friend invite (ACCOUNTS-SPEC.md §4). */
   function shareLink(c: Ctx, user: User): string {
-    return `${origin(c)}/u/${user.public_id}?f=${user.invite_code}`;
+    return `${origin(c)}${profilePath(user)}?f=${user.invite_code}`;
   }
 
   async function accountPage(c: Ctx, user: User, opts: Omit<Parameters<typeof AccountPage>[0], "user" | "calendars" | "shareLink">, status = 200) {
@@ -658,12 +658,29 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
 
   // ------------------------------------------------------------ profiles
 
+  function noSuchProfile(c: Ctx) {
+    // PRINTED OUTPUT: profile / not found
+    return page(c, <MessagePage title="No such profile" message="Check the link, or ask for a new one." href="/account" linkText="Go to your account" />, 404);
+  }
+
+  /** /u/<public_id>: the address before usernames. Moved for good to /@<username> once there is one, query (and friend invite) kept. */
   app.get("/u/:id", async (c) => {
     const owner = /^[a-z0-9]{10}$/.test(c.req.param("id")) ? await db(c).userByPublicId(c.req.param("id")) : null;
-    if (!owner || !owner.email_verified) {
-      // PRINTED OUTPUT: profile / not found
-      return page(c, <MessagePage title="No such profile" message="Check the link, or ask for a new one." href="/account" linkText="Go to your account" />, 404);
-    }
+    if (!owner || !owner.email_verified) return noSuchProfile(c);
+    if (owner.username) return c.redirect(`/@${owner.username}${new URL(c.req.url).search}`, 301);
+    return profilePage(c, owner);
+  });
+
+  /** /@<username>: a profile, found ignoring case; other spellings move to the stored one. */
+  app.get("/:handle{@[A-Za-z0-9_]{1,40}}", async (c) => {
+    const asked = c.req.param("handle").slice(1);
+    const owner = usernameProblem(asked.toLowerCase()) === null ? await db(c).userByUsername(asked.toLowerCase()) : null;
+    if (!owner || !owner.email_verified || !owner.username) return noSuchProfile(c);
+    if (asked !== owner.username) return c.redirect(`/@${owner.username}${new URL(c.req.url).search}`, 301);
+    return profilePage(c, owner);
+  });
+
+  async function profilePage(c: Ctx, owner: User) {
     const viewer = c.get("user");
     const isOwner = viewer?.user_id === owner.user_id;
     // Friends see the public profile too (phase 3).
@@ -673,7 +690,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const calendars = await db(c).calendarsOf(owner.user_id);
     const { page: body, status } = await renderCalendar({
       zone,
-      links: new Links(zone, `/u/${owner.public_id}`),
+      links: new Links(zone, profilePath(owner)),
       query: { view: c.req.query("view"), date: c.req.query("date"), from: c.req.query("from"), to: c.req.query("to") },
       nowSec: now(),
       window,
@@ -687,7 +704,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
         intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
     });
     return page(c, body, status);
-  });
+  }
 
   // ------------------------------------------------------------ errors
 

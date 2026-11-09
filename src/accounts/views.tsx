@@ -18,7 +18,7 @@ import { dateAt } from "../tz";
 import { PALETTE_NAMES, type PaletteName } from "../parula";
 import { LEVELS } from "../levels";
 import { stepClasses } from "../dither";
-import { USERNAME_MAX, USERNAME_MIN } from "./username";
+import { USERNAME_MAX, USERNAME_MIN, profilePath } from "./username";
 
 /** Limits shown in forms and checked on the server. */
 export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, email: 254, label: 40 } as const;
@@ -40,7 +40,7 @@ export function AccountShell({ title, children, user }: ShellProps) {
         <h1>{title}</h1>
         {user ? (
           // PRINTED OUTPUT: account / header picture link accessible name
-          <a class="pill round sub-avatar" href={`/u/${user.public_id}`} aria-label="Your profile">
+          <a class="pill round sub-avatar" href={profilePath(user)} aria-label="Your profile">
             {user.picture_key ? <img class="tb-avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={36} height={36} /> : <UserIcon />}
           </a>
         ) : null}
@@ -388,7 +388,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
           </p>
           <div class="actions actions-start">
             {/* PRINTED OUTPUT: account / view profile link */}
-            <a class="pill" href={`/u/${user.public_id}`}>
+            <a class="pill" href={profilePath(user)}>
               View profile
             </a>
             {/* PRINTED OUTPUT: account / copy target name */}
@@ -429,7 +429,7 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
         )}
         <p>
           {/* PRINTED OUTPUT: account / open your calendar */}
-          <a href={`/u/${user.public_id}`}>Open your calendar</a>
+          <a href={profilePath(user)}>Open your calendar</a>
         </p>
         {/* PRINTED OUTPUT: account / add calendar form */}
         <form class="form" method="post" action="/account/calendars">
