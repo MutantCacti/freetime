@@ -2,7 +2,7 @@ import { PALETTE_NAMES } from "../src/parula";
 import { describe, expect, it } from "vitest";
 import { cellClasses, DITHER_MAX_LEVEL, ditherLevel } from "../src/dither";
 import { LEVELS } from "../src/levels";
-import { NOW, attr, cellClass, makeApp, params, tagWith, topbarHref } from "./helpers";
+import { NOW, attr, cellClass, makeApp, params, settingHref, tagWith, topbarHref } from "./helpers";
 
 const files = import.meta.glob(["/public/css/*.css"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
@@ -207,8 +207,10 @@ describe("current time", () => {
     for (let i = 0; i < LEVELS; i++) expect(css).toContain(`.past.p${i}{background-color:var(--cell-past-${i})}`);
     const appCss = files["/public/css/app.css"]!;
     expect(appCss).toMatch(/\.slot\.past::after, \.slot\.split::after, \.daycell\.past::after \{[^}]*background: var\(--color-veil\)/);
-    // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does.
-    expect(appCss.match(/backdrop-filter/g)?.length).toBe(2);
+    // Whole cells use no backdrop filter (it's slow on low-end machines); only the split slot does,
+    // and the settings modal's backdrop (one element, while it's open).
+    const withFilter = [...appCss.matchAll(/([^{}]+)\{[^{}]*backdrop-filter:/g)].map((m) => m[1]!.trim().split("\n").pop()!.trim());
+    expect(withFilter).toEqual([".slot.split::after", ".settings::backdrop"]);
     expect(appCss).toMatch(/\.daycell\.is-today \{ outline: 3px solid var\(--color-now\)/);
   });
 
@@ -317,7 +319,7 @@ describe("top bar", () => {
     const html = await app.html("/?view=week&date=2026-11-02");
     const topbar = html.slice(html.indexOf('<header class="topbar"'), html.indexOf("</header>"));
     const order = [...topbar.matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1]);
-    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "account", "download", "contact", "help", "theme"]);
+    expect(order).toEqual(["tabs", "today", "prev", "next", "period", "tz", "indicator", "settings"]);
     const tabs = [...topbar.matchAll(/<a class="tab"[^>]*>([^<]+)<\/a>/g)].map((m) => m[1]);
     expect(tabs).toEqual(["Day", "Week", "Month", "Range"]);
   });
@@ -330,7 +332,7 @@ describe("top bar", () => {
     const between = (a: string, b: string) => topbar.slice(topbar.indexOf(a), b ? topbar.indexOf(b) : undefined);
     expect([...between('class="tb-left"', 'class="tb-centre"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["tabs", "today", "prev", "next"]);
     expect([...between('class="tb-centre"', 'class="tb-right"').matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["period", "tz"]);
-    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "account", "download", "contact", "help", "theme"]);
+    expect([...between('class="tb-right"', "").matchAll(/data-tb="([a-z]+)"/g)].map((m) => m[1])).toEqual(["indicator", "settings"]);
     const css = files["/public/css/app.css"]!;
     expect(css).toMatch(/grid-template-columns: minmax\(max-content, 1fr\) minmax\(0, max-content\) minmax\(max-content, 1fr\);\s*grid-template-areas: "left centre right"/);
   });
@@ -347,10 +349,10 @@ describe("top bar", () => {
 
   it("uses pills for Today, the arrows, the zone selector and the right-hand buttons, and keeps tabs as a segmented control", async () => {
     const html = await app.html("/?view=week&date=2026-11-09");
-    for (const name of ["today", "prev", "next", "tz", "indicator", "account", "download", "contact", "help", "theme"]) {
+    for (const name of ["today", "prev", "next", "tz", "indicator", "settings"]) {
       expect(attr(tagWith(html, `data-tb="${name}"`), "class")!.split(" "), name).toContain("pill");
     }
-    for (const name of ["prev", "next", "indicator", "theme"]) expect(attr(tagWith(html, `data-tb="${name}"`), "class")).toContain("round");
+    for (const name of ["prev", "next", "indicator", "settings"]) expect(attr(tagWith(html, `data-tb="${name}"`), "class")).toContain("round");
     expect(html).not.toMatch(/class="tab [^"]*pill/);
   });
 
@@ -375,9 +377,26 @@ describe("top bar", () => {
     expect(tagWith(html, 'data-tb="indicator"')).toContain('hidden=""');
   });
 
-  it("has a menu for narrow screens that works without JS (popover)", async () => {
-    const html = await app.html("/");
-    expect(html).toContain('popovertarget="tb-menu-items"');
-    expect(tagWith(html, 'id="tb-menu-items"')).toContain('popover="auto"');
+  it("the cog is the only menu: it opens the settings with JS, and goes to /help without it", async () => {
+    const html = await app.html("/?view=month&date=2026-11-01&dtz=Europe/Paris");
+    const cog = tagWith(html, 'data-tb="settings"')!;
+    expect(attr(cog, "href")).toBe("/help?view=month&date=2026-11-01&dtz=Europe/Paris");
+    expect(attr(cog, "data-settings")).toBe("dlg-settings");
+    expect(attr(cog, "aria-label")).toBe("Settings");
+    for (const gone of ["popovertarget", "tb-menu", "tb-account", "tb-theme", "tb-owner"]) expect(html, gone).not.toContain(gone);
+  });
+
+  it("the main site's settings: Account, Theme (the switch only), Download .ics, Contact me and Help", async () => {
+    const html = await app.html("/?view=week&date=2026-11-02");
+    const dlg = html.slice(html.indexOf('<dialog class="settings"'), html.indexOf("</dialog>", html.indexOf('<dialog class="settings"')));
+    const names = [...dlg.matchAll(/<span class="row-what">([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(names).toEqual(["Account", "Theme", "Download .ics", "Contact me", "Help"]);
+    expect(settingHref(html, "account")).toBe("/account");
+    // The switch, in parula; no colour maps here, and nothing read from a cookie.
+    expect(dlg).toContain('class="theme-switch" data-palette="parula" hidden=""');
+    expect(dlg).not.toContain("pal-btn");
+    expect(dlg).toContain('<span data-theme-mode="true">Dark</span>');
+    // The Close button that lands on the cog.
+    expect(dlg).toMatch(/class="pill round settings-close" data-settings-close="true" aria-label="Close"/);
   });
 });

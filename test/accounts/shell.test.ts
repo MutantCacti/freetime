@@ -13,12 +13,14 @@ it.each(["/account", "/account/sign-in", "/account/sign-up", "/account/reset", "
   expect(assetsOf(await (await a.browser().get(path)).text())).toEqual(SHARED_ASSETS);
 });
 
-it("the signed-in account page does too, with the site's header controls", async () => {
+it("the signed-in account page does too, with the site's sub-page header and the settings' rows", async () => {
   const a = makeAccounts();
   const b = await signedUp(a);
   const html = await (await b.get("/account")).text();
   expect(assetsOf(html)).toEqual(SHARED_ASSETS);
   expect(html).toContain('class="subheader"');
-  expect(html).toContain("theme-toggle");
+  // The theme is in its row here, not in the header.
+  expect(html).toContain('class="theme-switch"');
+  expect(html).not.toContain("theme-toggle");
   expect(html).toContain(`<title>Account · ${SITE_HOST}</title>`);
 });

@@ -1,46 +1,49 @@
-// The Add friend control's look (ACCOUNTS-SPEC.md §4). Phase 3 wires it to
-// real routes; these check each state renders the right control.
+// The Add friend control (ACCOUNTS-SPEC.md §4): a round accent button in the
+// profile card. Phase 3 wires the signed-in states to real routes; these check
+// each state renders the right control.
 import { describe, expect, it } from "vitest";
 import { FriendButton, FriendRequestsBadge, type FriendState } from "../../src/accounts/views";
 import { decode } from "./helpers";
 
-const html = (state: FriendState, extra = {}) => decode(String(FriendButton({ state, action: "/u/abc/friend", unfriendAction: "/u/abc/unfriend", ...extra })));
+const html = (state: FriendState, extra = {}) =>
+  decode(String(FriendButton({ state, name: "Ada", action: "/u/abc/friend", cancelAction: "/u/abc/cancel", unfriendAction: "/u/abc/unfriend", ...extra })));
 
 describe("FriendButton", () => {
   it.each([
-    ["add", "Add friend"],
-    ["invite", "Add friend"],
-    ["accept", "Accept friend request"],
-  ] as const)("%s is a primary pill that posts", (state, label) => {
+    ["add", "Add Ada as a friend"],
+    ["invite", "Add Ada as a friend"],
+    ["accept", "Accept Ada's friend request"],
+  ] as const)("%s is the round person-plus button, and posts", (state, label) => {
     const h = html(state);
-    expect(h).toContain('class="friend-action friend-cta"');
     expect(h).toContain('method="post" action="/u/abc/friend"');
-    expect(h).toMatch(new RegExp(`<button type="submit" class="pill pill-primary friend-pill">.*${label}</button>`));
+    expect(h).toMatch(new RegExp(`<button type="submit" class="add-friend" data-state="${state}" aria-label="${label}"><svg[^>]*class="icon icon-user-plus"`));
   });
 
-  it("invite carries the share link's code and says it's instant", () => {
-    const h = html("invite", { fields: { f: "code123" } });
-    expect(h).toContain('<input type="hidden" name="f" value="code123"/>');
-    expect(h).toContain("You'll be friends at once.");
+  it("invite carries the share link's code", () => {
+    expect(html("invite", { fields: { f: "code123" } })).toContain('<input type="hidden" name="f" value="code123"/>');
   });
 
-  it("signed out links to sign-up", () => {
-    const h = html("signed-out", { signUpHref: "/account/sign-up?next=%2Fu%2Fabc" });
-    expect(h).toContain('<a class="pill pill-primary friend-pill" href="/account/sign-up?next=%2Fu%2Fabc">');
-    expect(h).toContain("Sign up to add friend");
+  it("sent is an outlined check; tapping it again takes the request back", () => {
+    const h = html("sent");
+    expect(h).toContain('action="/u/abc/cancel"');
+    expect(h).toMatch(/<button type="submit" class="add-friend is-done" data-state="sent" aria-label="Friend request sent to Ada. Take it back"><svg[^>]*><path d="M3 8.5/);
+  });
+
+  it("friends is an outlined check that unfriends", () => {
+    const h = html("friends");
+    expect(h).toContain('action="/u/abc/unfriend"');
+    expect(h).toContain('class="add-friend is-done" data-state="friends"');
+  });
+
+  it("with no route yet, it's drawn but can't be pressed", () => {
+    expect(html("add", { action: undefined })).toMatch(/<button type="button" class="add-friend"[^>]*disabled=""/);
+  });
+
+  it("signed out: a link to sign in, with the note app.js shows on the first tap", () => {
+    const h = html("signed-out", { signInHref: "/account/sign-in?next=%2F%40ada" });
+    expect(h).toMatch(/^<a class="add-friend" data-state="signed-out" data-signin-tip="" href="\/account\/sign-in\?next=%2F%40ada" aria-label="Sign in to add Ada as a friend">/);
+    expect(h).toContain('<span class="add-friend-tip" hidden="">Sign in to add friends</span>');
     expect(h).not.toContain("<form");
-  });
-
-  it("sent and friends are quiet status lines; only friends has Unfriend", () => {
-    const sent = html("sent");
-    expect(sent).toContain('class="friend-action friend-status" data-state="sent"');
-    expect(sent).toContain("Request sent");
-    expect(sent).not.toContain("<button");
-    const friends = html("friends");
-    expect(friends).toContain("Friends");
-    expect(friends).toContain('action="/u/abc/unfriend"');
-    expect(friends).toContain("Unfriend");
-    expect(friends).not.toContain("friend-cta");
   });
 
   it("the request badge shows only when something is waiting", () => {

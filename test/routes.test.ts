@@ -85,10 +85,11 @@ describe("colour map", () => {
   it("the main site is always drawn in parula, the default map", async () => {
     const html = await (await app.get("/?view=week&date=2026-11-02")).text();
     expect(html).toContain('<html lang="en-GB">');
-    expect(html).not.toContain("data-palette");
-    // It never knows who's signed in: the account button is always the icon, and there's no accent sheet.
-    expect(html).toContain('class="icon icon-user"');
-    expect(html).not.toContain("tb-avatar");
+    expect(html).not.toMatch(/<html[^>]*data-palette/);
+    // Only the settings' theme switch names a map: parula.
+    expect([...html.matchAll(/data-palette="([a-z]+)"/g)].map((m) => m[1])).toEqual(["parula"]);
+    // It never knows who's signed in: Account is a plain link, and there's no accent sheet.
+    expect(html).toContain('data-setting="account"');
     expect(html).not.toContain("accent.css");
   });
 });

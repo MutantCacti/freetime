@@ -123,7 +123,11 @@ describe("motion", () => {
   it("dialogs and toasts grow from the top right, where their buttons are", () => {
     expect(css).toMatch(/\.dialog \{ transform-origin: top right;/);
     expect(css).toMatch(/\.toast \{ transform-origin: top right;/);
-    expect(css).toMatch(/\.tb-menu-items:popover-open \{ transform-origin: top right;/);
+    // The settings modal grows out of the cog's centre (its Close lands on the cog), on open only.
+    expect(css).toMatch(/\.settings \{[^}]*transform-origin: calc\(100% - 12px - 1\.125rem\) calc\(14px \+ 1\.125rem\);/);
+    expect(css).toContain(".settings[open] { animation: settings-grow var(--motion-settings); }");
+    expect(css).not.toMatch(/\.settings[^{]*is-closing/);
+    expect(tokens).toMatch(/--motion-settings: 200ms/);
   });
 });
 

@@ -30,11 +30,11 @@ describe("dialogs", () => {
 
   it("Help opens as a modal with JS and falls back to /help without it", async () => {
     const html = await app.html("/?view=month&date=2026-11-01&dtz=Europe/Paris");
-    const help = tagWith(html, 'data-tb="help"');
+    const help = tagWith(html, 'data-setting="help"');
     expect(attr(help, "data-dialog")).toBe("dlg-help");
     expect(attr(help, "href")).toBe("/help?view=month&date=2026-11-01&dtz=Europe/Paris");
     expect(dialog(html, "dlg-help")).toContain('<article class="help">');
-    for (const name of ["download", "contact"]) expect(attr(tagWith(html, `data-tb="${name}"`), "data-dialog")).toBe(`dlg-${name}`);
+    for (const name of ["download", "contact"]) expect(attr(tagWith(html, `data-setting="${name}"`), "data-dialog")).toBe(`dlg-${name}`);
   });
 });
 

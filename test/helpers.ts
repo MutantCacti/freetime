@@ -96,6 +96,11 @@ export function topbarHref(html: string, name: string): string | null {
   return attr(tagWith(html, `data-tb="${name}"`), "href");
 }
 
+/** The href of the settings row with data-setting=name (the cog's modal). */
+export function settingHref(html: string, name: string): string | null {
+  return attr(tagWith(html, `data-setting="${name}"`), "href");
+}
+
 /** Query parameters of a link. */
 export function params(href: string): URLSearchParams {
   return new URL(href, "http://localhost").searchParams;

@@ -12,7 +12,8 @@ import type { User } from "./db";
 import { accentSheetUrl, pictureUrl } from "./pictures";
 import { isAccent } from "./accent";
 import { CopyButton } from "../views/panels";
-import { CheckIcon, UserIcon, UserPlusIcon } from "../views/icons";
+import { CheckIcon, UserPlusIcon } from "../views/icons";
+import { LinkRow, ProfileLink, Row, Rows, ThemeRow } from "../views/settings";
 import { monthLabel } from "../format";
 import { dateAt } from "../tz";
 import { PALETTE_NAMES, type PaletteName } from "../parula";
@@ -28,23 +29,19 @@ export const LIMITS = { name: 60, bio: 280, passwordMin: 10, passwordMax: 256, e
 export interface ShellProps {
   title: string;
   children: Child;
-  /** Signed in: their picture in the header, and their accent stylesheet. */
+  /** Signed in: their accent stylesheet. */
   user?: User;
+  /** The header's theme button; off where the page has its own Theme row (/account). */
+  theme?: boolean;
 }
 
 /** A sub-page like /help: title, theme switcher, and Close back to the calendar. */
-export function AccountShell({ title, children, user }: ShellProps) {
+export function AccountShell({ title, children, user, theme = true }: ShellProps) {
   return (
     <Document title={pageTitle(title)} bodyClass="page-sub" accentSheet={user && isAccent(user.accent) ? accentSheetUrl(user.public_id, user.accent) : undefined}>
       <header class="subheader">
         <h1>{title}</h1>
-        {user ? (
-          // PRINTED OUTPUT: account / header picture link accessible name
-          <a class="pill round sub-avatar" href={profilePath(user)} aria-label="Your profile">
-            {user.picture_key ? <img class="tb-avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={36} height={36} /> : <UserIcon />}
-          </a>
-        ) : null}
-        <ThemeButton />
+        {theme ? <ThemeButton /> : null}
         <CloseControl href="/" />
       </header>
       <main class="sub-main" id="main">
@@ -59,6 +56,8 @@ export function AccountShell({ title, children, user }: ShellProps) {
 
 export interface FieldProps {
   label: string;
+  /** The input's id, when `f-<name>` is used twice on a page. */
+  id?: string;
   name: string;
   type?: "text" | "email" | "password";
   value?: string;
@@ -74,7 +73,7 @@ export interface FieldProps {
 
 /** Label, then hint, then the field, then any error: everything that explains a field sits above it. */
 export function Field(p: FieldProps) {
-  const id = `f-${p.name}`;
+  const id = p.id ?? `f-${p.name}`;
   const describedBy = [p.hint ? `${id}-hint` : "", p.error ? `${id}-error` : ""].filter(Boolean).join(" ") || undefined;
   return (
     <div class="field">
@@ -301,18 +300,44 @@ export function MessagePage({ title, message, href, linkText }: { title: string;
   );
 }
 
+/** Where the settings' Help goes: the profile's Help dialog, or the main site's /help page. */
+export interface HelpTarget {
+  href: string;
+  dialog?: string;
+}
+
+/** /account signed out: the sentence, Sign in and Create an account, then Theme and Help (as in the modal). */
+export function SignedOutSettings({ help, next }: { help: HelpTarget; next?: string }) {
+  const q = next ? `?next=${encodeURIComponent(next)}` : "";
+  return (
+    <>
+      <div class="settings-intro">
+        {/* PRINTED OUTPUT: account (signed out) / message and actions */}
+        <p>Sign in to show your free time on a profile, add friends and find a time together.</p>
+        <div class="actions actions-start">
+          <a class="pill pill-primary" href={`/account/sign-in${q}`}>
+            Sign in
+          </a>
+          <a class="pill" href={`/account/sign-up${q}`}>
+            Create an account
+          </a>
+        </div>
+      </div>
+      <Rows>
+        <ThemeRow />
+        {/* PRINTED OUTPUT: settings / help row */}
+        <LinkRow href={help.href} dialog={help.dialog} what="Help" />
+      </Rows>
+    </>
+  );
+}
+
 export function SignedOutPage() {
   return (
-    // PRINTED OUTPUT: account (signed out) / title, message and actions
-    <AccountShell title="Account">
-      <p class="lede">Sign in to show your free time on a profile, add friends and find a time together.</p>
-      <div class="actions actions-start">
-        <a class="pill pill-primary" href="/account/sign-in">
-          Sign in
-        </a>
-        <a class="pill" href="/account/sign-up">
-          Create an account
-        </a>
+    // PRINTED OUTPUT: account (signed out) / title
+    <AccountShell title="Account" theme={false}>
+      <div class="settings-page">
+        <SignedOutSettings help={{ href: "/help" }} />
       </div>
     </AccountShell>
   );
@@ -323,7 +348,7 @@ export function SignedOutPage() {
 /** The picture circle: the user's picture, or their initials. Decorative: the name is always next to it. */
 export function Avatar({ user }: { user: User }) {
   return user.picture_key ? (
-    <img class="avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={64} height={64} />
+    <img class="avatar" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={40} height={40} />
   ) : (
     <span class="avatar" aria-hidden="true">
       {initials(user.name)}
@@ -347,23 +372,243 @@ export interface CalendarRow {
   status: "ok" | "disconnected";
 }
 
-export interface AccountPageProps {
+export interface AccountSettingsProps {
   user: User;
   calendars: CalendarRow[];
-  /** The share link: the profile, and (phase 3) a friend invite. */
+  /** The share link: the profile, and a friend invite. */
   shareLink: string;
-  /** What was just saved, for the confirmation line. */
-  done?: string;
+  /** This site's host and origin, for the profile link's text and what Copy copies. */
+  host: string;
+  origin: string;
   errors?: Errors;
   /** Values to put back after a failed save. */
   draft?: { name?: string; username?: string; bio?: string; email?: string; label?: string; address?: string };
+  /** Where the forms come back to (the profile the modal was opened on); /account when omitted. */
+  next?: string;
+  help: HelpTarget;
+  /** The time zone field (only on /account: its list is long). */
+  zone?: boolean;
 }
 
-export function AccountPage({ user, calendars, shareLink, done, errors = {}, draft = {} }: AccountPageProps) {
-  const visibility = user.visibility === "public" ? "Public" : "Private"; // PRINTED OUTPUT: account / visibility names
+/** Hidden `next`, so a form sent from the modal comes back to the page it was on. */
+function Next({ next }: { next?: string }) {
+  return next ? <input type="hidden" name="next" value={next} /> : null;
+}
+
+/** The signed-in settings: you (picture, name, profile link), then Profile, Theme, Security, Calendars, Help and Sign out. */
+export function AccountSettings(p: AccountSettingsProps) {
+  const { user, calendars, errors = {}, draft = {}, next } = p;
+  const path = profilePath(user);
+  return (
+    <>
+      <section class="me" data-accent-user={user.public_id} aria-label={user.name}>
+        <Avatar user={user} />
+        <div class="me-text">
+          <strong>{user.name}</strong>
+          <ProfileLink host={p.host} path={path} copy={`${p.origin}${path}`} />
+        </div>
+      </section>
+      <Rows>
+        {/* PRINTED OUTPUT: settings / profile row name and summary */}
+        <Row id="profile" what="Profile" value="Name, bio, picture">
+          {/* PRINTED OUTPUT: account / profile form fields, placeholders, choices and button */}
+          <form class="form" method="post" action="/account/profile">
+            <Next next={next} />
+            <Field label="Name" name="name" placeholder="Your name" value={draft.name ?? user.name} error={errors.name} required maxlength={LIMITS.name} autocomplete="name" />
+            <UsernameField value={draft.username ?? user.username ?? ""} error={errors.username} />
+            <div class="field">
+              <label for="f-bio">Bio</label>
+              <p class="field-hint">Up to {LIMITS.bio} characters.</p>
+              <textarea id="f-bio" name="bio" rows={3} maxlength={LIMITS.bio} placeholder="A line about you" aria-invalid={errors.bio ? "true" : undefined}>
+                {draft.bio ?? user.bio}
+              </textarea>
+              {errors.bio ? <p class="field-error">{errors.bio}</p> : null}
+            </div>
+            {p.zone ? <ZoneSelect value={user.zone} /> : null}
+            <fieldset class="field choice">
+              <legend>Who can see your profile</legend>
+              <label>
+                <input type="radio" name="visibility" value="private" checked={user.visibility === "private"} /> Private: your name, bio and busy times. Friends see everything public.
+              </label>
+              <label>
+                <input type="radio" name="visibility" value="public" checked={user.visibility === "public"} /> Public: also your time zone and friends.
+              </label>
+            </fieldset>
+            <div class="actions actions-start">
+              <button type="submit" class="pill pill-primary">
+                Save profile
+              </button>
+            </div>
+          </form>
+          {/* PRINTED OUTPUT: account / picture field, hint and buttons */}
+          <form class="form" method="post" action="/account/picture" enctype="multipart/form-data">
+            <Next next={next} />
+            <div class="field">
+              <label for="f-picture">Picture</label>
+              <p class="field-hint">PNG or JPEG, up to 2 MB. Kept as a small square (the middle of your picture), shown as a circle to everyone who sees your profile.</p>
+              <input id="f-picture" name="picture" type="file" accept="image/png,image/jpeg" required aria-invalid={errors.picture ? "true" : undefined} />
+              {errors.picture ? <p class="field-error">{errors.picture}</p> : null}
+            </div>
+            <div class="actions actions-start">
+              <button type="submit" class="pill">
+                Upload picture
+              </button>
+            </div>
+          </form>
+          {user.picture_key ? (
+            <form method="post" action="/account/picture/remove">
+              <Next next={next} />
+              <button type="submit" class="pill">
+                Remove picture
+              </button>
+            </form>
+          ) : null}
+          <div class="field">
+            {/* PRINTED OUTPUT: account / share link label, hint and copy target */}
+            <p class="field-label">Share link</p>
+            <p class="field-hint">Your profile, and a friend invite: whoever opens it can add you in one tap.</p>
+            <p class="share-link">
+              <code>{p.shareLink}</code>
+            </p>
+            <div class="actions actions-start">
+              <CopyButton value={p.shareLink} what="share link" />
+            </div>
+          </div>
+        </Row>
+        <ThemeRow palette={user.palette} mapName={PALETTE_LABELS[user.palette].name}>
+          <PaletteChoice value={user.palette} next={next} error={errors.palette} />
+        </ThemeRow>
+        {/* PRINTED OUTPUT: settings / security row name and summary */}
+        <Row id="security" what="Security" value="Email, password">
+          {/* PRINTED OUTPUT: account / email form */}
+          <form class="form" method="post" action="/account/email">
+            <Next next={next} />
+            <Field label="Email" name="email" placeholder="you@example.com" type="email" value={draft.email ?? user.email} error={errors.email} required maxlength={LIMITS.email} autocomplete="email" hint="Changing it sends a link to the new address; it changes when you open it." />
+            <div class="actions actions-start">
+              <button type="submit" class="pill">
+                Change email
+              </button>
+            </div>
+          </form>
+          {/* PRINTED OUTPUT: account / password form */}
+          <form class="form" method="post" action="/account/password">
+            <Next next={next} />
+            <Field label="Current password" name="current" placeholder="Current password" type="password" error={errors.current} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
+            <Field
+              label="New password"
+              name="password"
+              placeholder="New password"
+              type="password"
+              error={errors.password}
+              required
+              autocomplete="new-password"
+              minlength={LIMITS.passwordMin}
+              maxlength={LIMITS.passwordMax}
+              hint={`At least ${LIMITS.passwordMin} characters. Signs you out everywhere else.`}
+            />
+            <div class="actions actions-start">
+              <button type="submit" class="pill">
+                Change password
+              </button>
+            </div>
+          </form>
+          {/* PRINTED OUTPUT: account / sign out everywhere else */}
+          <form class="form" method="post" action="/account/sign-out-everywhere">
+            <Next next={next} />
+            <p class="field-label">Sessions</p>
+            <div class="actions actions-start">
+              <button type="submit" class="pill">
+                Sign out everywhere else
+              </button>
+            </div>
+          </form>
+          {/* PRINTED OUTPUT: account / delete account form */}
+          <form class="form danger" method="post" action="/account/delete">
+            <p class="field-label">Delete account</p>
+            <p class="field-hint">Deletes your profile and everything in it. This can't be undone. Enter your password to confirm.</p>
+            <Field label="Password" name="password" id="f-delete-password" placeholder="Password" type="password" error={errors.delete} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
+            <div class="actions actions-start">
+              <button type="submit" class="pill pill-danger">
+                Delete my account
+              </button>
+            </div>
+          </form>
+        </Row>
+        {/* PRINTED OUTPUT: settings / calendars row name and count */}
+        <Row id="calendars" what="Calendars" value={calendars.length ? `${calendars.length} added` : "None yet"}>
+          {/* PRINTED OUTPUT: account / your calendar intro */}
+          <p class="field-hint">Your busy times, merged from these calendars. Only when you're busy is shown, never what you're doing.</p>
+          {calendars.length ? (
+            <ul class="calendar-list">
+              {calendars.map((cal) => (
+                <li>
+                  <span class="calendar-label">{cal.label}</span>
+                  {/* PRINTED OUTPUT: account / calendar kind and status */}
+                  <span class="field-hint">{cal.kind === "google" ? "Google Calendar" : "iCal"}{cal.status === "disconnected" ? " · disconnected" : ""}</span>
+                  <form method="post" action="/account/calendars/remove">
+                    <Next next={next} />
+                    <input type="hidden" name="id" value={String(cal.calendar_id)} />
+                    {/* PRINTED OUTPUT: account / remove calendar button and accessible name */}
+                    <button type="submit" class="pill" aria-label={`Remove ${cal.label}`}>
+                      Remove
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            // PRINTED OUTPUT: account / no calendars yet
+            <p>No calendars yet: until you add one, your profile shows you as free.</p>
+          )}
+          {/* PRINTED OUTPUT: account / add calendar form */}
+          <form class="form" method="post" action="/account/calendars">
+            <Next next={next} />
+            <p class="field-label">Add a calendar</p>
+            <Field label="Name" name="label" placeholder="Work" value={draft.label} error={errors.label} required maxlength={LIMITS.label} hint="For you only, like Work or Personal." />
+            <Field
+              label="Secret iCal address"
+              name="address"
+              placeholder="https://calendar.example/…/basic.ics"
+              value={draft.address}
+              error={errors.address}
+              required
+              maxlength={2048}
+              autocomplete="off"
+              hint="From your calendar's settings: in Google Calendar, Settings, your calendar, Integrate calendar, Secret address in iCal format. Stored encrypted; never shown again."
+            />
+            <div class="actions actions-start">
+              <button type="submit" class="pill pill-primary">
+                Add calendar
+              </button>
+            </div>
+          </form>
+        </Row>
+        {/* PRINTED OUTPUT: settings / help row */}
+        <LinkRow href={p.help.href} dialog={p.help.dialog} what="Help" />
+        <li class="row">
+          <form method="post" action="/account/sign-out">
+            {/* PRINTED OUTPUT: settings / sign out row */}
+            <button type="submit" class="row-head row-danger">
+              <span class="row-what">Sign out</span>
+            </button>
+          </form>
+        </li>
+      </Rows>
+    </>
+  );
+}
+
+export interface AccountPageProps extends Omit<AccountSettingsProps, "help" | "zone"> {
+  /** What was just saved, for the confirmation line. */
+  done?: string;
+}
+
+/** /account: the same rows as the modal, as a page (the cog's place without JS). */
+export function AccountPage({ done, ...settings }: AccountPageProps) {
+  const { user, errors = {} } = settings;
   return (
     // PRINTED OUTPUT: account / title
-    <AccountShell title="Account" user={user}>
+    <AccountShell title="Account" user={user} theme={false}>
       {done ? <FormMessage kind="done">{done}</FormMessage> : null}
       {errors.form ? <FormMessage kind="error">{errors.form}</FormMessage> : null}
       {user.email_verified ? null : (
@@ -377,216 +622,26 @@ export function AccountPage({ user, calendars, shareLink, done, errors = {}, dra
           </form>
         </div>
       )}
-
-      <section class="profile-card" data-accent-user={user.public_id} aria-labelledby="profile-name">
-        <div class="profile-text">
-          <h2 id="profile-name">{user.name}</h2>
-          {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
-          {/* PRINTED OUTPUT: account / profile card, time zone and visibility */}
-          <p class="profile-meta">
-            <WithSeps text={`${user.zone} · ${visibility}`} />
-          </p>
-          <div class="actions actions-start">
-            {/* PRINTED OUTPUT: account / view profile link */}
-            <a class="pill" href={profilePath(user)}>
-              View profile
-            </a>
-            {/* PRINTED OUTPUT: account / copy target name */}
-            <CopyButton value={shareLink} what="share link" />
-          </div>
-          {/* Without JS, the link to copy by hand. */}
-          <p class="field-hint share-link">
-            {/* PRINTED OUTPUT: account / share link label */}
-            Your share link: <code>{shareLink}</code>
-          </p>
-        </div>
-      </section>
-
-      <section class="account-section" aria-labelledby="your-calendar">
-        {/* PRINTED OUTPUT: account / your calendar heading, intro and link */}
-        <h2 id="your-calendar">Your calendar</h2>
-        <p class="field-hint">Your busy times, merged from these calendars. Only when you're busy is shown, never what you're doing.</p>
-        {calendars.length ? (
-          <ul class="calendar-list">
-            {calendars.map((cal) => (
-              <li>
-                <span class="calendar-label">{cal.label}</span>
-                {/* PRINTED OUTPUT: account / calendar kind and status */}
-                <span class="field-hint">{cal.kind === "google" ? "Google Calendar" : "iCal"}{cal.status === "disconnected" ? " · disconnected" : ""}</span>
-                <form method="post" action="/account/calendars/remove">
-                  <input type="hidden" name="id" value={String(cal.calendar_id)} />
-                  {/* PRINTED OUTPUT: account / remove calendar button and accessible name */}
-                  <button type="submit" class="pill" aria-label={`Remove ${cal.label}`}>
-                    Remove
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          // PRINTED OUTPUT: account / no calendars yet
-          <p>No calendars yet: until you add one, your profile shows you as free.</p>
-        )}
-        <p>
-          {/* PRINTED OUTPUT: account / open your calendar */}
-          <a href={profilePath(user)}>Open your calendar</a>
-        </p>
-        {/* PRINTED OUTPUT: account / add calendar form */}
-        <form class="form" method="post" action="/account/calendars">
-          <h3>Add a calendar</h3>
-          <Field label="Name" name="label" placeholder="Work" value={draft.label} error={errors.label} required maxlength={LIMITS.label} hint="For you only, like Work or Personal." />
-          <Field
-            label="Secret iCal address"
-            name="address"
-            placeholder="https://calendar.example/…/basic.ics"
-            value={draft.address}
-            error={errors.address}
-            required
-            maxlength={2048}
-            autocomplete="off"
-            hint="From your calendar's settings: in Google Calendar, Settings, your calendar, Integrate calendar, Secret address in iCal format. Stored encrypted; never shown again."
-          />
-          <div class="actions actions-start">
-            <button type="submit" class="pill pill-primary">
-              Add calendar
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="account-section" aria-labelledby="edit-profile">
-        {/* PRINTED OUTPUT: account / edit profile heading, fields, placeholders, choices and button */}
-        <h2 id="edit-profile">Edit profile</h2>
-        <form class="form" method="post" action="/account/profile">
-          <Field label="Name" name="name" placeholder="Your name" value={draft.name ?? user.name} error={errors.name} required maxlength={LIMITS.name} autocomplete="name" />
-          <UsernameField value={draft.username ?? user.username ?? ""} error={errors.username} />
-          <div class="field">
-            <label for="f-bio">Bio</label>
-            <textarea id="f-bio" name="bio" rows={3} maxlength={LIMITS.bio} placeholder="A line about you" aria-invalid={errors.bio ? "true" : undefined}>
-              {draft.bio ?? user.bio}
-            </textarea>
-            <p class="field-hint">Up to {LIMITS.bio} characters.</p>
-            {errors.bio ? <p class="field-error">{errors.bio}</p> : null}
-          </div>
-          <ZoneSelect value={user.zone} />
-          <fieldset class="field choice">
-            <legend>Who can see your profile</legend>
-            <label>
-              <input type="radio" name="visibility" value="private" checked={user.visibility === "private"} /> Private: your name, bio and busy times. Friends see everything public.
-            </label>
-            <label>
-              <input type="radio" name="visibility" value="public" checked={user.visibility === "public"} /> Public: also your time zone and friends.
-            </label>
-          </fieldset>
-          <PaletteChoice value={user.palette} error={errors.palette} />
-          <div class="actions actions-start">
-            <button type="submit" class="pill pill-primary">
-              Save profile
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="account-section" aria-labelledby="picture">
-        {/* PRINTED OUTPUT: account / picture heading, field, hint and buttons */}
-        <h2 id="picture">Picture</h2>
-        <form class="form" method="post" action="/account/picture" enctype="multipart/form-data">
-          <div class="field">
-            <label for="f-picture">Choose a picture</label>
-            <input id="f-picture" name="picture" type="file" accept="image/png,image/jpeg" required aria-invalid={errors.picture ? "true" : undefined} />
-            <p class="field-hint">PNG or JPEG, up to 2 MB. Kept as a small square (the middle of your picture), shown as a circle to everyone who sees your profile.</p>
-            {errors.picture ? <p class="field-error">{errors.picture}</p> : null}
-          </div>
-          <div class="actions actions-start">
-            <button type="submit" class="pill pill-primary">
-              Upload picture
-            </button>
-          </div>
-        </form>
-        {user.picture_key ? (
-          <form method="post" action="/account/picture/remove">
-            <button type="submit" class="pill">
-              Remove picture
-            </button>
-          </form>
-        ) : null}
-      </section>
-
-      <section class="account-section" aria-labelledby="security">
-        {/* PRINTED OUTPUT: account / sign-in and security heading */}
-        <h2 id="security">Sign-in and security</h2>
-
-        {/* PRINTED OUTPUT: account / email form */}
-        <form class="form" method="post" action="/account/email">
-          <Field label="Email" name="email" placeholder="you@example.com" type="email" value={draft.email ?? user.email} error={errors.email} required maxlength={LIMITS.email} autocomplete="email" hint="Changing it sends a link to the new address; it changes when you open it." />
-          <div class="actions actions-start">
-            <button type="submit" class="pill">
-              Change email
-            </button>
-          </div>
-        </form>
-
-        {/* PRINTED OUTPUT: account / password form */}
-        <form class="form" method="post" action="/account/password">
-          <Field label="Current password" name="current" placeholder="Current password" type="password" error={errors.current} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
-          <Field
-            label="New password"
-            name="password"
-            placeholder="New password"
-            type="password"
-            error={errors.password}
-            required
-            autocomplete="new-password"
-            minlength={LIMITS.passwordMin}
-            maxlength={LIMITS.passwordMax}
-            hint={`At least ${LIMITS.passwordMin} characters. Signs you out everywhere else.`}
-          />
-          <div class="actions actions-start">
-            <button type="submit" class="pill">
-              Change password
-            </button>
-          </div>
-        </form>
-
-        {/* PRINTED OUTPUT: account / sign out buttons */}
-        <div class="actions actions-start">
-          <form method="post" action="/account/sign-out">
-            <button type="submit" class="pill">
-              Sign out
-            </button>
-          </form>
-          <form method="post" action="/account/sign-out-everywhere">
-            <button type="submit" class="pill">
-              Sign out everywhere
-            </button>
-          </form>
-        </div>
-
-        {/* PRINTED OUTPUT: account / delete account form */}
-        <form class="form danger" method="post" action="/account/delete">
-          <h3>Delete account</h3>
-          <p class="field-hint">Deletes your profile and everything in it. This can't be undone.</p>
-          <Field label="Password" name="password" placeholder="Password" type="password" error={errors.delete} required autocomplete="current-password" maxlength={LIMITS.passwordMax} />
-          <div class="actions actions-start">
-            <button type="submit" class="pill pill-danger">
-              Delete my account
-            </button>
-          </div>
-        </form>
-      </section>
+      <p class="account-links">
+        {/* PRINTED OUTPUT: account / view profile link */}
+        <a href={profilePath(user)}>View your profile</a>
+      </p>
+      <div class="settings-page">
+        <AccountSettings {...settings} help={{ href: "/help" }} zone />
+      </div>
     </AccountShell>
   );
 }
 
 export { ZoneSelect };
 
-// PRINTED OUTPUT: account / colour map names and notes
-const PALETTE_LABELS: Record<PaletteName, { name: string; note?: string }> = {
-  parula: { name: "Parula", note: "the default" },
-  viridis: { name: "Viridis" },
-  cividis: { name: "Cividis", note: "made for colour-blind eyes" },
-  magma: { name: "Magma" },
-  plasma: { name: "Plasma" },
+// PRINTED OUTPUT: account / colour map names
+const PALETTE_LABELS: Record<PaletteName, { name: string }> = {
+  parula: { name: "parula" },
+  viridis: { name: "viridis" },
+  cividis: { name: "cividis" },
+  magma: { name: "magma" },
+  plasma: { name: "plasma" },
 };
 
 /** A strip of the map's busy steps, free to busy, drawn by calendar.css. */
@@ -600,29 +655,23 @@ export function PaletteSwatch({ palette }: { palette: PaletteName }) {
   );
 }
 
-/** The colour map choice in Edit profile: one radio per preset, each with its swatch. */
-function PaletteChoice({ value, error }: { value: PaletteName; error?: string }) {
+/** The colour maps, in Theme: one button each, which saves it at once; the name sits just left of its colours. */
+function PaletteChoice({ value, next, error }: { value: PaletteName; next?: string; error?: string }) {
   return (
-    <fieldset class="field choice palette-choice" aria-describedby="palette-hint" aria-invalid={error ? "true" : undefined}>
-      {/* PRINTED OUTPUT: account / colour map legend and hint */}
-      <legend>Colour map</legend>
-      <p class="field-hint" id="palette-hint">
-        Your calendar is drawn in this map, from free to busy, for everyone who sees your profile.
-      </p>
-      <div class="palette-options">
+    <form class="palette-choice" method="post" action="/account/palette">
+      <Next next={next} />
+      {/* PRINTED OUTPUT: account / colour map list name, button names and hint */}
+      <div class="pal-list" role="group" aria-label="Colour map">
         {PALETTE_NAMES.map((name) => (
-          <label class="palette-option">
-            <input type="radio" name="palette" value={name} checked={value === name} />
-            <span class="palette-name">
-              {PALETTE_LABELS[name].name}
-              {PALETTE_LABELS[name].note ? <span class="field-hint"> · {PALETTE_LABELS[name].note}</span> : null}
-            </span>
+          <button type="submit" class="pal-btn" name="palette" value={name} aria-pressed={value === name ? "true" : "false"} aria-label={`Colour map: ${PALETTE_LABELS[name].name}`}>
+            <span class="pal-name">{PALETTE_LABELS[name].name}</span>
             <PaletteSwatch palette={name} />
-          </label>
+          </button>
         ))}
       </div>
+      <p class="field-hint">Your profile is drawn in this map for everyone who visits it. Parula is the default; cividis is made for colour-blind eyes.</p>
       {error ? <p class="field-error">{error}</p> : null}
-    </fieldset>
+    </form>
   );
 }
 
@@ -630,19 +679,25 @@ function PaletteChoice({ value, error }: { value: PaletteName; error?: string })
 
 export interface ProfileCardProps {
   user: User;
-  /** Phase 3 wires this up; until then nothing passes it and no friend control is shown. */
+  /** The visitor's Add friend control; none for the owner. */
   friend?: FriendButtonProps;
   /** Time zone, friends and member since: public profiles, friends (phase 3) and the owner. */
   showPublic: boolean;
   isOwner: boolean;
-  shareLink?: string;
+  host: string;
+  origin: string;
 }
 
-/** Above the calendar on /u/<id> (ACCOUNTS-SPEC.md §3). Never shows the email. */
-export function ProfileCard({ user, showPublic, isOwner, shareLink, friend }: ProfileCardProps) {
+/**
+ * The owner's card, with their calendar (ACCOUNTS-SPEC.md §3): under it on
+ * phones, above it on wide screens. Edged in their accent. Never shows the email.
+ */
+export function ProfileCard({ user, showPublic, isOwner, friend, host, origin }: ProfileCardProps) {
   const since = monthLabel(dateAt(user.created_at, user.zone));
+  const path = profilePath(user);
   return (
     <section class="profile-card profile-strip" data-accent-user={user.public_id} aria-labelledby="profile-name">
+      {user.picture_key ? <img class="card-picture" src={pictureUrl(user.public_id, user.picture_key)} alt="" width={40} height={40} /> : null}
       <div class="profile-text">
         <h2 id="profile-name">{user.name}</h2>
         {user.bio ? <p class="profile-bio">{user.bio}</p> : null}
@@ -652,22 +707,14 @@ export function ProfileCard({ user, showPublic, isOwner, shareLink, friend }: Pr
             <WithSeps text={`${user.zone} · Member since ${since}`} />
           </p>
         ) : null}
-        {isOwner && shareLink ? (
-          <div class="actions actions-start">
-            {/* PRINTED OUTPUT: profile / owner's actions */}
-            <a class="pill" href="/account">
-              Edit profile
-            </a>
-            <CopyButton value={shareLink} what="share link" />
-          </div>
-        ) : null}
-        {friend && !isOwner ? <FriendButton {...friend} /> : null}
+        <ProfileLink host={host} path={path} copy={`${origin}${path}`} />
       </div>
+      {friend && !isOwner ? <FriendButton {...friend} name={user.name} /> : null}
     </section>
   );
 }
 
-// ---------------------------------------------------------------- friends (look only; phase 3 wires it)
+// ---------------------------------------------------------------- friends
 
 /**
  * Where a visitor stands with a profile's owner (ACCOUNTS-SPEC.md §4):
@@ -684,59 +731,57 @@ export interface FriendButtonProps {
   state: FriendState;
   /** POST target that adds, accepts or requests (states add, invite, accept). */
   action?: string;
+  /** POST target that takes a request back (state sent). */
+  cancelAction?: string;
   /** POST target for Unfriend (state friends). */
   unfriendAction?: string;
-  /** Sign-up link that comes back to this profile (state signed-out). */
-  signUpHref?: string;
-  /** Hidden fields for the form, such as the share link's `f` code. */
+  /** Sign-in link that comes back to this profile (state signed-out). */
+  signInHref?: string;
+  /** Hidden fields for the forms, such as the share link's `f` code. */
   fields?: Record<string, string>;
 }
 
 /**
- * The one-tap friend control on a profile card. The states that ask for a tap
- * (add, invite, accept, signed-out) are a primary pill; on narrow screens it
- * sits at the bottom of the screen, in thumb reach. "Request sent" and
- * "Friends" are quiet status lines in the card.
+ * Add friend: a round accent button with a person and a plus, in the card.
+ * Sent (or friends), it becomes an outlined check; tapping it again takes
+ * the request back. Signed out, the first tap says why (app.js) and the
+ * second goes to sign in; without JS it's a link to sign in.
  */
-export function FriendButton({ state, action = "", unfriendAction, signUpHref = "/account/sign-up", fields = {} }: FriendButtonProps) {
-  // PRINTED OUTPUT: profile / friend control labels and notes
-  const label = { add: "Add friend", invite: "Add friend", accept: "Accept friend request", "signed-out": "Sign up to add friend" } as const;
-  const note = { invite: "You'll be friends at once.", accept: "They asked to be your friend." } as const;
-  if (state === "sent" || state === "friends") {
+export function FriendButton({ state, action = "", cancelAction, unfriendAction, signInHref = "/account/sign-in", fields = {}, name }: FriendButtonProps & { name: string }) {
+  // PRINTED OUTPUT: profile / add friend accessible names and the signed-out note
+  const label = {
+    add: `Add ${name} as a friend`,
+    invite: `Add ${name} as a friend`,
+    accept: `Accept ${name}'s friend request`,
+    sent: `Friend request sent to ${name}. Take it back`,
+    friends: `You and ${name} are friends. Unfriend`,
+    "signed-out": `Sign in to add ${name} as a friend`,
+  } as const;
+  const hidden = Object.entries(fields).map(([k, v]) => <input type="hidden" name={k} value={v} />);
+  if (state === "signed-out") {
     return (
-      <div class="friend-action friend-status" data-state={state}>
-        <span class="friend-badge">
-          <CheckIcon /> {state === "sent" ? "Request sent" : "Friends"}
+      <a class="add-friend" data-state={state} data-signin-tip="" href={signInHref} aria-label={label[state]}>
+        <UserPlusIcon />
+        <span class="add-friend-tip" hidden>
+          Sign in to add friends
         </span>
-        {state === "friends" && unfriendAction ? (
-          <form method="post" action={unfriendAction}>
-            <button type="submit" class="pill pill-quiet">
-              Unfriend
-            </button>
-          </form>
-        ) : null}
-      </div>
+      </a>
     );
   }
-  const n = state === "invite" || state === "accept" ? note[state] : null;
-  return (
-    <div class="friend-action friend-cta" data-state={state}>
-      {state === "signed-out" ? (
-        <a class="pill pill-primary friend-pill" href={signUpHref}>
-          <UserPlusIcon /> {label[state]}
-        </a>
-      ) : (
-        <form method="post" action={action}>
-          {Object.entries(fields).map(([k, v]) => (
-            <input type="hidden" name={k} value={v} />
-          ))}
-          <button type="submit" class="pill pill-primary friend-pill">
-            <UserPlusIcon /> {label[state]}
-          </button>
-        </form>
-      )}
-      {n ? <p class="field-hint friend-note">{n}</p> : null}
-    </div>
+  const done = state === "sent" || state === "friends";
+  const target = state === "sent" ? cancelAction : state === "friends" ? unfriendAction : action;
+  const button = (
+    <button type={target ? "submit" : "button"} class={done ? "add-friend is-done" : "add-friend"} data-state={state} aria-label={label[state]} disabled={target ? undefined : true}>
+      {done ? <CheckIcon /> : <UserPlusIcon />}
+    </button>
+  );
+  return target ? (
+    <form class="add-friend-form" method="post" action={target}>
+      {hidden}
+      {button}
+    </form>
+  ) : (
+    button
   );
 }
 

@@ -9,6 +9,7 @@ import type { PaletteName } from "../parula";
 import { Document, pageTitle } from "./layout";
 import { WithSeps } from "./sep";
 import { CloseControl, SubHeader, TopBar, type TopBarProps } from "./topbar";
+import { SiteSettings } from "./settings";
 
 export interface CalendarPageProps {
   title: string;
@@ -25,7 +26,9 @@ export interface CalendarPageProps {
   /** A profile's colour map (its owner's choice). */
   palette?: PaletteName;
   /** A profile's accent stylesheet (its owner's), if they have one. */
-  accentSheet?: string;
+  accentSheet?: string | string[];
+  /** The settings modal's contents; the main site's when omitted. */
+  settings?: Child;
 }
 
 export function CalendarPage(p: CalendarPageProps) {
@@ -47,6 +50,7 @@ export function CalendarPage(p: CalendarPageProps) {
         </section>
         {p.showColourBar ? <ColourBar /> : null}
       </main>
+      {p.settings ?? <SiteSettings links={p.topbar.links} here={p.topbar.here} exportParams={p.topbar.exportParams} />}
       {p.topbar.pages === false ? null : (
         <>
       <dialog class="dialog" id="dlg-download" aria-labelledby="dlg-download-title">

@@ -22,8 +22,11 @@ import { seal } from "./secret-box";
 import { type UsernameProblem, USERNAME_MAX, USERNAME_MIN, normaliseUsername, profilePath, usernameProblem } from "./username";
 import { Db, SESSION_SECONDS, type User } from "./db";
 import { type SendEmail, confirmEmail, resendSender, resetEmail } from "./email";
+import { SettingsDialog } from "../views/settings";
 import {
   AccountPage,
+  AccountSettings,
+  SignedOutSettings,
   CheckEmailPage,
   ConfirmLinkPage,
   type Errors,
@@ -111,6 +114,7 @@ const MSG = {
   addressNotCalendar: "That address isn't a calendar in iCal format.",
   resetDone: "Password changed. You've been signed out everywhere else.",
   usernameTaken: "Someone already has that username. Try another.",
+  paletteSaved: "Colour map saved.",
 } as const;
 
 // PRINTED OUTPUT: account / username mistakes
@@ -171,9 +175,9 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     return `${origin(c)}${profilePath(user)}?f=${user.invite_code}`;
   }
 
-  async function accountPage(c: Ctx, user: User, opts: Omit<Parameters<typeof AccountPage>[0], "user" | "calendars" | "shareLink">, status = 200) {
+  async function accountPage(c: Ctx, user: User, opts: Omit<Parameters<typeof AccountPage>[0], "user" | "calendars" | "shareLink" | "host" | "origin">, status = 200) {
     const calendars = (await db(c).calendarsOf(user.user_id)).map(({ calendar_id, label, kind, status }) => ({ calendar_id, label, kind, status }));
-    return page(c, <AccountPage user={user} calendars={calendars} shareLink={shareLink(c, user)} {...opts} />, status);
+    return page(c, <AccountPage user={user} calendars={calendars} shareLink={shareLink(c, user)} host={new URL(c.req.url).host} origin={origin(c)} {...opts} />, status);
   }
 
   function startSession(c: Ctx, token: string) {
@@ -188,6 +192,14 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   function page(c: Ctx, body: Parameters<Ctx["html"]>[0], status = 200) {
     c.header("cache-control", "no-store");
     return c.html(body, status as 200);
+  }
+
+  /**
+   * After a settings form: back to the page it was sent from (`next`, the
+   * profile the modal was opened on), or to /account saying what was done.
+   */
+  function saved(c: Ctx, next: string | undefined, done: string) {
+    return c.redirect(next ?? `/account?done=${done}`, 303);
   }
 
   async function form(c: Ctx): Promise<Record<string, string>> {
@@ -241,11 +253,14 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
   app.get("/account", async (c) => {
     const user = c.get("user");
     if (!user) return page(c, <SignedOutPage />);
-    const done = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, signedup: MSG.signedUp, resent: MSG.resent, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved, picture: MSG.pictureSaved, pictureRemoved: MSG.pictureRemoved }[
-      c.req.query("done") ?? ""
-    ];
-    return await accountPage(c, user, { done: done });
+    return await accountPage(c, user, { done: doneMessage(c.req.query("done")) });
   });
+
+  /** The confirmation for `?done=` after a settings form. */
+  function doneMessage(key: string | undefined): string | undefined {
+    const done: Record<string, string> = { profile: MSG.profileSaved, password: MSG.passwordSaved, email: MSG.emailSent, changed: MSG.emailChanged, everywhere: MSG.signedOutAll, welcome: MSG.verified, signedup: MSG.signedUp, resent: MSG.resent, reset: MSG.resetDone, calendar: MSG.calendarAdded, removed: MSG.calendarRemoved, picture: MSG.pictureSaved, pictureRemoved: MSG.pictureRemoved, palette: MSG.paletteSaved };
+    return key ? done[key] : undefined;
+  }
 
   // ------------------------------------------------------------ sign up
 
@@ -400,14 +415,14 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     const token = c.get("token");
     if (token) await db(c).deleteSession(token);
     deleteCookie(c, SESSION_COOKIE, { path: "/", secure: true });
-    return c.redirect("/account", 303);
+    return c.redirect(safeNext((await form(c)).next) ?? "/account", 303);
   });
 
   app.post("/account/sign-out-everywhere", async (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
     await db(c).deleteSessions(user.user_id, c.get("token") ?? undefined);
-    return c.redirect("/account?done=everywhere", 303);
+    return saved(c, safeNext((await form(c)).next), "everywhere");
   });
 
   // ------------------------------------------------------------ reset a forgotten password
@@ -505,7 +520,10 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     }
     if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors, draft: { name, bio, username: username ?? "" } }, 400);
     await db(c).updateProfile(user.user_id, { name, username, bio, zone, visibility, palette: palette! });
-    return c.redirect("/account?done=profile", 303);
+    // From a profile: back to it, at its new address if the username changed.
+    const next = safeNext(f.next);
+    const onProfile = next && (next.startsWith(`${profilePath(user)}?`) || next === profilePath(user) || next.startsWith(`/u/${user.public_id}`));
+    return saved(c, onProfile ? profilePath({ public_id: user.public_id, username }) + new URL(next, "http://x").search : next, "profile");
   });
 
   app.post("/account/password", async (c) => {
@@ -521,7 +539,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (Object.keys(errors).length) return await accountPage(c, user, { errors: errors }, 400);
     await db(c).setPassword(user.user_id, await hashPassword(password));
     await db(c).deleteSessions(user.user_id, c.get("token") ?? undefined);
-    return c.redirect("/account?done=password", 303);
+    return saved(c, safeNext(f.next), "password");
   });
 
   app.post("/account/email", async (c) => {
@@ -541,7 +559,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       reportFatal(c, toAppError(e));
       return await accountPage(c, user, { errors: { form: MSG.emailSend }, draft: { email } }, 503);
     }
-    return c.redirect("/account?done=email", 303);
+    return saved(c, safeNext(f.next), "email");
   });
 
   app.post("/account/delete", async (c) => {
@@ -584,7 +602,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       return accountPage(c, user, { errors: { address: `${message} (${err.code})` }, draft }, 400);
     }
     await db(c).addCalendar(user.user_id, { kind: "ical", label, secret: await seal(c.env.ACCOUNTS_KEY, "calendar", address!) }, now());
-    return c.redirect("/account?done=calendar", 303);
+    return saved(c, safeNext(f.next), "calendar");
   });
 
   app.post("/account/calendars/remove", async (c) => {
@@ -592,7 +610,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     if (user instanceof Response) return user;
     const f = await form(c);
     await db(c).removeCalendar(user.user_id, Number(f.id));
-    return c.redirect("/account?done=removed", 303);
+    return saved(c, safeNext(f.next), "removed");
   });
 
   // ------------------------------------------------------------ pictures
@@ -618,17 +636,28 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     await bucket.put(key, processed.png, { httpMetadata: { contentType: "image/png" } });
     await db(c).setPicture(user.user_id, key, processed.accent);
     if (user.picture_key) await bucket.delete(user.picture_key);
-    return c.redirect("/account?done=picture", 303);
+    return saved(c, safeNext(body.next), "picture");
   });
 
   app.post("/account/picture/remove", async (c) => {
     const user = requireUser(c);
     if (user instanceof Response) return user;
+    const f = await form(c);
     if (user.picture_key) {
       await db(c).setPicture(user.user_id, null);
       await c.env.PICTURES?.delete(user.picture_key);
     }
-    return c.redirect("/account?done=pictureRemoved", 303);
+    return saved(c, safeNext(f.next), "pictureRemoved");
+  });
+
+  /** Theme's colour maps: one tap saves the map. */
+  app.post("/account/palette", async (c) => {
+    const user = requireUser(c);
+    if (user instanceof Response) return user;
+    const f = await form(c);
+    if (!isPaletteName(f.palette)) return await accountPage(c, user, { errors: { palette: MSG.paletteUnknown } }, 400);
+    await db(c).setPalette(user.user_id, f.palette);
+    return saved(c, safeNext(f.next), "palette");
   });
 
   /** Pictures are shown at every visibility level, so anyone may load them. */
@@ -688,6 +717,31 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     // Drawn in the viewer's zone, like the main site.
     const zone = resolveZone(c.req.query("tz"), c.req.query("dtz"));
     const calendars = await db(c).calendarsOf(owner.user_id);
+    const url = new URL(c.req.url);
+    const host = url.host;
+    // The settings' forms come back here.
+    const here = url.pathname + url.search.replace(/%2F/gi, "/").replace(/%40/g, "@");
+    const help = { href: "/help", dialog: "dlg-help" };
+    const settings = (
+      <SettingsDialog>
+        {viewer ? (
+          <AccountSettings
+            user={viewer}
+            calendars={(await db(c).calendarsOf(viewer.user_id)).map(({ calendar_id, label, kind, status }) => ({ calendar_id, label, kind, status }))}
+            shareLink={shareLink(c, viewer)}
+            host={host}
+            origin={origin(c)}
+            next={here}
+            help={help}
+          />
+        ) : (
+          <SignedOutSettings help={help} next={here} />
+        )}
+      </SettingsDialog>
+    );
+    // Signed out, Add friend asks you to sign in first (phase 3 wires it for signed-in visitors).
+    const friend = !viewer ? { state: "signed-out" as const, signInHref: `/account/sign-in?next=${encodeURIComponent(here)}` } : undefined;
+    const sheets = [owner, ...(viewer && !isOwner ? [viewer] : [])].filter((u) => isAccent(u.accent)).map((u) => accentSheetUrl(u.public_id, u.accent!));
     const { page: body, status } = await renderCalendar({
       zone,
       links: new Links(zone, profilePath(owner)),
@@ -699,9 +753,10 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       profile: {
         title: owner.name,
         palette: owner.palette,
-        accentSheet: isAccent(owner.accent) ? accentSheetUrl(owner.public_id, owner.accent) : undefined,
-        owner: owner.picture_key ? { picture: pictureUrl(owner.public_id, owner.picture_key), name: owner.name } : undefined,
-        intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
+        accentSheet: sheets.length ? sheets : undefined,
+        settings,
+        intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} friend={friend} host={host} origin={origin(c)} />,
+      },
     });
     return page(c, body, status);
   }

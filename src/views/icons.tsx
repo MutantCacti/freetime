@@ -118,3 +118,11 @@ export const UserPlusIcon = () => (
     <path d="M13.25 3v4.5M11 5.25h4.5" />
   </svg>
 );
+
+/** A cog: the settings button. */
+export const CogIcon = () => (
+  <svg {...base} class="icon icon-cog" stroke-width={1.5}>
+    <path d="M6.6 1.6h2.8l.4 1.8 1.3.7 1.7-.7 1.4 2.4-1.4 1.2v1.5l1.4 1.2-1.4 2.4-1.7-.7-1.3.7-.4 1.8H6.6l-.4-1.8-1.3-.7-1.7.7-1.4-2.4 1.4-1.2V7l-1.4-1.2 1.4-2.4 1.7.7 1.3-.7z" />
+    <circle cx="8" cy="8" r="2.1" />
+  </svg>
+);

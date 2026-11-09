@@ -49,6 +49,8 @@
   --motion-ui: 100ms ease-out;
   --motion-hover: 40ms ease-out;
   --motion-glide: 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* The settings modal growing out of the cog: from far smaller, so a little longer. */
+  --motion-settings: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --grow-scale: 0.96;
   --grow-nudge: 6px;
 
@@ -108,3 +110,17 @@
   --color-shadow: color-mix(in srgb, var(--raw-grey-900) 18%, transparent);
   color-scheme: light;
 }
+
+/* ---------------------------------------------------------------- theme switch: PLACEHOLDER */
+/*
+ * Each colour map's step-0 ("free") colour in the dark and the light theme,
+ * and the text on it, for the Dark | Light switch in Settings. PLACEHOLDER:
+ * the style work generates these same names in /css/calendar.css (loaded after
+ * this file, so it wins); delete this block when that lands.
+ */
+:root, [data-palette="parula"] { --map-free-dark: #352f7c; --map-free-light: #e5e843; }
+[data-palette="viridis"] { --map-free-dark: #552464; --map-free-light: #f3e154; }
+[data-palette="cividis"] { --map-free-dark: #213d65; --map-free-light: #f3e15b; }
+[data-palette="magma"] { --map-free-dark: #363d4c; --map-free-light: #e1e2af; }
+[data-palette="plasma"] { --map-free-dark: #1a2f8f; --map-free-light: #e1e94c; }
+:root { --map-on-free-dark: var(--raw-white); --map-on-free-light: var(--raw-black); }

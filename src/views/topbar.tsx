@@ -1,7 +1,7 @@
 import type { Links } from "../links";
 import type { Navigation, Period, View, ViewParams, ZoneState } from "../state";
 import { formatOffset, spokenOffset } from "../tz";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, MenuIcon, MoonIcon, SunIcon, UserIcon, WarningIcon } from "./icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CloseIcon, CogIcon, MoonIcon, SunIcon, WarningIcon } from "./icons";
 
 export interface ZoneLabel {
   /** What the button shows: the zone name only. */
@@ -50,34 +50,14 @@ export interface TopBarProps {
   /** Current view parameters, carried to Help, Contact, Download and /tz. */
   here: ViewParams;
   exportParams: Record<string, string>;
-  /** Maxence's pages (Download .ics, Contact me). Off on profiles, which aren't Maxence's calendar; Help is always there. */
+  /** Maxence's pages (Download .ics, Contact me) in the settings. Off on profiles, which aren't Maxence's calendar. */
   pages?: boolean;
-  /** On a profile: its owner's picture, shown before the period label to say whose calendar this is. */
-  owner?: { picture: string; name: string };
+  /** Where the cog goes without JS: /help on the main site, /account on the accounts Worker. */
+  settingsHref: string;
 }
 
 export function TopBar(p: TopBarProps) {
   const steps = STEP_NAMES[p.period.view];
-  // The menu: Maxence's pages on the main site; on profiles only Help, which applies to any calendar.
-  // On narrow screens it's always a button, even with one item, so every page's top bar looks the same.
-  const menu = (
-    <>
-      {/* PRINTED OUTPUT: topbar / menu button accessible name */}
-      <button type="button" class="pill round tb-menu" popovertarget="tb-menu-items" aria-label="Menu">
-        <MenuIcon />
-      </button>
-      <div class="tb-menu-items" id="tb-menu-items" popover="auto">
-        {/* PRINTED OUTPUT: topbar / download, contact, help */}
-        {p.pages === false ? null : (
-          <>
-            <a class="pill" data-tb="download" data-dialog="dlg-download" href={p.links.href("/export", p.exportParams)}>Download .ics</a>
-            <a class="pill" data-tb="contact" data-dialog="dlg-contact" href={p.links.href("/contact", p.here)}>Contact me</a>
-          </>
-        )}
-        <a class="pill" data-tb="help" data-dialog="dlg-help" href={p.links.href("/help", p.here)}>Help</a>
-      </div>
-    </>
-  );
   return (
     <header class="topbar" id="topbar">
       {/* Three groups: controls on the left, context in the centre, pages on the right. */}
@@ -126,20 +106,11 @@ export function TopBar(p: TopBarProps) {
       <button type="button" class="pill round tb-indicator" id="notice-indicator" data-tb="indicator" hidden aria-label="Show notice">
         <WarningIcon />
       </button>
-      {/*
-        Profiles (pages === false): [menu] [owner's picture] [account] [theme], so the picture sits
-        right before the account and theme buttons. The main site: [account] [menu] [theme].
-      */}
-      {p.pages === false ? menu : null}
-      {/* The profile owner's picture; its alt text is their name. */}
-      {p.owner ? <img class="tb-owner" data-tb="owner" src={p.owner.picture} alt={p.owner.name} width={36} height={36} /> : null}
-      {/* The accounts Worker's page (ACCOUNTS-SPEC.md §1). The same signed in or out: this Worker never reads the cookie. */}
-      {/* PRINTED OUTPUT: topbar / account button accessible name */}
-      <a class="pill round tb-account" data-tb="account" href={p.links.href("/account")} aria-label="Account">
-        <UserIcon />
+      {/* The only menu: the settings modal (app.js). Without JS, a page with the same things. */}
+      {/* PRINTED OUTPUT: topbar / settings button accessible name */}
+      <a class="pill round tb-cog" id="tb-cog" data-tb="settings" data-settings="dlg-settings" href={p.settingsHref} aria-label="Settings" aria-haspopup="dialog">
+        <CogIcon />
       </a>
-      {p.pages === false ? null : menu}
-      <ThemeButton tb />
       </div>
     </header>
   );

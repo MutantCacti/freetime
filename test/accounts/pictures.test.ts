@@ -35,16 +35,17 @@ describe("profile pictures", () => {
     const { public_id, picture_key } = (await row())!;
     expect(picture_key).toMatch(/^p\/[a-z0-9]{24}$/);
     const src = `/u/${public_id}/picture?v=${picture_key!.slice(-8)}`;
-    // One picture per page: in the account page's header for its owner, and in a profile's top bar
-    // (before the period label) for every visitor, with the owner's name as its text.
-    expect(await (await b.get("/account")).text()).toContain(`<img class="tb-avatar" src="${src}" alt=""`);
-    for (const viewer of [a.browser(), b]) {
-      const html = decode(await (await viewer.get("/@ada")).text());
-      expect(html).toContain(`<img class="tb-owner" data-tb="owner" src="${src}" alt="Ada Lovelace"`);
-      expect(html.split(src).length - 1).toBe(1);
-      // The account button is the icon for everyone, right after the picture; the card has no circle of its own.
-      expect(html).toMatch(/<img class="tb-owner"[^>]*\/><a class="pill round tb-account"[^>]*><svg[^>]*class="icon icon-user"/);
-      expect(html).not.toContain('class="identity');
+    // On the account page: in the settings' header. On the profile: in the card, for every visitor;
+    // the owner sees it once more in the settings' header. Never in the top bar.
+    expect(await (await b.get("/account")).text()).toContain(`<img class="avatar" src="${src}" alt=""`);
+    const visitor = decode(await (await a.browser().get("/@ada")).text());
+    expect(visitor).toContain(`<img class="card-picture" src="${src}" alt=""`);
+    expect(visitor.split(src).length - 1).toBe(1);
+    const owner = decode(await (await b.get("/@ada")).text());
+    expect(owner.split(src).length - 1).toBe(2);
+    for (const html of [visitor, owner]) {
+      const topbar = html.slice(html.indexOf('<header class="topbar"'), html.indexOf("</header>"));
+      expect(topbar).not.toContain("<img");
     }
     const pic = await a.browser().get(src);
     expect(pic.status).toBe(200);
