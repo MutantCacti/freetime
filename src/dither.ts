@@ -57,21 +57,31 @@ export function assertDitherLayers(layers: readonly number[], min: number, max: 
 assertDitherLayers(DITHER_LAYERS, DITHER_MIN_LEVEL, DITHER_MAX_LEVEL);
 
 /**
- * Dither level for a step: the layer nearest MIN + stepPosition(step) × (MAX − MIN)
- * (ties go to the lower layer), at least the first dotted layer for any busy
- * step (busy time always has dots) and at most the one below MAX short of
- * fully busy (only a full slot gets the full pattern). Neighbouring steps
- * share a layer and differ by colour alone; levels never go down.
- * With [0, 2, 4, 6, 9, 12]: 0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 9, 9, 9, 12.
+ * The fine level a step had before the layers (round 4): round(stepPosition × 12),
+ * at least 1 for any busy step and at most 11 short of fully busy.
+ * 0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12.
  */
-export function ditherLevelForStep(step: number): number {
+export function fineLevelForStep(step: number): number {
   const last = LEVELS - 1;
   if (step <= 0) return DITHER_MIN_LEVEL;
   if (step >= last) return DITHER_MAX_LEVEL;
-  const ideal = DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL);
-  let best = DITHER_LAYERS[1]!;
-  for (const l of DITHER_LAYERS.slice(1, -1)) if (Math.abs(l - ideal) < Math.abs(best - ideal) - 1e-9) best = l;
-  return best;
+  const level = Math.round(DITHER_MIN_LEVEL + stepPosition(step) * (DITHER_MAX_LEVEL - DITHER_MIN_LEVEL));
+  return Math.min(DITHER_MAX_LEVEL - 1, Math.max(DITHER_MIN_LEVEL + 1, level));
+}
+
+/**
+ * Dither level for a step, as in the approved sketch: the fine level
+ * (fineLevelForStep) snapped to the nearest layer, ties to the lower one,
+ * and never 0 for a busy step (busy time always has dots). Levels never go
+ * down. Steps 13–15 snap up to the full pattern, so they share it with a
+ * fully busy slot and differ from it by colour alone.
+ * With [0, 2, 4, 6, 9, 12]: 0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 12, 12, 12, 12.
+ */
+export function ditherLevelForStep(step: number): number {
+  const fine = fineLevelForStep(step);
+  let best = DITHER_LAYERS[0]!;
+  for (const l of DITHER_LAYERS) if (Math.abs(l - fine) < Math.abs(best - fine)) best = l;
+  return step > 0 && best === DITHER_MIN_LEVEL ? DITHER_LAYERS[1]! : best;
 }
 
 /** Dither level for a busy fraction, through its step. */

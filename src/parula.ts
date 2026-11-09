@@ -172,6 +172,8 @@ export interface StepPalette {
   colours: readonly string[];
   past: readonly string[];
   tones: readonly Tone[];
+  /** What the solve couldn't fit to the rules for this pattern (none, for every preset: tested). */
+  issues?: readonly RampIssue[];
 }
 type ThemePalettes = Record<Theme, StepPalette>;
 
@@ -201,90 +203,96 @@ export function dotContrast(hex: string, tone: Tone): number {
 }
 
 /**
- * A theme's ramp from the map's colours, free to busy. Step i is meant to
- * read at stepPosition(i) between free and fully busy, but the dots change
- * how light a cell looks (light dots lift it, dark dots sink it), and where
- * the dot tone flips the cell would jump the wrong way. So each step's
- * colour keeps its hue and chroma and has its lightness solved so that the
- * averaged cell (colour plus dots) lands on target: the free cell's
- * lightness moved towards the fully busy cell's by stepPosition(i). The dot
- * tone is whichever moves the colour least from the map's own lightness with its dots showing.
+ * Each step's dot tone, per map and theme, free to busy: "k" dark dots, "w"
+ * light dots (step 0 has no dots; its letter is unused). These are the tones
+ * of round 4 (whichever gave the clearer dots then), kept as they were when
+ * the dots went to six layers, as in the approved sketch: light dots on the
+ * dark theme's early steps, so a few dots show on a dark colour.
  */
-function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPalette {
+export const DOT_TONES: Record<PaletteName, Record<Theme, string>> = {
+  parula: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+  viridis: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+  cividis: { dark: "wwwwwwwwwwkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+  magma: { dark: "wwwwwwwwwkkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+  plasma: { dark: "wwwwwwwwwwkkkkkkw", light: "kkkkkkkkwkkkkkkkk" },
+};
+
+/** A step the solve couldn't fit to the rules: what failed and by how much. */
+export interface RampIssue {
+  step: number;
+  rule: "target" | "dots" | "order";
+  /** target: OKLab L short of the target; dots: contrast short of MIN_DOT_CONTRAST; order: L short of MIN_LIGHTNESS_STEP. */
+  short: number;
+}
+
+/**
+ * A theme's ramp from the map's colours, free to busy, for a given dot
+ * pattern (ditherLevelForStep and the tones). Step i is meant to read at
+ * stepPosition(i) between free and fully busy, but the dots change how light
+ * a cell looks (light dots lift it, dark dots sink it). So each step's colour
+ * keeps its hue and chroma and has its lightness solved so that the averaged
+ * cell (colour plus dots) lands on target: the free cell's lightness moved
+ * towards the fully busy cell's by stepPosition(i). The pattern is fixed;
+ * anything the solve can't fit is reported in `issues` (the tests require
+ * none), never fixed by changing the pattern.
+ */
+function solveRamp(sampled: readonly string[], toneSpec: string, busyIsLighter: boolean): StepPalette & { issues: RampIssue[] } {
   const last = LEVELS - 1;
   const okL = (rgb: RGB) => rgbToOklch(rgb)[0];
-  // The colour of step i whose averaged cell (with its dots, in either tone) lands on target,
-  // keeping the sampled hue and chroma. Only tones that reach the target with their dots
-  // showing (MIN_DOT_CONTRAST) count; of those, the one that moves the colour least from the
-  // map's own lightness wins, so the colour keeps its hue and chroma (a big move can push it out
-  // of sRGB, which cuts chroma) and doesn't go near-black just to make room for light dots.
-  // Changing tone from the step before counts as a move of FLIP_COST, so a lone cell with
-  // the other tone in the middle of a run doesn't happen for a small gain.
-  const FLIP_COST = 0.05;
-  const solveStep = (i: number, target: number, prevTone?: Tone): { hex: string; tone: Tone; contrast: number } | undefined => {
+  const toneOf = (i: number) => toneSpec[i] as Tone;
+  const issues: RampIssue[] = [];
+  // The colour of step i, in its tone and level, whose averaged cell lands nearest the target.
+  const solveStep = (i: number, target: number) => {
     const level = ditherLevelForStep(i);
+    const tone = toneOf(i);
     const [, C, h] = rgbToOklch(hexToRgb(sampled[i]!));
-    const L0 = rgbToOklch(hexToRgb(sampled[i]!))[0];
-    const options: { hex: string; tone: Tone; contrast: number; move: number }[] = [];
-    for (const tone of ["k", "w"] as const) {
-      let lo = 0, hi = 1;
-      for (let k = 0; k < 32; k++) {
-        const mid = (lo + hi) / 2;
-        if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
-        else hi = mid;
-      }
-      const hex = rgbToHex(fitGamut([(lo + hi) / 2, C, h]));
-      if (Math.abs(okL(averagedCell(hex, tone, level)) - target) > 0.004) continue; // this tone can't reach it
-      const contrast = dotContrast(hex, tone);
-      if (contrast >= MIN_DOT_CONTRAST) options.push({ hex, tone, contrast, move: Math.abs((lo + hi) / 2 - L0) + (prevTone && tone !== prevTone ? FLIP_COST : 0) });
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 32; k++) {
+      const mid = (lo + hi) / 2;
+      if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
+      else hi = mid;
     }
-    return options.sort((a, b) => a.move - b.move)[0];
+    const hex = rgbToHex(fitGamut([(lo + hi) / 2, C, h]));
+    return { hex, miss: Math.abs(okL(averagedCell(hex, tone, level)) - target), contrast: dotContrast(hex, tone) };
   };
-  // Fully busy: of the two dot tones, whichever leaves the cell furthest towards busy with
-  // its dots still showing. If the dots don't show on the map's end colour, that colour's
-  // lightness is moved (away from busy) just until they do.
+  const fits = (r: { miss: number; contrast: number }) => r.miss <= 0.004 && r.contrast >= MIN_DOT_CONTRAST;
+  // Fully busy, in its tone: the map's end colour, its lightness moved (away from busy) just
+  // until its dots show.
   const levelN = ditherLevelForStep(last);
+  const toneN = toneOf(last);
   const [Ln, Cn, hn] = rgbToOklch(hexToRgb(sampled[last]!));
-  const ends = (["k", "w"] as const).map((tone) => {
-    let hex = sampled[last]!;
-    if (dotContrast(hex, tone) < MIN_DOT_CONTRAST) {
-      // Dark dots need a lighter colour under them, light dots a darker one.
-      const away = tone === "k" ? 1 : -1;
-      let lo = 0, hi = tone === "k" ? 1 - Ln : Ln;
-      for (let k = 0; k < 32; k++) {
-        const mid = (lo + hi) / 2;
-        if (dotContrast(rgbToHex(fitGamut([Ln + away * mid, Cn, hn])), tone) >= MIN_DOT_CONTRAST) hi = mid;
-        else lo = mid;
-      }
-      hex = rgbToHex(fitGamut([Ln + away * hi, Cn, hn]));
+  let endHex = sampled[last]!;
+  if (dotContrast(endHex, toneN) < MIN_DOT_CONTRAST) {
+    // Dark dots need a lighter colour under them, light dots a darker one.
+    const away = toneN === "k" ? 1 : -1;
+    let lo = 0, hi = toneN === "k" ? 1 - Ln : Ln;
+    for (let k = 0; k < 32; k++) {
+      const mid = (lo + hi) / 2;
+      if (dotContrast(rgbToHex(fitGamut([Ln + away * mid, Cn, hn])), toneN) >= MIN_DOT_CONTRAST) hi = mid;
+      else lo = mid;
     }
-    return { hex, tone, L: okL(averagedCell(hex, tone, levelN)) };
-  });
-  const end = ends.sort((a, b) => (busyIsLighter ? b.L - a.L : a.L - b.L))[0]!;
-  const toneN = end.tone;
+    endHex = rgbToHex(fitGamut([Ln + away * hi, Cn, hn]));
+  }
   const from = okL(hexToRgb(sampled[0]!));
-  // The step before fully busy has fewer dots (the full pattern is only for a full slot), so to
-  // read nearly as busy its colour has to go further than the end's, and there its dots can stop
-  // showing (dark dots on the darkest light-theme colours). Then the end moves towards free, a
-  // little at a time, until the step before it can reach its target with its dots showing.
+  // If the step before can't reach its target with its dots showing, the end moves towards free,
+  // a little at a time, until it can.
+  let to = okL(averagedCell(endHex, toneN, levelN));
   {
-    const [Le, Ce, he] = rgbToOklch(hexToRgb(end.hex));
+    const [Le, Ce, he] = rgbToOklch(hexToRgb(endHex));
     const towardsFree = busyIsLighter ? -1 : 1;
-    for (let k = 1; k <= 300 && !solveStep(last - 1, from + (end.L - from) * stepPosition(last - 1)); k++) {
-      end.hex = rgbToHex(fitGamut([Le + towardsFree * k * 0.001, Ce, he]));
-      end.L = okL(averagedCell(end.hex, toneN, levelN));
+    for (let k = 1; k <= 300 && !fits(solveStep(last - 1, from + (to - from) * stepPosition(last - 1))); k++) {
+      endHex = rgbToHex(fitGamut([Le + towardsFree * k * 0.001, Ce, he]));
+      to = okL(averagedCell(endHex, toneN, levelN));
     }
   }
-  const to = end.L;
   const colours: string[] = [sampled[0]!];
-  const tones: Tone[] = [toneFor(sampled[0]!)]; // no dots at step 0; the tone is unused
   for (let i = 1; i < last; i++) {
-    const best = solveStep(i, from + (to - from) * stepPosition(i), i > 1 ? tones[i - 1] : undefined) ?? { hex: sampled[i]!, tone: toneFor(sampled[i]!) };
-    colours.push(best.hex);
-    tones.push(best.tone);
+    const r = solveStep(i, from + (to - from) * stepPosition(i));
+    if (r.miss > 0.004) issues.push({ step: i, rule: "target", short: r.miss });
+    colours.push(r.hex);
   }
-  colours.push(end.hex);
-  tones.push(toneN);
+  colours.push(endHex);
+  const tones = Array.from({ length: LEVELS }, (_, i) => toneOf(i));
   // With many steps the targets near the ends are only a few thousandths apart, about the size of
   // one 8-bit rounding of a colour. So walk the ramp and, where a step doesn't read busier than the
   // one before, move its lightness towards busy, a little at a time, until it does.
@@ -296,27 +304,33 @@ function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPale
       colours[i] = rgbToHex(fitGamut([L0 + dir * k * 0.001, C, h]));
     }
   }
+  for (let i = 1; i <= last; i++) {
+    const gap = (avg(i) - avg(i - 1)) * dir;
+    if (gap < MIN_LIGHTNESS_STEP) issues.push({ step: i, rule: "order", short: MIN_LIGHTNESS_STEP - gap });
+    const c = dotContrast(colours[i]!, tones[i]!);
+    if (c < MIN_DOT_CONTRAST) issues.push({ step: i, rule: "dots", short: MIN_DOT_CONTRAST - c });
+  }
   const past = colours.map((hex) => {
     const [L, C, h] = rgbToOklch(hexToRgb(hex));
     return rgbToHex(fitGamut([L, C * PAST_CHROMA, h]));
   });
-  return { colours, past, tones };
+  return { colours, past, tones, issues };
 }
 
 /**
- * A map's ramps for both themes. Dark: free is the map's dark end, busy its
- * light end. Light: the map is inverted, so busy is dark against a white
- * page. Each step's colour is sampled from the toned table at
- * stepPosition(step), then solveRamp sets its lightness for its dots.
+ * A map's ramps for both themes, in its dot tones. Dark: free is the map's
+ * dark end, busy its light end. Light: the map is inverted, so busy is dark
+ * against a white page. Each step's colour is sampled from the toned table
+ * at stepPosition(step), then solveRamp sets its lightness for its dots.
  */
-export function themePalettesFor(source: readonly string[], chroma = PALETTE_CHROMA): ThemePalettes {
+export function themePalettesFor(source: readonly string[], tones: Record<Theme, string>, chroma = PALETTE_CHROMA): ThemePalettes {
   const toned = toneTable(source, chroma);
   const sampled = Array.from({ length: LEVELS }, (_, step) => toned[Math.round(stepPosition(step) * (toned.length - 1))]!);
-  return { dark: solveRamp(sampled, true), light: solveRamp([...sampled].reverse(), false) };
+  return { dark: solveRamp(sampled, tones.dark, true), light: solveRamp([...sampled].reverse(), tones.light, false) };
 }
 
 /** Parula's ramps: the main site's, and the default. */
-export const THEME_PALETTES: ThemePalettes = themePalettesFor(PARULA_SOURCE);
+export const THEME_PALETTES: ThemePalettes = themePalettesFor(PARULA_SOURCE, DOT_TONES.parula);
 /** Parula's dark-theme colours, free to busy. */
 export const PALETTE: readonly string[] = THEME_PALETTES.dark.colours;
 /** Parula's dark-theme past colours: each step with chroma scaled by PAST_CHROMA. */
@@ -348,5 +362,5 @@ export const PALETTE_SOURCES: Record<PaletteName, readonly string[]> = {
 
 /** Every preset's colours in each theme. PALETTES.parula is THEME_PALETTES. */
 export const PALETTES: Record<PaletteName, ThemePalettes> = Object.fromEntries(
-  PALETTE_NAMES.map((name) => [name, name === "parula" ? THEME_PALETTES : themePalettesFor(PALETTE_SOURCES[name])]),
+  PALETTE_NAMES.map((name) => [name, name === "parula" ? THEME_PALETTES : themePalettesFor(PALETTE_SOURCES[name], DOT_TONES[name])]),
 ) as Record<PaletteName, ThemePalettes>;

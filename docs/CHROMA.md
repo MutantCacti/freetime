@@ -127,6 +127,66 @@ Averaged lightness at chroma 0.85, 17 steps, six dot layers:
 | plasma | light | current | 0.90 0.90 0.88 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.33 0.32 |
 | plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
 
+## Round 6: the sketch's dot pattern, re-solved
+
+Maxence compared round 5 with the approved sketch, and the sketch is the spec. Round 5 differed in two ways:
+
+1. **Tones.** Round 5 picked each step's dot tone to move its colour least, which put dark dots on the dark theme's early steps. Dark dots on navy barely show, so those steps read as plain colour and the six layers didn't read. The tones are now round 4's, unchanged, per map and theme (`DOT_TONES` in `src/parula.ts`): light dots on the dark theme's steps 1–8 (1–9 for cividis and plasma), dark dots after, light dots on the fully busy cell; dark dots throughout the light theme except step 8 (light).
+2. **Layers.** Each step's layer is round 4's fine level (`fineLevelForStep`: 0, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11, 11, 12) snapped to the nearest of 0, 2, 4, 6, 9, 12, ties to the lower, never 0 for a busy step:
+   0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 12, 12, 12, 12.
+   Steps 13–15 (fine level 11) now have the full pattern, where round 5 capped them at 9.
+
+The pattern, per map and theme (level and tone, steps 1 → 16):
+
+| Map | Theme | Pattern |
+|---|---|---|
+| parula | dark | 2w 2w 2w 2w 2w 4w 4w 6w 6k 9k 9k 9k 12k 12k 12k 12w |
+| parula | light | 2k 2k 2k 2k 2k 4k 4k 6w 6k 9k 9k 9k 12k 12k 12k 12k |
+| viridis | dark | 2w 2w 2w 2w 2w 4w 4w 6w 6k 9k 9k 9k 12k 12k 12k 12w |
+| viridis | light | 2k 2k 2k 2k 2k 4k 4k 6w 6k 9k 9k 9k 12k 12k 12k 12k |
+| cividis | dark | 2w 2w 2w 2w 2w 4w 4w 6w 6w 9k 9k 9k 12k 12k 12k 12w |
+| cividis | light | 2k 2k 2k 2k 2k 4k 4k 6w 6k 9k 9k 9k 12k 12k 12k 12k |
+| magma | dark | 2w 2w 2w 2w 2w 4w 4w 6w 6k 9k 9k 9k 12k 12k 12k 12w |
+| magma | light | 2k 2k 2k 2k 2k 4k 4k 6w 6k 9k 9k 9k 12k 12k 12k 12k |
+| plasma | dark | 2w 2w 2w 2w 2w 4w 4w 6w 6w 9k 9k 9k 12k 12k 12k 12w |
+| plasma | light | 2k 2k 2k 2k 2k 4k 4k 6w 6k 9k 9k 9k 12k 12k 12k 12k |
+Then each step's colour lightness is solved for that exact pattern, as in rounds 3–5 (the pattern is fixed; the solve only moves lightness, keeping hue and chroma).
+
+**Rules.**
+- Averaged lightness moves towards busy at every step, for every map, both themes, current and past: holds.
+- Dots at least 1.4:1 against their colour at every step: holds (lowest 1.40:1).
+- **Bent: "only a full slot gets the full pattern".** Steps 13–15 share the 12-dot pattern with a fully busy slot, as in the sketch; colour alone tells them apart. A busy cell is still never solid (12 of 16). SPEC.md §6 is updated.
+- **Missed target, dark theme step 1, every map.** Two light dots lift any colour: even on black, a step-1 cell averages 0.374, and its target on the curve is 0.365. So step 1 lands 0.009 above its target, with its colour at black, and step 2's colour is nearly black too (L 0.14). Both rules still hold (step 1 still reads between free and step 2), but those two cells have no hue: black or near-black with white dots. The solve reports this (`issues` on each ramp) and a test pins it to exactly this cell.
+  The smallest ways out, none taken without a decision:
+  - give the dark theme's early colours a lightness floor of about 0.25 (enough for the hue to show): steps 1–3 then average at least 0.407, so the curve's start jumps from 0.36 to about 0.41 at step 1 and is flat-ish to step 3, instead of easing in;
+  - or use 1 dot instead of 2 at dark-theme step 1 (a seventh pattern): step 1 keeps a navy colour (L about 0.28), but step 2 is still near-black;
+  - or accept it: from arm's length step 1 reads as dark with sparse white dots, as in the sketch, whose step 1 colour was navy but which didn't re-solve lightness.
+
+Averaged lightness at chroma 0.85, the sketch's pattern:
+
+| Map | Theme | Kind | Averaged lightness, steps 0 → 16 |
+|---|---|---|---|
+| parula | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| parula | dark | past | 0.27 0.28 0.29 0.30 0.31 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| parula | light | current | 0.90 0.89 0.88 0.85 0.81 0.76 0.72 0.67 0.61 0.56 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| parula | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| viridis | dark | current | 0.36 0.37 0.38 0.41 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| viridis | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| viridis | light | current | 0.90 0.89 0.87 0.85 0.81 0.76 0.71 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| viridis | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| cividis | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| cividis | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| cividis | light | current | 0.90 0.89 0.87 0.85 0.81 0.76 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| cividis | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| magma | dark | current | 0.36 0.37 0.38 0.41 0.44 0.47 0.52 0.56 0.61 0.65 0.70 0.74 0.78 0.81 0.83 0.85 0.85 |
+| magma | dark | past | 0.27 0.28 0.29 0.30 0.32 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.55 |
+| magma | light | current | 0.90 0.89 0.87 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| magma | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| plasma | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.82 0.84 0.84 |
+| plasma | dark | past | 0.27 0.28 0.29 0.30 0.31 0.33 0.36 0.38 0.41 0.43 0.45 0.48 0.50 0.52 0.53 0.54 0.54 |
+| plasma | light | current | 0.90 0.90 0.88 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+
 ## What was measured
 
 - **Averaged colour.** From arm's length a cell is its colour with its dots blended in: dots cover `level / 16` of the cell at 42% opacity, blended in linear light. Every number below is for that averaged colour, because that's what the eye compares.
