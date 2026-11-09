@@ -33,7 +33,7 @@ export interface ShellProps {
 /** A sub-page like /help: title, theme switcher, and Close back to the calendar. */
 export function AccountShell({ title, children, user }: ShellProps) {
   return (
-    <Document title={pageTitle(title)} bodyClass="page-sub" accentSheet={user && isAccent(user.accent) ? accentSheetUrl(user.public_id, user.accent) : undefined}>
+    <Document title={pageTitle(title)} bodyClass="page-sub" accentSheet={user?.email_verified ? accentSheetUrl(user.public_id, isAccent(user.accent) ? user.accent : null, user.palette) : undefined}>
       <header class="subheader">
         <h1>{title}</h1>
         {user ? (

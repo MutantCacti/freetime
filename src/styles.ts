@@ -5,7 +5,7 @@ import { RANGE_COLUMN_MAX_DAYS } from "./config";
 import { DITHER_LAYERS, DITHER_MIN_LEVEL, DOT_PX, ditherLevelForStep, ditherSvg } from "./dither";
 import { LEVELS } from "./levels";
 import { NOW_STEPS } from "./calendar";
-import { PALETTES, PALETTE_NAMES, type PaletteName, type Theme } from "./parula";
+import { PALETTES, PALETTE_NAMES, toneFor, type PaletteName, type Theme } from "./parula";
 
 export function ditherAssetPath(level: number, tone: "k" | "w"): string {
   return `/img/dither/${level}${tone}.svg`;
@@ -36,18 +36,30 @@ export function calendarCss(): string {
       })
       .join(";");
   };
+  // Each map's free colour (step 0) in both themes, whatever the theme is: the dark/light switch
+  // paints its halves with them. Defined once per map, outside the theme blocks, so the light
+  // theme doesn't override them. --map-on-free-* is black or white for text on each.
+  const free = (name: PaletteName) =>
+    (["dark", "light"] as const)
+      .map((t) => {
+        const c = PALETTES[name][t].colours[0]!;
+        return `--map-free-${t}:${c};--map-on-free-${t}:${toneFor(c) === "k" ? "var(--raw-black)" : "var(--raw-white)"}`;
+      })
+      .join(";");
   // Same structure as tokens.css: dark by default, light only when chosen.
   // Parula is the default map.
-  out.push(`:root{${vars("parula", "dark")}}`);
+  out.push(`:root{${vars("parula", "dark")};${free("parula")}}`);
   out.push(`:root[data-theme="light"]{${vars("parula", "light")}}`);
   // Each preset, scoped by data-palette: on <html> for a whole profile page,
   // or on any element (the swatches in the account form). Custom properties
   // inherit, so everything inside, the colour bar included, uses that map.
   for (const name of PALETTE_NAMES) {
     const sel = `[data-palette="${name}"]`;
-    out.push(`${sel}{${vars(name, "dark")}}`);
+    out.push(`${sel}{${vars(name, "dark")};${free(name)}}`);
     out.push(`:root[data-theme="light"]${sel},:root[data-theme="light"] ${sel}{${vars(name, "light")}}`);
   }
+  out.push(".map-free-dark{background-color:var(--map-free-dark);color:var(--map-on-free-dark)}");
+  out.push(".map-free-light{background-color:var(--map-free-light);color:var(--map-on-free-light)}");
   const tile = DOT_PX * 4;
   for (let i = 0; i < LEVELS; i++) {
     out.push(`.p${i}{background-color:var(--cell-${i});background-image:var(--dots-${i});background-size:${tile}px ${tile}px}`);

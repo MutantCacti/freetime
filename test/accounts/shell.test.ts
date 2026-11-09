@@ -17,7 +17,10 @@ it("the signed-in account page does too, with the site's header controls", async
   const a = makeAccounts();
   const b = await signedUp(a);
   const html = await (await b.get("/account")).text();
-  expect(assetsOf(html)).toEqual(SHARED_ASSETS);
+  // Plus the owner's accent sheet (every verified profile has one), right after the shared stylesheets.
+  const accent = assetsOf(html).find((h) => h!.endsWith("/accent.css") || h!.includes("/accent.css?"));
+  expect(accent).toMatch(/^\/u\/[a-z0-9]{10}\/accent\.css\?v=2-parula-none$/);
+  expect(assetsOf(html).filter((h) => h !== accent)).toEqual(SHARED_ASSETS);
   expect(html).toContain('class="subheader"');
   expect(html).toContain("theme-toggle");
   expect(html).toContain(`<title>Account · ${SITE_HOST}</title>`);

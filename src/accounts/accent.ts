@@ -24,8 +24,19 @@
 //    relative luminance is within ACCENT_LUMINANCE. In that band the accent is
 //    at least 3:1 against the page and surface colours of both themes, and
 //    either dark or light text on it is at least 4.5:1 (accentText picks).
+//    That colour is what's stored; it's the source hue for step 5.
+// 5. Snap it to the profile's colour map, once per theme (snapAccent): of the
+//    theme's 17 cell colours that have a hue (OKLCH chroma at least
+//    MAP_HUE_MIN_CHROMA), the one nearest the stored accent's hue, a little
+//    in favour of the more colourful; for a grey accent (chroma under
+//    GREY_ACCENT_CHROMA), or no picture, the map's middle step. Then its
+//    lightness is moved, hue and chroma kept, only as far as it takes to be
+//    3:1 against that theme's page and surface (THEME_ACCENT_LUMINANCE).
+//    Black or white text on any colour is at least 4.58:1 one way or the
+//    other, so accentText still holds.
 
-import { fitGamut, luminance, rgbToHex, rgbToOklch } from "../parula";
+import { PALETTES, type PaletteName, type Theme, fitGamut, hexToRgb, luminance, rgbToHex, rgbToOklch } from "../parula";
+import { LEVELS } from "../levels";
 import type { Grid } from "./image-decode";
 
 /** Intel's Kawase offsets, continued: pass i uses KAWASE_OFFSETS[i] (then on, each offset is used for two passes). */
@@ -190,3 +201,59 @@ export function isAccent(v: unknown): v is string {
   return typeof v === "string" && /^#[0-9a-f]{6}$/.test(v);
 }
 
+
+// ---------------------------------------------------------------- snapped to the colour map
+
+/** A stored accent with less OKLCH chroma than this counts as grey: no hue to match. */
+export const GREY_ACCENT_CHROMA = 0.03;
+/** Map colours with less chroma than this have no hue worth matching (cividis's greys). */
+export const MAP_HUE_MIN_CHROMA = 0.04;
+/** How much a map colour's chroma counts against hue distance (radians per unit of chroma). */
+export const CHROMA_PREFERENCE = (40 * Math.PI) / 180;
+/**
+ * Luminance limits for the snapped accent, one side per theme: in the dark
+ * theme at least `min` (3:1 against the dark page and surface), in the light
+ * theme at most `max` (3:1 against white and the light surface). The tests
+ * check them against tokens.css.
+ */
+export const THEME_ACCENT_LUMINANCE = { dark: { min: 0.14 }, light: { max: 0.26 } } as const;
+
+/** The step used when there's no hue to match: the middle of the ramp. */
+export const MID_STEP = (LEVELS - 1) / 2;
+
+const hueDistance = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+/** Which of the map's steps an accent snaps to in a theme. */
+export function snapStep(accent: string | null, palette: PaletteName, theme: Theme): number {
+  const source = accent ? rgbToOklch(hexToRgb(accent)) : null;
+  if (!source || source[1] < GREY_ACCENT_CHROMA) return MID_STEP;
+  let best = -1, bestScore = Infinity;
+  PALETTES[palette][theme].colours.forEach((hex, i) => {
+    const [, C, h] = rgbToOklch(hexToRgb(hex));
+    if (C < MAP_HUE_MIN_CHROMA) return;
+    const score = hueDistance(h, source[2]) - CHROMA_PREFERENCE * C;
+    if (score < bestScore) [best, bestScore] = [i, score];
+  });
+  return best < 0 ? MID_STEP : best;
+}
+
+/**
+ * The profile's accent in a theme: the map colour snapStep picks, with its
+ * lightness moved (hue and chroma kept) just far enough to be 3:1 against
+ * that theme's page and surface.
+ */
+export function snapAccent(accent: string | null, palette: PaletteName, theme: Theme): string {
+  const cell = PALETTES[palette][theme].colours[snapStep(accent, palette, theme)]!;
+  const [L0, C, h] = rgbToOklch(hexToRgb(cell));
+  const lumAt = (L: number) => luminance(rgbToHex(fitGamut([L, C, h])));
+  const ok = (L: number) => (theme === "dark" ? lumAt(L) >= THEME_ACCENT_LUMINANCE.dark.min : lumAt(L) <= THEME_ACCENT_LUMINANCE.light.max);
+  if (ok(L0)) return cell;
+  // Lighter in the dark theme, darker in the light one: bisect between the cell and the far end.
+  let [bad, good] = theme === "dark" ? [L0, 1] : [L0, 0];
+  for (let i = 0; i < 30; i++) {
+    const mid = (bad + good) / 2;
+    if (ok(mid)) good = mid;
+    else bad = mid;
+  }
+  return rgbToHex(fitGamut([good, C, h]));
+}

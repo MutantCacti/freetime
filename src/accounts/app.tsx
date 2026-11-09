@@ -16,7 +16,7 @@ import { calendarCss, ditherAsset } from "../styles";
 import { resolveZone } from "../state";
 import { type FetchCalendar, busyOf, calendarAddress, fetchCalendarUrl, loadCalendar } from "./busy";
 import { checkPassword, dummyPasswordHash, hashPassword, randomId, sha256Hex } from "./crypto";
-import { PICTURE_MAX_BYTES, accentCss, accentSheetUrl, pictureUrl, processPicture, sniffPicture } from "./pictures";
+import { PICTURE_MAX_BYTES, accentCss, accentSheetUrl, accentSheetVersion, pictureUrl, processPicture, sniffPicture } from "./pictures";
 import { isAccent } from "./accent";
 import { seal } from "./secret-box";
 import { Db, SESSION_SECONDS, type User } from "./db";
@@ -618,14 +618,15 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     });
   });
 
-  /** A user's accent as a tiny stylesheet (CSP-safe: no inline styles). */
+  /** A user's accent as a tiny stylesheet (CSP-safe: no inline styles). Every profile has one: with no picture, it's the map's middle step. */
   app.get("/u/:id/accent.css", async (c) => {
     const owner = /^[a-z0-9]{10}$/.test(c.req.param("id")) ? await db(c).userByPublicId(c.req.param("id")) : null;
-    if (!owner?.email_verified || !isAccent(owner.accent)) return c.notFound();
-    return c.body(accentCss(owner.public_id, owner.accent), 200, {
+    if (!owner?.email_verified) return c.notFound();
+    const accent = isAccent(owner.accent) ? owner.accent : null;
+    return c.body(accentCss(owner.public_id, accent, owner.palette), 200, {
       "content-type": "text/css; charset=utf-8",
-      // The URL carries the accent (?v=), so a matching one can be kept for good.
-      "cache-control": c.req.query("v") === owner.accent.slice(1) ? "public, max-age=31536000, immutable" : "no-cache",
+      // The URL carries everything the sheet depends on (?v=), so a matching one can be kept for good.
+      "cache-control": c.req.query("v") === accentSheetVersion(accent, owner.palette) ? "public, max-age=31536000, immutable" : "no-cache",
     });
   });
 
@@ -655,7 +656,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       profile: {
         title: owner.name,
         palette: owner.palette,
-        accentSheet: isAccent(owner.accent) ? accentSheetUrl(owner.public_id, owner.accent) : undefined,
+        accentSheet: accentSheetUrl(owner.public_id, isAccent(owner.accent) ? owner.accent : null, owner.palette),
         owner: owner.picture_key ? { picture: pictureUrl(owner.public_id, owner.picture_key), name: owner.name } : undefined,
         intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} shareLink={isOwner ? shareLink(c, owner) : undefined} /> },
     });

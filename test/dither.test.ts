@@ -211,6 +211,19 @@ describe("palette presets", () => {
     }
   });
 
+  it.each(PALETTE_NAMES.map((n) => [n]))("%s: its free colour in both themes is in calendar.css for the theme switch, outside the theme blocks", (name) => {
+    const css = calendarCss();
+    const esc = name.replace(/[-]/g, "\\-");
+    const darkBlock = new RegExp(`^\\[data-palette="${esc}"\\]\\{([^}]*)\\}`, "m").exec(css)![1]!;
+    const { dark, light } = PALETTES[name];
+    expect(darkBlock).toContain(`--map-free-dark:${dark.colours[0]};--map-on-free-dark:var(--raw-white)`);
+    expect(darkBlock).toContain(`--map-free-light:${light.colours[0]};--map-on-free-light:var(--raw-black)`);
+    expect(css.match(/--map-free-dark:/g)?.length).toBe(1 + PALETTE_NAMES.length);
+    for (const line of css.split("\n").filter((l) => l.startsWith(':root[data-theme="light"]'))) expect(line).not.toContain("--map-free");
+    expect(css).toContain(".map-free-dark{background-color:var(--map-free-dark);color:var(--map-on-free-dark)}");
+    expect(css).toContain(".map-free-light{background-color:var(--map-free-light);color:var(--map-on-free-light)}");
+  });
+
   it.each(PALETTE_NAMES.map((n) => [n]))("%s has its own scoped block in calendar.css, in both themes", (name) => {
     const css = calendarCss();
     const esc = name.replace(/[-]/g, "\\-");
