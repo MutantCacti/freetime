@@ -208,11 +208,38 @@ export function dotContrast(hex: string, tone: Tone): number {
  * colour keeps its hue and chroma and has its lightness solved so that the
  * averaged cell (colour plus dots) lands on target: the free cell's
  * lightness moved towards the fully busy cell's by stepPosition(i). The dot
- * tone is whichever can reach the target with the clearer dots.
+ * tone is whichever moves the colour least from the map's own lightness with its dots showing.
  */
 function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPalette {
   const last = LEVELS - 1;
   const okL = (rgb: RGB) => rgbToOklch(rgb)[0];
+  // The colour of step i whose averaged cell (with its dots, in either tone) lands on target,
+  // keeping the sampled hue and chroma. Only tones that reach the target with their dots
+  // showing (MIN_DOT_CONTRAST) count; of those, the one that moves the colour least from the
+  // map's own lightness wins, so the colour keeps its hue and chroma (a big move can push it out
+  // of sRGB, which cuts chroma) and doesn't go near-black just to make room for light dots.
+  // Changing tone from the step before counts as a move of FLIP_COST, so a lone cell with
+  // the other tone in the middle of a run doesn't happen for a small gain.
+  const FLIP_COST = 0.05;
+  const solveStep = (i: number, target: number, prevTone?: Tone): { hex: string; tone: Tone; contrast: number } | undefined => {
+    const level = ditherLevelForStep(i);
+    const [, C, h] = rgbToOklch(hexToRgb(sampled[i]!));
+    const L0 = rgbToOklch(hexToRgb(sampled[i]!))[0];
+    const options: { hex: string; tone: Tone; contrast: number; move: number }[] = [];
+    for (const tone of ["k", "w"] as const) {
+      let lo = 0, hi = 1;
+      for (let k = 0; k < 32; k++) {
+        const mid = (lo + hi) / 2;
+        if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
+        else hi = mid;
+      }
+      const hex = rgbToHex(fitGamut([(lo + hi) / 2, C, h]));
+      if (Math.abs(okL(averagedCell(hex, tone, level)) - target) > 0.004) continue; // this tone can't reach it
+      const contrast = dotContrast(hex, tone);
+      if (contrast >= MIN_DOT_CONTRAST) options.push({ hex, tone, contrast, move: Math.abs((lo + hi) / 2 - L0) + (prevTone && tone !== prevTone ? FLIP_COST : 0) });
+    }
+    return options.sort((a, b) => a.move - b.move)[0];
+  };
   // Fully busy: of the two dot tones, whichever leaves the cell furthest towards busy with
   // its dots still showing. If the dots don't show on the map's end colour, that colour's
   // lightness is moved (away from busy) just until they do.
@@ -236,27 +263,23 @@ function solveRamp(sampled: readonly string[], busyIsLighter: boolean): StepPale
   const end = ends.sort((a, b) => (busyIsLighter ? b.L - a.L : a.L - b.L))[0]!;
   const toneN = end.tone;
   const from = okL(hexToRgb(sampled[0]!));
+  // The step before fully busy has fewer dots (the full pattern is only for a full slot), so to
+  // read nearly as busy its colour has to go further than the end's, and there its dots can stop
+  // showing (dark dots on the darkest light-theme colours). Then the end moves towards free, a
+  // little at a time, until the step before it can reach its target with its dots showing.
+  {
+    const [Le, Ce, he] = rgbToOklch(hexToRgb(end.hex));
+    const towardsFree = busyIsLighter ? -1 : 1;
+    for (let k = 1; k <= 300 && !solveStep(last - 1, from + (end.L - from) * stepPosition(last - 1)); k++) {
+      end.hex = rgbToHex(fitGamut([Le + towardsFree * k * 0.001, Ce, he]));
+      end.L = okL(averagedCell(end.hex, toneN, levelN));
+    }
+  }
   const to = end.L;
   const colours: string[] = [sampled[0]!];
   const tones: Tone[] = [toneFor(sampled[0]!)]; // no dots at step 0; the tone is unused
   for (let i = 1; i < last; i++) {
-    const level = ditherLevelForStep(i);
-    const target = from + (to - from) * stepPosition(i);
-    const [, C, h] = rgbToOklch(hexToRgb(sampled[i]!));
-    const options: { hex: string; tone: Tone; contrast: number }[] = [];
-    for (const tone of ["k", "w"] as const) {
-      let lo = 0, hi = 1;
-      for (let k = 0; k < 32; k++) {
-        const mid = (lo + hi) / 2;
-        if (okL(averagedCell(rgbToHex(fitGamut([mid, C, h])), tone, level)) < target) lo = mid;
-        else hi = mid;
-      }
-      const hex = rgbToHex(fitGamut([(lo + hi) / 2, C, h]));
-      if (Math.abs(okL(averagedCell(hex, tone, level)) - target) > 0.004) continue; // this tone can't reach it
-      options.push({ hex, tone, contrast: dotContrast(hex, tone) });
-    }
-    options.sort((a, b) => b.contrast - a.contrast);
-    const best = options[0] ?? { hex: sampled[i]!, tone: toneFor(sampled[i]!), contrast: 0 };
+    const best = solveStep(i, from + (to - from) * stepPosition(i), i > 1 ? tones[i - 1] : undefined) ?? { hex: sampled[i]!, tone: toneFor(sampled[i]!) };
     colours.push(best.hex);
     tones.push(best.tone);
   }

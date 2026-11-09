@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { decodePng } from "../../src/accounts/image-decode";
 import baselineUrl from "../fixtures/pic-baseline-420.jpg?inline";
 import { accountsEnv, decode, makeAccounts, resetDb, signedUp } from "./helpers";
+import { accentCss } from "../../src/accounts/pictures";
+import { snapAccent } from "../../src/accounts/accent";
+import type { PaletteName } from "../../src/parula";
 import { buildPng, inlineBytes } from "./png-builder";
 
 beforeEach(resetDb);
@@ -142,13 +145,16 @@ describe("accent", () => {
   const sheets = (html: string) => [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
   const SHARED = ["/css/fonts.css", "/css/tokens.css", "/css/app.css", "/css/calendar.css"];
 
+  const sheetText = (id: string, accent: string | null, palette: PaletteName) => accentCss(id, accent, palette);
+
   it("a picture's accent is served as a stylesheet, linked after the shared four on the owner's pages", async () => {
     const a = makeAccounts();
     const b = await signedUp(a);
-    expect(sheets(await (await b.get("/account")).text())).toEqual(SHARED);
+    const { public_id: id0 } = (await row())!;
+    expect(sheets(await (await b.get("/account")).text())).toEqual([...SHARED, `/u/${id0}/accent.css?v=2-parula-none`]);
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     const { public_id, accent } = (await row())!;
-    const href = `/u/${public_id}/accent.css?v=${accent!.slice(1)}`;
+    const href = `/u/${public_id}/accent.css?v=2-parula-${accent!.slice(1)}`;
     for (const html of [await (await b.get("/account")).text(), await (await a.browser().get("/@ada")).text()]) {
       expect(sheets(html)).toEqual([...SHARED, href]);
       expect(html).toContain(`data-accent-user="${public_id}"`);
@@ -156,21 +162,41 @@ describe("accent", () => {
     const css = await a.browser().get(href);
     expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
     expect(css.headers.get("cache-control")).toContain("immutable");
-    expect(await css.text()).toBe(`[data-accent-user="${public_id}"]{--user-accent:${accent};--user-on-accent:var(--raw-black)}\n`);
+    const text = await css.text();
+    expect(text).toBe(sheetText(public_id, accent, "parula"));
+    // Both themes: dark on the element, light under the light theme, each from the map.
+    expect(text).toContain(`[data-accent-user="${public_id}"]{--user-accent-dark:${snapAccent(accent, "parula", "dark")};--user-accent-light:${snapAccent(accent, "parula", "light")};--user-accent:${snapAccent(accent, "parula", "dark")};`);
+    expect(text).toContain(`:root[data-theme="light"] [data-accent-user="${public_id}"]{--user-accent:${snapAccent(accent, "parula", "light")};`);
     expect((await a.browser().get(`/u/${public_id}/accent.css?v=000000`)).headers.get("cache-control")).toBe("no-cache");
   });
 
-  it("no picture, no accent: no stylesheet, and the card falls back to the site's colour", async () => {
+  it("the sheet follows the profile's colour map, and its URL changes with it", async () => {
+    const a = makeAccounts();
+    const b = await signedUp(a);
+    await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
+    await accountsEnv.DB.prepare("UPDATE users SET palette = 'magma'").run();
+    const { public_id, accent } = (await row())!;
+    const href = `/u/${public_id}/accent.css?v=2-magma-${accent!.slice(1)}`;
+    expect(sheets(await (await a.browser().get("/@ada")).text())).toEqual([...SHARED, href]);
+    const res = await a.browser().get(href);
+    expect(res.headers.get("cache-control")).toContain("immutable");
+    expect(await res.text()).toBe(sheetText(public_id, accent, "magma"));
+    expect((await a.browser().get(`/u/${public_id}/accent.css?v=2-parula-${accent!.slice(1)}`)).headers.get("cache-control")).toBe("no-cache");
+  });
+
+  it("no picture: the sheet still exists, with the map's middle step", async () => {
     const a = makeAccounts();
     const b = await signedUp(a);
     const { public_id } = (await row())!;
-    expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
+    const href = `/u/${public_id}/accent.css?v=2-parula-none`;
     const bare = await (await a.browser().get("/@ada")).text();
-    expect(sheets(bare)).toEqual(SHARED);
+    expect(sheets(bare)).toEqual([...SHARED, href]);
     expect(bare).not.toContain("tb-owner");
+    expect(await (await a.browser().get(href)).text()).toBe(sheetText(public_id, null, "parula"));
     await b.upload("/account/picture", "picture", new File([PNG], "me.png"));
     await b.post("/account/picture/remove", {});
-    expect((await a.browser().get(`/u/${public_id}/accent.css`)).status).toBe(404);
+    expect(await (await a.browser().get(`/u/${public_id}/accent.css`)).text()).toBe(sheetText(public_id, null, "parula"));
+    expect((await a.browser().get("/u/zzzzzzzzzz/accent.css")).status).toBe(404);
   });
 
   it("the database refuses an accent that isn't #rrggbb", async () => {

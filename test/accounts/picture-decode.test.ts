@@ -1,10 +1,10 @@
 // Decoding, resizing and the accent colour (image-decode.ts, accent.ts, pictures.ts).
 import { describe, expect, it } from "vitest";
 import tokens from "../../public/css/tokens.css?raw";
-import { ACCENT_LUMINANCE, KAWASE_WEIGHTS, SATURATION_BOOST, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour, saturate } from "../../src/accounts/accent";
+import { ACCENT_LUMINANCE, CHROMA_PREFERENCE, MAP_HUE_MIN_CHROMA, MID_STEP, KAWASE_WEIGHTS, snapAccent, snapStep, SATURATION_BOOST, accentOf, accentText, blurToPixel, clampAccent, gridImage, kawaseOffset, pictureColour, saturate } from "../../src/accounts/accent";
 import { Grid, PICTURE_SIZE, decodeJpeg, decodePng } from "../../src/accounts/image-decode";
 import { processPicture } from "../../src/accounts/pictures";
-import { luminance, rgbToOklch } from "../../src/parula";
+import { PALETTES, PALETTE_NAMES, hexToRgb, luminance, rgbToOklch } from "../../src/parula";
 import baselineUrl from "../fixtures/pic-baseline-420.jpg?inline";
 import progressiveUrl from "../fixtures/pic-progressive-420.jpg?inline";
 import greyUrl from "../fixtures/pic-grey.jpg?inline";
@@ -219,5 +219,96 @@ describe("accent", () => {
     const rgb: [number, number, number] = [0.25, 0.5, 0.75];
     const hex = clampAccent(rgb);
     expect(close(to8([1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)), to8(rgb), 1)).toBe(true);
+  });
+});
+
+describe("accent snapped to the colour map", () => {
+  const raw = Object.fromEntries([...tokens.matchAll(/(--raw-[a-z0-9-]+):\s*(#[0-9a-f]{6})/g)].map((m) => [m[1], m[2]]));
+  const themeBlock = (from: string, to?: string) => tokens.slice(tokens.indexOf(from), to ? tokens.indexOf(to) : undefined);
+  const semantic = (block: string, name: string) => raw[new RegExp(`${name}:\\s*var\\((--raw-[a-z0-9-]+)\\)`).exec(block)![1]!]!;
+  const blocks = { dark: themeBlock("semantic: dark (default)", "semantic: light (chosen)"), light: themeBlock("semantic: light (chosen)") };
+  const pages = (theme: "dark" | "light") => [semantic(blocks[theme], "--color-bg"), semantic(blocks[theme], "--color-surface")];
+  const contrast = (a: string, b: string) => {
+    const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
+    return (x + 0.05) / (y + 0.05);
+  };
+  const hueGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  // Stored accents as the picture pipeline leaves them (clampAccent keeps the hue), plus a grey and none.
+  const accents: [string, string | null][] = [
+    ["orange", clampAccent([0.9, 0.47, 0.08])],
+    ["teal", clampAccent([0.16, 0.6, 0.63])],
+    ["slate blue", clampAccent([0.44, 0.53, 0.79])],
+    ["plum", clampAccent([0.6, 0.42, 0.77])],
+    ["green", clampAccent([0.3, 0.7, 0.3])],
+    ["red", clampAccent([0.8, 0.15, 0.15])],
+    ["grey", clampAccent([0.54, 0.57, 0.62])],
+    ["none", null],
+  ];
+  const cases = PALETTE_NAMES.flatMap((map) => (["dark", "light"] as const).flatMap((theme) => accents.map(([n, a]) => [map, theme, n, a] as const)));
+
+  it.each(cases)("%s, %s theme, %s: 3:1 on the page, readable text, the map's own hue", (map, theme, _n, accent) => {
+    const hex = snapAccent(accent, map, theme);
+    for (const bg of pages(theme)) expect(contrast(hex, bg), `on ${bg}`).toBeGreaterThanOrEqual(3);
+    const text = accentText(hex) === "dark" ? raw["--raw-black"]! : raw["--raw-white"]!;
+    expect(contrast(hex, text)).toBeGreaterThanOrEqual(4.5);
+    // The colour is the chosen step's, with only its lightness moved.
+    const cell = PALETTES[map][theme].colours[snapStep(accent, map, theme)]!;
+    const [, Cc, hc] = rgbToOklch(hexToRgb(cell));
+    const [, C, h] = rgbToOklch(hexToRgb(hex));
+    if (Cc > 0.03 && C > 0.03) expect(hueGap(h, hc)).toBeLessThan(0.1);
+    if (hex !== cell) expect(theme === "dark" ? luminance(hex) > luminance(cell) : luminance(hex) < luminance(cell)).toBe(true);
+  });
+
+  it.each(cases)("%s, %s theme, %s: the step nearest the picture's hue, or the middle step for grey", (map, theme, _n, accent) => {
+    const step = snapStep(accent, map, theme);
+    const source = accent ? rgbToOklch(hexToRgb(accent)) : null;
+    const cells = PALETTES[map][theme].colours.map((c) => rgbToOklch(hexToRgb(c)));
+    // Never the free colour, and always a step with a hue.
+    expect(step).toBeGreaterThan(0);
+    expect(cells[step]![1]).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
+    const huedSteps = cells.map((c, i) => [i, c] as const).filter(([i, [, C]]) => i > 0 && C >= MAP_HUE_MIN_CHROMA);
+    if (!source || source[1] < 0.03) {
+      // The hued step nearest the middle one.
+      const nearestMid = Math.min(...huedSteps.map(([i]) => Math.abs(i - MID_STEP)));
+      return expect(Math.abs(step - MID_STEP)).toBe(nearestMid);
+    }
+    const hued = huedSteps.map(([, c]) => c);
+    const nearest = Math.min(...hued.map(([, , h]) => hueGap(h, source[2])));
+    const maxC = Math.max(...hued.map(([, C]) => C));
+    expect(cells[step]![1]).toBeGreaterThanOrEqual(MAP_HUE_MIN_CHROMA);
+    // Nearest in hue, give or take the small preference for colourful steps.
+    expect(hueGap(cells[step]![2], source[2])).toBeLessThanOrEqual(nearest + CHROMA_PREFERENCE * maxC + 1e-9);
+  });
+
+  it("the middle step is the middle of the 17", () => expect(MID_STEP).toBe(8));
+
+  it("plum on parula's dark theme skips the free colour for the next-nearest hue", () => {
+    const plum = clampAccent([0.6, 0.42, 0.77]);
+    expect(snapStep(plum, "parula", "dark")).toBeGreaterThan(0);
+  });
+
+  it("grey on cividis gives a colour, not grey", () => {
+    for (const theme of ["dark", "light"] as const) {
+      for (const accent of [null, clampAccent([0.54, 0.57, 0.62])]) {
+        const step = snapStep(accent, "cividis", theme);
+        expect(step).not.toBe(MID_STEP); // cividis's middle step is grey
+        expect(rgbToOklch(hexToRgb(snapAccent(accent, "cividis", theme)))[1]).toBeGreaterThanOrEqual(0.03);
+      }
+    }
+  });
+
+  it("keeps a map colour that already stands 3:1 off the page as it is", () => {
+    // Parula's busiest dark-theme colour is light enough already.
+    const cell = PALETTES.parula.dark.colours[16]!;
+    const yellowish = clampAccent([0.95, 0.85, 0.1]);
+    const step = snapStep(yellowish, "parula", "dark");
+    const hex = snapAccent(yellowish, "parula", "dark");
+    if (step === 16) expect(hex).toBe(cell);
+    expect(contrast(hex, pages("dark")[0]!)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("different hues land on different steps of a colourful map", () => {
+    const steps = new Set(accents.slice(0, 6).map(([, a]) => snapStep(a, "plasma", "dark")));
+    expect(steps.size).toBeGreaterThanOrEqual(3);
   });
 });

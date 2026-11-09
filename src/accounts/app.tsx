@@ -16,7 +16,7 @@ import { calendarCss, ditherAsset } from "../styles";
 import { resolveZone } from "../state";
 import { type FetchCalendar, busyOf, calendarAddress, fetchCalendarUrl, loadCalendar } from "./busy";
 import { checkPassword, dummyPasswordHash, hashPassword, randomId, sha256Hex } from "./crypto";
-import { PICTURE_MAX_BYTES, accentCss, accentSheetUrl, pictureUrl, processPicture, sniffPicture } from "./pictures";
+import { PICTURE_MAX_BYTES, accentCss, accentSheetUrl, accentSheetVersion, pictureUrl, processPicture, sniffPicture } from "./pictures";
 import { isAccent } from "./accent";
 import { seal } from "./secret-box";
 import { type UsernameProblem, USERNAME_MAX, USERNAME_MIN, normaliseUsername, profilePath, usernameProblem } from "./username";
@@ -674,14 +674,15 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     });
   });
 
-  /** A user's accent as a tiny stylesheet (CSP-safe: no inline styles). */
+  /** A user's accent as a tiny stylesheet (CSP-safe: no inline styles). Every profile has one: with no picture, it's the map's middle step. */
   app.get("/u/:id/accent.css", async (c) => {
     const owner = /^[a-z0-9]{10}$/.test(c.req.param("id")) ? await db(c).userByPublicId(c.req.param("id")) : null;
-    if (!owner?.email_verified || !isAccent(owner.accent)) return c.notFound();
-    return c.body(accentCss(owner.public_id, owner.accent), 200, {
+    if (!owner?.email_verified) return c.notFound();
+    const accent = isAccent(owner.accent) ? owner.accent : null;
+    return c.body(accentCss(owner.public_id, accent, owner.palette), 200, {
       "content-type": "text/css; charset=utf-8",
-      // The URL carries the accent (?v=), so a matching one can be kept for good.
-      "cache-control": c.req.query("v") === owner.accent.slice(1) ? "public, max-age=31536000, immutable" : "no-cache",
+      // The URL carries everything the sheet depends on (?v=), so a matching one can be kept for good.
+      "cache-control": c.req.query("v") === accentSheetVersion(accent, owner.palette) ? "public, max-age=31536000, immutable" : "no-cache",
     });
   });
 
@@ -741,7 +742,8 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
     );
     // Signed out, Add friend asks you to sign in first (phase 3 wires it for signed-in visitors).
     const friend = !viewer ? { state: "signed-out" as const, signInHref: `/account/sign-in?next=${encodeURIComponent(here)}` } : undefined;
-    const sheets = [owner, ...(viewer && !isOwner ? [viewer] : [])].filter((u) => isAccent(u.accent)).map((u) => accentSheetUrl(u.public_id, u.accent!));
+    // Every verified profile has an accent sheet (snapped to its map, even with no picture): the owner's, then the viewer's for the settings header.
+    const sheets = [owner, ...(viewer && !isOwner ? [viewer] : [])].map((u) => accentSheetUrl(u.public_id, isAccent(u.accent) ? u.accent : null, u.palette));
     const { page: body, status } = await renderCalendar({
       zone,
       links: new Links(zone, profilePath(owner)),
@@ -753,7 +755,7 @@ export function createAccountsApp(deps: AccountsDeps = {}) {
       profile: {
         title: owner.name,
         palette: owner.palette,
-        accentSheet: sheets.length ? sheets : undefined,
+        accentSheet: sheets,
         settings,
         intro: <ProfileCard user={owner} showPublic={showPublic} isOwner={isOwner} friend={friend} host={host} origin={origin(c)} />,
       },

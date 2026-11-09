@@ -301,6 +301,11 @@ describe("colour and dither", () => {
     expect(svg.headers.get("content-type")).toBe("image/svg+xml");
     expect((await svg.text()).match(/<rect /g)?.length).toBe(DITHER_MAX_LEVEL);
     expect((await app.get("/img/dither/16k.svg")).status).toBe(404);
+    // Only the six layers have tiles: a level between them isn't served, and calendar.css uses none.
+    expect((await app.get("/img/dither/11k.svg")).status).toBe(404);
+    expect((await app.get("/img/dither/9w.svg")).status).toBe(200);
+    const used = new Set([...css.matchAll(/\/img\/dither\/(\d+)[kw]\.svg/g)].map((m) => Number(m[1])));
+    expect([...used].sort((a, b) => a - b)).toEqual([2, 4, 6, 9, 12]);
   });
 
   it("labels every cell and makes it keyboard-focusable", async () => {

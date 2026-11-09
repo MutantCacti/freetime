@@ -3,7 +3,8 @@
 // stored in R2, under a random key, is never the upload: it's the centre
 // square, area-averaged to at most 128 × 128 and re-encoded as PNG.
 
-import { accentOf, accentText } from "./accent";
+import { accentOf, accentText, snapAccent } from "./accent";
+import type { PaletteName } from "../parula";
 import { type Grid, decodeJpeg, decodePng } from "./image-decode";
 
 export const PICTURE_MAX_BYTES = 2 * 1024 * 1024;
@@ -24,19 +25,43 @@ export function pictureUrl(publicId: string, key: string): string {
   return `/u/${publicId}/picture?v=${encodeURIComponent(key.slice(-8))}`;
 }
 
-/** A user's accent stylesheet; the accent is in the query, so it can be cached for good. */
-export function accentSheetUrl(publicId: string, accent: string): string {
-  return `/u/${publicId}/accent.css?v=${accent.slice(1)}`;
+/**
+ * Bumped when the way the accent is drawn from the stored colour changes, so
+ * stylesheets cached for good under the old rule are fetched again.
+ */
+export const ACCENT_SHEET_VERSION = 2;
+
+/**
+ * A user's accent stylesheet. Everything it depends on (the rule, the map and
+ * the stored accent) is in the query, so it can be cached for good.
+ */
+export function accentSheetUrl(publicId: string, accent: string | null, palette: PaletteName): string {
+  return `/u/${publicId}/accent.css?v=${accentSheetVersion(accent, palette)}`;
+}
+
+/** The ?v= an accent stylesheet's URL carries. */
+export function accentSheetVersion(accent: string | null, palette: PaletteName): string {
+  return `${ACCENT_SHEET_VERSION}-${palette}-${accent ? accent.slice(1) : "none"}`;
 }
 
 /**
- * The accent stylesheet's body: the accent, and black or white for text and
- * icons on it, scoped to elements carrying that user's data-accent-user.
+ * The accent stylesheet's body, scoped to elements carrying that user's
+ * data-accent-user (or to the page, when it's on <html>): the accent snapped
+ * to their colour map for each theme (accent.ts, snapAccent), and black or
+ * white for text and icons on it. --user-accent and --user-on-accent follow
+ * the theme; --user-accent-dark and --user-accent-light hold both, for
+ * anything that shows the two side by side.
  * A stylesheet, not an inline style: the CSP allows only style-src 'self'.
  */
-export function accentCss(publicId: string, accent: string): string {
-  const on = accentText(accent) === "dark" ? "var(--raw-black)" : "var(--raw-white)";
-  return `[data-accent-user="${publicId}"]{--user-accent:${accent};--user-on-accent:${on}}\n`;
+export function accentCss(publicId: string, accent: string | null, palette: PaletteName): string {
+  const on = (hex: string) => (accentText(hex) === "dark" ? "var(--raw-black)" : "var(--raw-white)");
+  const dark = snapAccent(accent, palette, "dark");
+  const light = snapAccent(accent, palette, "light");
+  const sel = `[data-accent-user="${publicId}"]`;
+  return (
+    `${sel}{--user-accent-dark:${dark};--user-accent-light:${light};--user-accent:${dark};--user-on-accent:${on(dark)}}\n` +
+    `:root[data-theme="light"]${sel},:root[data-theme="light"] ${sel}{--user-accent:${light};--user-on-accent:${on(light)}}\n`
+  );
 }
 
 // ---------------------------------------------------------------- resize and re-encode

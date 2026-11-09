@@ -24,8 +24,20 @@
 //    relative luminance is within ACCENT_LUMINANCE. In that band the accent is
 //    at least 3:1 against the page and surface colours of both themes, and
 //    either dark or light text on it is at least 4.5:1 (accentText picks).
+//    That colour is what's stored; it's the source hue for step 5.
+// 5. Snap it to the profile's colour map, once per theme (snapAccent): of the
+//    theme's busy steps (never step 0, the free colour) that have a hue
+//    (OKLCH chroma at least MAP_HUE_MIN_CHROMA), the one nearest the stored
+//    accent's hue, a little in favour of the more colourful; for a grey
+//    accent (chroma under GREY_ACCENT_CHROMA), or no picture, the hued step
+//    nearest the middle one. Then its
+//    lightness is moved, hue and chroma kept, only as far as it takes to be
+//    3:1 against that theme's page and surface (THEME_ACCENT_LUMINANCE).
+//    Black or white text on any colour is at least 4.58:1 one way or the
+//    other, so accentText still holds.
 
-import { fitGamut, luminance, rgbToHex, rgbToOklch } from "../parula";
+import { PALETTES, type PaletteName, type Theme, fitGamut, hexToRgb, luminance, rgbToHex, rgbToOklch } from "../parula";
+import { LEVELS } from "../levels";
 import type { Grid } from "./image-decode";
 
 /** Intel's Kawase offsets, continued: pass i uses KAWASE_OFFSETS[i] (then on, each offset is used for two passes). */
@@ -190,3 +202,72 @@ export function isAccent(v: unknown): v is string {
   return typeof v === "string" && /^#[0-9a-f]{6}$/.test(v);
 }
 
+
+// ---------------------------------------------------------------- snapped to the colour map
+
+/** A stored accent with less OKLCH chroma than this counts as grey: no hue to match. */
+export const GREY_ACCENT_CHROMA = 0.03;
+/** Map colours with less chroma than this have no hue worth matching (cividis's greys). */
+export const MAP_HUE_MIN_CHROMA = 0.04;
+/** How much a map colour's chroma counts against hue distance (radians per unit of chroma). */
+export const CHROMA_PREFERENCE = (40 * Math.PI) / 180;
+/**
+ * Luminance limits for the snapped accent, one side per theme: in the dark
+ * theme at least `min` (3:1 against the dark page and surface), in the light
+ * theme at most `max` (3:1 against white and the light surface). The tests
+ * check them against tokens.css.
+ */
+export const THEME_ACCENT_LUMINANCE = { dark: { min: 0.14 }, light: { max: 0.26 } } as const;
+
+/** The step used when there's no hue to match: the middle of the ramp. */
+export const MID_STEP = (LEVELS - 1) / 2;
+
+const hueDistance = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+/** Steps with a hue worth matching: chroma at least MAP_HUE_MIN_CHROMA, and never step 0 (free), so the accent never sits next to free cells. */
+function huedSteps(palette: PaletteName, theme: Theme): { i: number; C: number; h: number }[] {
+  return PALETTES[palette][theme].colours
+    .map((hex, i) => {
+      const [, C, h] = rgbToOklch(hexToRgb(hex));
+      return { i, C, h };
+    })
+    .filter(({ i, C }) => i > 0 && C >= MAP_HUE_MIN_CHROMA);
+}
+
+/**
+ * Which of the map's steps an accent snaps to in a theme: of the hued steps
+ * (huedSteps), the one nearest its hue; for a grey accent or none, the hued
+ * step nearest MID_STEP (the lower one on a tie), so a map with greys in the
+ * middle (cividis) still gives a colour.
+ */
+export function snapStep(accent: string | null, palette: PaletteName, theme: Theme): number {
+  const hued = huedSteps(palette, theme);
+  if (hued.length === 0) return MID_STEP;
+  const source = accent ? rgbToOklch(hexToRgb(accent)) : null;
+  const score =
+    !source || source[1] < GREY_ACCENT_CHROMA
+      ? ({ i }: { i: number }) => Math.abs(i - MID_STEP) + i * 1e-6
+      : ({ C, h }: { C: number; h: number }) => hueDistance(h, source[2]) - CHROMA_PREFERENCE * C;
+  return hued.reduce((best, s) => (score(s) < score(best) ? s : best)).i;
+}
+
+/**
+ * The profile's accent in a theme: the map colour snapStep picks, with its
+ * lightness moved (hue and chroma kept) just far enough to be 3:1 against
+ * that theme's page and surface.
+ */
+export function snapAccent(accent: string | null, palette: PaletteName, theme: Theme): string {
+  const cell = PALETTES[palette][theme].colours[snapStep(accent, palette, theme)]!;
+  const [L0, C, h] = rgbToOklch(hexToRgb(cell));
+  const lumAt = (L: number) => luminance(rgbToHex(fitGamut([L, C, h])));
+  const ok = (L: number) => (theme === "dark" ? lumAt(L) >= THEME_ACCENT_LUMINANCE.dark.min : lumAt(L) <= THEME_ACCENT_LUMINANCE.light.max);
+  if (ok(L0)) return cell;
+  // Lighter in the dark theme, darker in the light one: bisect between the cell and the far end.
+  let [bad, good] = theme === "dark" ? [L0, 1] : [L0, 0];
+  for (let i = 0; i < 30; i++) {
+    const mid = (bad + good) / 2;
+    if (ok(mid)) good = mid;
+    else bad = mid;
+  }
+  return rgbToHex(fitGamut([good, C, h]));
+}

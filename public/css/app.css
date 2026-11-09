@@ -389,9 +389,10 @@ img.avatar { object-fit: cover; padding: 0; }
 .profile-card { display: flex; gap: var(--space-4); align-items: flex-start; }
 .profile-card.profile-strip { align-items: center; gap: 12px; }
 /*
- * A profile card is drawn in its owner's accent (from their picture, set by
- * /u/<id>/accent.css on [data-accent-user]); without one, the site's link colour.
- * The accent keeps 3:1 on both themes' page colours, and its text colour 4.5:1.
+ * A profile card is drawn in its owner's accent (their picture's hue snapped to
+ * their colour map, per theme, set by /u/<id>/accent.css on [data-accent-user]);
+ * until that sheet loads, the site's link colour. The accent keeps 3:1 on the
+ * current theme's page colours, and its text colour 4.5:1.
  */
 .profile-card {
   --card-accent: var(--user-accent, var(--color-link));

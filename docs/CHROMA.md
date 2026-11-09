@@ -13,7 +13,7 @@ Maxence: "we want much more blocks to look like they're near the extremes of the
    - each step's colour is sampled from the toned map at `stepPosition(step)` instead of step / 8.
 
    Steps 1–2 now read close to free and steps 6–7 close to fully busy; the middle changes fastest.
-2. **Each step's lightness is solved for its dots.** A cell's averaged lightness (colour plus dots, blended in linear light) should land at `stepPosition(step)` of the way from the free cell to the fully busy cell. For each step the colour keeps the map's hue and chroma, and its OKLCH lightness is found by bisection so the *averaged* cell hits that target. Both dot tones are tried, and the one with the clearer dots wins. For the fully busy end, the tone that leaves the cell furthest towards busy is used, with the end colour's lightness moved only as far as needed for its dots to show (dots at least 1.4:1 against their colour, as before). In the light theme that means dark dots on the busiest cells instead of light ones, which made the busy end much darker: the light theme now spans 0.90 → 0.32 in averaged lightness, where before it ended back up at 0.70.
+2. **Each step's lightness is solved for its dots.** A cell's averaged lightness (colour plus dots, blended in linear light) should land at `stepPosition(step)` of the way from the free cell to the fully busy cell. For each step the colour keeps the map's hue and chroma, and its OKLCH lightness is found by bisection so the *averaged* cell hits that target. Both dot tones are tried, and the one with the clearer dots wins (changed in round 5: the one that moves the colour least). For the fully busy end, the tone that leaves the cell furthest towards busy is used, with the end colour's lightness moved only as far as needed for its dots to show (dots at least 1.4:1 against their colour, as before). In the light theme that means dark dots on the busiest cells instead of light ones, which made the busy end much darker: the light theme now spans 0.90 → 0.32 in averaged lightness, where before it ended back up at 0.70.
 
 **Result:** averaged lightness now moves towards busy at every step, for all five maps, in both themes, for current and past time. A test (`test/colour-rule.test.ts`, "cells read steadily busier") checks this for all 20 combinations. Because the targets are the same for every map, all five maps now share the same lightness curve and differ only in hue, which is what a perceptually uniform map is meant to do. The dither-contrast test (dots at least 1.4:1 at every step, current and past, both themes, every map) still passes.
 
@@ -86,6 +86,47 @@ Averaged lightness at chroma 0.85, 17 steps:
 | plasma | light | current | 0.90 0.89 0.88 0.85 0.81 0.76 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
 | plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
 
+## Round 5: six dot layers, still 17 steps
+
+Maxence: "3 or 4 layers is better than 17", then "How about six layers?", approved in the profile sketch. Round 4's 13 dot patterns were too many to tell apart: neighbours one dot apart read as noise, not as a scale.
+
+**Decision: keep 17 colour steps, and give them six dot layers** (`DITHER_LAYERS` in `src/dither.ts`): none, 2, 4, 6, 9 and 12 of the 16 Bayer cells. "None" is one of the six, and only free time has it.
+
+- **Why not fewer steps.** The steps carry the information (how busy a slot is), and the colour does the fine work between them; the gentler curve that 17 steps gave in round 4 is what Maxence asked for. What was hard to read was the dots. With six layers the patterns are few and distinct, and the colour still moves at every step. Going back to six steps would throw away the gentle curve to fix something only the dots had.
+- **Which layers.** The gaps are 2, 2, 2, 3, 3: closer together near free, where a couple of dots is the cue that a slot isn't free, and wider towards busy. 12 is still the fully busy pattern, never solid.
+- **Which step gets which layer.** The layer nearest the step's place on the smoothstep ramp, with the same rules as before: any busy step has dots (at least 2), and only a full slot gets the full pattern (anything short of full gets at most 9):
+  0, 2, 2, 2, 2, 2, 4, 4, 6, 6, 9, 9, 9, 9, 9, 9, 12.
+  Every layer is used. Only these levels have tiles: `/img/dither/<level><tone>.svg` is a 404 for any other level.
+- **The lightness solve does the rest.** Each step's colour lightness is solved for its own dots (round 3), so where the layer jumps (2 → 4 at step 6, 6 → 9 at step 10) the colour moves the other way, just enough that the averaged cell still lands on its target. The averaged-lightness curve is the same as round 4's to within 0.01 at every step (table below).
+- **One new constraint in the solve.** Step 15 now has 9 dots against the end's 12, so to read almost fully busy its colour must go further than the end's. In the light theme that meant dark dots on a colour too dark for them (1.39:1, under the 1.4:1 rule) for parula, viridis and plasma. Two changes: a step's colour only counts if its dots show (at least `MIN_DOT_CONTRAST`), and the fully busy colour moves towards free, 0.001 at a time, until the step before it can reach its target with its dots showing. That lightened those three maps' fully busy light-theme cell by up to 0.006 in averaged lightness; the others are unchanged. Lowest dot contrast now: 1.40:1.
+- **Which dot tone.** Round 3 took whichever tone gave the clearer dots. With at least 2 dots from step 1, that put light dots on the early dark-theme steps, and their colours had to go almost black to leave room for the dots (parula's step 2 was a near-black navy, its hue gone). Now, of the tones whose dots show, the one that moves the colour least from the map's own lightness wins, and changing tone from the step before costs as much as a 0.05 move, so no lone cell has the other tone. Result: dark dots on every busy step in both themes, except the fully busy dark-theme cell (light dots on a deeper yellow, as before). Colours keep their hue: the lowest share of chroma kept is now 0.93, against 0.60 in round 4.
+- **Both rules still hold** for every map, both themes, current and past (the existing tests): averaged lightness moves towards busy at every step, and dots are at least 1.4:1 against their colour.
+
+Averaged lightness at chroma 0.85, 17 steps, six dot layers:
+
+| Map | Theme | Kind | Averaged lightness, steps 0 → 16 |
+|---|---|---|---|
+| parula | dark | current | 0.36 0.36 0.38 0.41 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| parula | dark | past | 0.27 0.28 0.29 0.30 0.31 0.34 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| parula | light | current | 0.90 0.89 0.88 0.85 0.81 0.77 0.72 0.67 0.61 0.56 0.50 0.45 0.41 0.37 0.34 0.33 0.32 |
+| parula | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| viridis | dark | current | 0.36 0.37 0.38 0.41 0.44 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| viridis | dark | past | 0.27 0.28 0.28 0.30 0.32 0.33 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| viridis | light | current | 0.90 0.89 0.87 0.85 0.81 0.77 0.72 0.67 0.61 0.56 0.51 0.46 0.41 0.38 0.35 0.33 0.32 |
+| viridis | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.84 0.81 0.79 0.76 0.74 0.72 0.71 0.69 0.69 0.68 |
+| cividis | dark | current | 0.36 0.37 0.38 0.40 0.43 0.47 0.52 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.83 0.84 0.85 |
+| cividis | dark | past | 0.27 0.28 0.29 0.30 0.31 0.33 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.54 |
+| cividis | light | current | 0.90 0.89 0.87 0.85 0.81 0.76 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| cividis | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.84 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| magma | dark | current | 0.36 0.37 0.38 0.40 0.44 0.47 0.51 0.56 0.61 0.65 0.70 0.74 0.78 0.81 0.83 0.85 0.85 |
+| magma | dark | past | 0.27 0.28 0.29 0.30 0.32 0.33 0.36 0.38 0.41 0.43 0.46 0.48 0.50 0.52 0.53 0.54 0.55 |
+| magma | light | current | 0.90 0.89 0.87 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.32 0.32 |
+| magma | light | past | 0.95 0.95 0.94 0.92 0.90 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+| plasma | dark | current | 0.36 0.37 0.38 0.40 0.43 0.47 0.51 0.56 0.60 0.65 0.69 0.73 0.77 0.80 0.82 0.84 0.84 |
+| plasma | dark | past | 0.27 0.28 0.29 0.30 0.31 0.33 0.36 0.38 0.41 0.43 0.45 0.48 0.50 0.52 0.53 0.54 0.54 |
+| plasma | light | current | 0.90 0.90 0.88 0.85 0.81 0.77 0.72 0.66 0.61 0.55 0.50 0.45 0.41 0.37 0.34 0.33 0.32 |
+| plasma | light | past | 0.95 0.95 0.94 0.92 0.91 0.88 0.86 0.83 0.81 0.78 0.76 0.74 0.72 0.70 0.69 0.68 0.68 |
+
 ## What was measured
 
 - **Averaged colour.** From arm's length a cell is its colour with its dots blended in: dots cover `level / 16` of the cell at 42% opacity, blended in linear light. Every number below is for that averaged colour, because that's what the eye compares.
@@ -122,7 +163,7 @@ Averaged lightness at chroma 0.85, 17 steps:
   - **magma:** good in dark; light steps 6–7 flatten less than viridis. Keep.
   - **plasma:** the most distinct in dark (ΔE 7–16); light flattens from step 5. Keep, with the fix.
 
-## Numbers now (17 steps)
+## Numbers at round 4 (17 steps, 13 dot levels)
 
 ### Summary: every map, chroma and theme
 
